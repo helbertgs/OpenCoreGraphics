@@ -3,6 +3,13 @@
 
 import PackageDescription
 
+
+#if os(macOS)
+let branch = "macos"
+#else
+let branch = "main"
+#endif
+
 let package = Package(
     name: "OpenCoreGraphics",
     products: [
@@ -12,11 +19,19 @@ let package = Package(
             targets: ["OpenCoreGraphics"]
         ),
     ],
+    dependencies: [
+        .package(url: "https://github.com/helbertgs/OpenGLAD", branch: branch),
+        .package(url: "https://github.com/helbertgs/OpenGLFW", branch: "main"),
+        .package(url: "https://github.com/helbertgs/OpenSTB", revision: "1.0")
+    ],
     targets: [
-        // Targets are the basic building blocks of a package, defining a module or a test suite.
-        // Targets can depend on other targets in this package and products from dependencies.
         .target(
-            name: "OpenCoreGraphics"
+            name: "OpenCoreGraphics",
+            dependencies: [
+                .product(name: "OpenGLAD", package: "OpenGLAD"),
+                .product(name: "OpenGLFW", package: "OpenGLFW"),
+                .product(name: "OpenSTB", package: "OpenSTB")
+            ]
         ),
         .testTarget(
             name: "OpenCoreGraphicsTests",
