@@ -17,6 +17,10 @@ let package = Package(
             name: "OpenCoreGraphics",
             targets: ["OpenCoreGraphics"]
         ),
+        .executable(
+            name: "OpenCoreGraphicsSample", 
+            targets: ["OpenCoreGraphicsSample"]
+        )
     ],
     dependencies: [
         .package(url: "https://github.com/helbertgs/OpenGLAD", branch: branch),
@@ -31,6 +35,10 @@ let package = Package(
                 .product(name: "OpenGLFW", package: "OpenGLFW"),
                 .product(name: "OpenSTB", package: "OpenSTB")
             ]
+        ),
+        .executableTarget(
+            name: "OpenCoreGraphicsSample",
+            dependencies: ["OpenCoreGraphics"]
         ),
         .testTarget(
             name: "OpenCoreGraphicsTests",

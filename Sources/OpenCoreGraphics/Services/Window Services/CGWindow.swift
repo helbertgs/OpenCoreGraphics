@@ -27,25 +27,28 @@ open class CGWindow {
     var windowRef: OpaquePointer?
 
     /// The OpenGL context associated with the window.
-    public lazy var cgContext: CGContext = {
-        let pixelsWide = Int(frame.size.width)
-        let pixelsHgith = Int(frame.size.height)
-
-        let bitmapBytesPerRow = pixelsWide * 4
-        let bitmapByteCount = bitmapBytesPerRow * pixelsHgith
-        let colorSpace = CGColorSpace.genericRGBLinear
-        let bitmapData = UnsafeMutableRawPointer.allocate(byteCount: bitmapByteCount, alignment: 1)
-
-        return .init(
-            data: bitmapData,
-            width: pixelsWide,
-            height: pixelsHgith,
-            bitsPerComponent: 8,
-            bytesPerRow: bitmapBytesPerRow,
-            space: colorSpace,
-            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
-        )
+    public lazy var cgContext: CGWindowContext = {
+        CGWindowContext(width: Int(frame.size.width), height: Int(frame.size.height))
     }()
+    // public lazy var cgContext: CGContext = {
+    //     let pixelsWide = Int(frame.size.width)
+    //     let pixelsHgith = Int(frame.size.height)
+
+    //     let bitmapBytesPerRow = pixelsWide * 4
+    //     let bitmapByteCount = bitmapBytesPerRow * pixelsHgith
+    //     let colorSpace = CGColorSpace.genericRGBLinear
+    //     let bitmapData = UnsafeMutableRawPointer.allocate(byteCount: bitmapByteCount, alignment: 1)
+
+    //     return .init(
+    //         data: bitmapData,
+    //         width: pixelsWide,
+    //         height: pixelsHgith,
+    //         bitsPerComponent: 8,
+    //         bytesPerRow: bitmapBytesPerRow,
+    //         space: colorSpace,
+    //         bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+    //     )
+    // }()
 
     // MARK: - Configuring the Window’s Appearance
 
