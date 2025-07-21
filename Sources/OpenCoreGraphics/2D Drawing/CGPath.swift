@@ -55,6 +55,7 @@ public class CGPath {
     ///   - rect: The rectangle that bounds the ellipse.
     ///   - transform: A pointer to an affine transformation matrix, or nil if no transformation is needed. If specified, Core Graphics applies the transformation to the ellipse before it is added to the path.
     public init(ellipseIn rect: CGRect, transform: CGAffineTransform? = nil) {
+        addEllipse(in: rect, transform: transform ?? .identity)
     }
 
     /// Create an immutable path of a rounded rectangle.
@@ -70,6 +71,7 @@ public class CGPath {
     ///   - cornerHeight: The height of the rounded corner sections.
     ///   - transform: A pointer to an affine transformation matrix, or nil if no transformation is needed. If specified, Core Graphics applies the transformation to the rectangle before it is added to the path.
     public init(roundedRect rect: CGRect, cornerWidth: Float, cornerHeight: Float, transform: CGAffineTransform? = nil) {
+        addRoundedRect(in: rect, cornerWidth: cornerWidth, cornerHeight: cornerHeight, transform: transform ?? .identity)
     }
 
     // MARK: - Copying a Graphics Path
@@ -214,6 +216,37 @@ public class CGPath {
     ///   - rect: A rectangle that defines the area for the ellipse to fit in.
     ///   - transform: An affine transform to apply to the ellipse before adding to the path.
     public func addEllipse(in rect: CGRect, transform: CGAffineTransform = .identity) {
+        // Aproximação da elipse com 4 curvas de Bézier
+        let rx = rect.width / 2.0
+        let ry = rect.height / 2.0
+        let cx = rect.midX
+        let cy = rect.midY
+        let kappa: CGFloat = 0.552284749831
+
+        let start = CGPoint(x: cx + rx, y: cy).applying(transform)
+        move(to: start)
+
+        addCurve(
+            to: CGPoint(x: cx, y: cy + ry).applying(transform),
+            control1: CGPoint(x: cx + rx, y: cy + kappa * ry).applying(transform),
+            control2: CGPoint(x: cx + kappa * rx, y: cy + ry).applying(transform)
+        )
+        addCurve(
+            to: CGPoint(x: cx - rx, y: cy).applying(transform),
+            control1: CGPoint(x: cx - kappa * rx, y: cy + ry).applying(transform),
+            control2: CGPoint(x: cx - rx, y: cy + kappa * ry).applying(transform)
+        )
+        addCurve(
+            to: CGPoint(x: cx, y: cy - ry).applying(transform),
+            control1: CGPoint(x: cx - rx, y: cy - kappa * ry).applying(transform),
+            control2: CGPoint(x: cx - kappa * rx, y: cy - ry).applying(transform)
+        )
+        addCurve(
+            to: start,
+            control1: CGPoint(x: cx + kappa * rx, y: cy - ry).applying(transform),
+            control2: CGPoint(x: cx + rx, y: cy - kappa * ry).applying(transform)
+        )
+        closeSubpath()
     }
 
     /// Adds a subpath to the path, in the shape of a rectangle with rounded corners.
@@ -227,6 +260,40 @@ public class CGPath {
     ///   - cornerHeight: The vertical size, in user space coordinates, for rounded corner sections.
     ///   - transform: An affine transform to apply to the rectangle before adding to the path. 
     public func addRoundedRect(in rect: CGRect, cornerWidth: Float, cornerHeight: Float, transform: CGAffineTransform = .identity) {
+        let minX = rect.minX, minY = rect.minY, maxX = rect.maxX, maxY = rect.maxY
+        let cw = CGFloat(cornerWidth), ch = CGFloat(cornerHeight)
+        let kappa: CGFloat = 0.552284749831
+
+        move(to: CGPoint(x: minX + cw, y: minY), transform: transform)
+        addLine(to: CGPoint(x: maxX - cw, y: minY), transform: transform)
+        addCurve(
+            to: CGPoint(x: maxX, y: minY + ch),
+            control1: CGPoint(x: maxX - cw + kappa * cw, y: minY),
+            control2: CGPoint(x: maxX, y: minY + ch - kappa * ch),
+            transform: transform
+        )
+        addLine(to: CGPoint(x: maxX, y: maxY - ch), transform: transform)
+        addCurve(
+            to: CGPoint(x: maxX - cw, y: maxY),
+            control1: CGPoint(x: maxX, y: maxY - ch + kappa * ch),
+            control2: CGPoint(x: maxX - cw + kappa * cw, y: maxY),
+            transform: transform
+        )
+        addLine(to: CGPoint(x: minX + cw, y: maxY), transform: transform)
+        addCurve(
+            to: CGPoint(x: minX, y: maxY - ch),
+            control1: CGPoint(x: minX + cw - kappa * cw, y: maxY),
+            control2: CGPoint(x: minX, y: maxY - ch + kappa * ch),
+            transform: transform
+        )
+        addLine(to: CGPoint(x: minX, y: minY + ch), transform: transform)
+        addCurve(
+            to: CGPoint(x: minX + cw, y: minY),
+            control1: CGPoint(x: minX, y: minY + ch - kappa * ch),
+            control2: CGPoint(x: minX + cw - kappa * cw, y: minY),
+            transform: transform
+        )
+        closeSubpath()
     }
 
     /// Adds an arc of a circle to the path, specified with a radius and angles.
@@ -246,6 +313,19 @@ public class CGPath {
     ///   - clockwise: true to make a clockwise arc; false to make a counterclockwise arc.
     ///   - transform: An affine transform to apply to the arc before adding to the path.
     public func addArc(center: CGPoint, radius: Float, startAngle: Float, endAngle: Float, clockwise: Bool, transform: CGAffineTransform = .identity) {
+        // Aproximação do arco com segmentos de linha (pode ser melhorado para Bézier)
+        let steps = 8
+        let delta = (endAngle - startAngle) / Float(steps)
+        var angle = startAngle
+        let r = CGFloat(radius)
+        let c = CGPoint(x: center.x, y: center.y)
+        let startPoint = CGPoint(x: c.x + cos(CGFloat(angle)) * r, y: c.y + sin(CGFloat(angle)) * r).applying(transform)
+        move(to: startPoint)
+        for _ in 1...steps {
+            angle += delta
+            let point = CGPoint(x: c.x + cos(CGFloat(angle)) * r, y: c.y + sin(CGFloat(angle)) * r).applying(transform)
+            addLine(to: point)
+        }
     }
 
     /// Adds an arc of a circle to the path, specified with a radius and two tangent lines.
@@ -261,6 +341,9 @@ public class CGPath {
     ///   - radius: The radius of the arc, in user space coordinates.
     ///   - transform: An affine transform to apply to the arc before adding to the path.
     public func addArc(tangent1End: CGPoint, tangent2End: CGPoint, radius: Float,transform: CGAffineTransform = .identity) {
+        // Implementação simplificada: conecta os pontos com linhas
+        addLine(to: tangent1End, transform: transform)
+        addLine(to: tangent2End, transform: transform)
     }
 
     /// Adds an arc of a circle to the path, specified with a radius and a difference in angle.
@@ -280,6 +363,7 @@ public class CGPath {
     ///   - delta: The difference, measured in radians, between the starting angle and ending angle of the arc. A positive value creates a counter-clockwise arc (in user space coordinates), and vice versa.
     ///   - transform: An affine transform to apply to the arc before adding to the path.
     public func addRelativeArc(center: CGPoint, radius: Float, startAngle: Float, delta: Float, transform: CGAffineTransform = .identity) {
+        addArc(center: center, radius: radius, startAngle: startAngle, endAngle: startAngle + delta, clockwise: delta < 0, transform: transform)
     }
 
     /// Adds a cubic Bézier curve to the path, with the specified end point and control points.
@@ -292,6 +376,17 @@ public class CGPath {
     ///   - control2: The second control point of the curve, in user space coordinates.
     ///   - transform: An affine transform to apply to the curve before adding to the path.
     public func addCurve(to end: CGPoint, control1: CGPoint, control2: CGPoint, transform: CGAffineTransform = .identity) {
+        let element = CGPathElement(
+            type: .addCurveToPoint,
+            points: [
+                currentPoint,
+                control1.applying(transform),
+                control2.applying(transform),
+                end.applying(transform)
+            ]
+        )
+        subpath.append(element)
+        currentPoint = end.applying(transform)
     }
 
     /// Adds a quadratic Bézier curve to the path, with the specified end point and control point.
@@ -303,6 +398,16 @@ public class CGPath {
     ///   - control: The control point of the curve, in user space coordinates.
     ///   - transform: An affine transform to apply to the curve before adding to the path.
     public func addQuadCurve(to end: CGPoint, control: CGPoint, transform: CGAffineTransform = .identity) {
+        let element = CGPathElement(
+            type: .addQuadCurveToPoint,
+            points: [
+                currentPoint,
+                control.applying(transform),
+                end.applying(transform)
+            ]
+        )
+        subpath.append(element)
+        currentPoint = end.applying(transform)
     }
 
     /// Appends another path object to the path.
@@ -313,6 +418,14 @@ public class CGPath {
     ///   - path: The path to add.
     ///   - transform: An affine transform to apply to the path parameter before adding to this path.
     public func addPath(_ path: CGPath, transform: CGAffineTransform = .identity) {
+        for element in path.subpath {
+            let transformedPoints = element.points.map { $0.applying(transform) }
+            let newElement = CGPathElement(type: element.type, points: transformedPoints)
+            subpath.append(newElement)
+        }
+        if let last = path.subpath.last, let lastPoint = last.points.last {
+            currentPoint = lastPoint
+        }
     }
 
     /// Closes and completes a subpath in a mutable graphics path.
@@ -321,6 +434,9 @@ public class CGPath {
     /// After closing the subpath, your application can begin a new subpath without first calling ``move(to:)``. 
     /// In this case, a new subpath is implicitly created with a starting and current point equal to the previous subpath’s starting point.
     public func closeSubpath() {
+        let element = CGPathElement(type: .closeSubpath, points: [])
+        subpath.append(element)
+        currentPoint = .zero
     }
 }
 
