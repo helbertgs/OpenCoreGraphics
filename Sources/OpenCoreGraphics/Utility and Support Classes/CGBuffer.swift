@@ -1,6 +1,9 @@
 import Foundation
 
 public struct CGBuffer : Sendable {
+    
+    /// The OpenGL texture ID used for rendering.
+    public var texture: UInt32 = 0
 
     /// The OpenGL vertex array object (VAO) used for rendering.
     public var vao: UInt32 = 0

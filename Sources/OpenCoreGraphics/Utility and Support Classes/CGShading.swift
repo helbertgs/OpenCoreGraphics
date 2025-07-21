@@ -238,3 +238,56 @@ extension CGShading {
         """
     )
 }
+
+extension CGShading {
+    @MainActor public static let strokeShader: CGShading = CGShading(
+        """
+        #version 330 core
+        
+        layout(location = 0) in vec2 aPos;
+        out vec2 vUV;
+
+        void main() {
+            vUV = (aPos + 1.0) * 0.5; // Transform from NDC (-1,1) to UV (0,1)
+            vUV.y = 1.0 - vUV.y; // Flip Y coordinate for OpenGL
+            gl_Position = vec4(aPos, 0.0, 1.0);
+        }
+        """, 
+        """
+        #version 330 core
+
+        #define MAX_POINTS 16
+
+        in vec2 vUV;
+        out vec4 FragColor;
+        
+        uniform vec2 uPoints[MAX_POINTS];
+        uniform int uPointCount;
+        uniform vec4 uColor;
+
+        bool isPointInPolygon(vec2 point) {
+            if (uPointCount < 3) return false;
+            
+            bool inside = false;
+            for (int i = 0, j = uPointCount - 1; i < uPointCount; j = i++) {
+                vec2 pi = uPoints[i];
+                vec2 pj = uPoints[j];
+                if ((pi.y > point.y) != (pj.y > point.y) &&
+                    (point.x < (pj.x - pi.x) * (point.y - pi.y) / (pj.y - pi.y) + pi.x)) {
+                    inside = !inside;
+                }
+            }
+            return inside;
+        }
+
+        void main() {
+            if (isPointInPolygon(vUV)) {
+                FragColor = uColor;
+            } else {
+                discard; // Discard pixels outside the polygon
+            }
+        }
+
+        """
+    )
+}

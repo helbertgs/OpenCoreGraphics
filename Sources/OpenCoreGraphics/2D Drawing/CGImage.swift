@@ -1,5 +1,6 @@
 import Foundation
 import OpenSTB
+@preconcurrency import OpenGLAD 
 
 /// A bitmap image or image mask.
 /// 
@@ -37,6 +38,7 @@ public class CGImage : Equatable, Hashable, Identifiable {
         shouldInterpolate: Bool,
         intent: CGColorRenderingIntent
     ) {
+        self.id = 0
         self.width = width
         self.height = height
         self.bitsPerComponent = bitsPerComponent
@@ -50,57 +52,51 @@ public class CGImage : Equatable, Hashable, Identifiable {
         self.renderingIntent = intent
     }
 
-    /// Creates a bitmap image using JPEG-encoded data supplied by a data provider.
-    /// - Parameters:
-    ///   - source: A data provider supplying JPEG-encoded data.
-    ///   - decode: The decode array for the image. Typically a decode array is unnecessary, and you should pass nil.
-    ///   - shouldInterpolate: A Boolean value that specifies whether interpolation should occur. The interpolation setting specifies whether a pixel-smoothing algorithm should be applied to the image.
-    ///   - intent: A CGColorRenderingIntent constant that specifies how to handle colors that are not located within the gamut of the destination color space of a graphics context.
-    public init(jpegDataProviderSource source: CGDataProvider, decode: UnsafePointer<CGFloat>? = nil, shouldInterpolate: Bool = false, intent: CGColorRenderingIntent = .defaultIntent) {
-        self.dataProvider = source
-        self.decode = decode
-        self.shouldInterpolate = shouldInterpolate
-        self.renderingIntent = intent
-    }
-
-    /// Creates a bitmap image using PNG-encoded data supplied by a data provider.
-    /// - Parameters:
-    ///   - source: A data provider supplying PNG-encoded data.
-    ///   - decode: The decode array for the image. Typically a decode array is unnecessary, and you should pass nil.
-    ///   - shouldInterpolate: A Boolean value that specifies whether interpolation should occur. The interpolation setting specifies whether a pixel-smoothing algorithm should be applied to the image.
-    ///   - intent: A CGColorRenderingIntent constant that specifies how to handle colors that are not located within the gamut of the destination color space of a graphics context.
-    public init(pngDataProviderSource source: CGDataProvider, decode: UnsafePointer<CGFloat>? = nil, shouldInterpolate: Bool = false, intent: CGColorRenderingIntent = .defaultIntent) {
-        self.dataProvider = source
-        self.decode = decode
-        self.shouldInterpolate = shouldInterpolate
-        self.renderingIntent = intent
-    }
-
-    public convenience init?(url: String) {
+    public init(url: String) {
         var width: Int32 = 0
         var height: Int32 = 0
         var channels: Int32 = 0
+        var format: Int32 = GL_RGBA
 
         stbi_set_flip_vertically_on_load(1)
         
         guard let image: UnsafeMutablePointer<UInt8> = stbi_load(url, &width, &height, &channels, 0) else {
-            print("failed to load image: \(url)")
-            return nil
+            fatalError("failed to load image: \(url)")
         }
-        
+
         let data  = Data(bytes: image, count: Int(width * height * channels))
         let dataProvider = CGDataProvider(data: data)
         dataProvider.info = image
         
-        self.init(jpegDataProviderSource: dataProvider)
+        self.dataProvider = dataProvider
         self.width = Int(width)
         self.height = Int(height)
         self.colorSpace = channels == 4 ? CGColorSpace.sRGB : CGColorSpace.genericRGBLinear
+        format = channels == 4 ? GL_RGBA : GL_RGB
 
         stbi_image_free(image)
+
+        var id = UInt32(0)
+        glad_glGenTextures(1, &id)
+        defer { glad_glDeleteTextures(1, &id) }
+        glad_glBindTexture(GLenum(GL_TEXTURE_2D), id)
+        
+        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_WRAP_S), GLint(GL_REPEAT))
+        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_WRAP_T), GLint(GL_REPEAT))
+        
+        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_MIN_FILTER), GLint(GL_LINEAR))
+        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_MAG_FILTER), GLint(GL_LINEAR))
+
+        dataProvider.data?.withUnsafeMutableBytes {
+            glad_glTexImage2D(GLenum(GL_TEXTURE_2D), 0,  format,  GLsizei(width),  GLsizei(height),  0,  GLenum(format),  GLenum(GL_UNSIGNED_BYTE),  $0.baseAddress)
+        }
+
+        glad_glGenerateMipmap(GLenum(GL_TEXTURE_2D))
     }
 
     // MARK: - Examining an Image
+
+    public private(set) var id: UInt32 = 0
 
     /// Returns whether a bitmap image is an image mask.
     public private(set) var isMask: Bool = false
@@ -148,6 +144,7 @@ public class CGImage : Equatable, Hashable, Identifiable {
     ///   - lhs: A value to compare.
     ///   - rhs: Another value to compare.
     public static func == (_ lhs: CGImage, _ rhs: CGImage) -> Bool {
+        lhs.id == rhs.id && 
         lhs.isMask == rhs.isMask &&
         lhs.width == rhs.width &&
         lhs.height == rhs.height &&
@@ -164,6 +161,7 @@ public class CGImage : Equatable, Hashable, Identifiable {
     /// Call ``hasher.combine(_:)`` with each of these components.
     /// - Parameter hasher: The hasher to use when combining the components of this instance.
     public func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
         hasher.combine(isMask)
         hasher.combine(width)
         hasher.combine(height)

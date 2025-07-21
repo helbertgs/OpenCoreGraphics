@@ -513,6 +513,7 @@ extension CGPath {
     /// 
     /// You can pass a path drawing mode constant to the function ``drawPath(using:)`` to specify how Core Graphics should paint a graphics context’s current path.
     public enum CGPathDrawingMode : String, Codable, Equatable, Hashable, Sendable {
+
         /// Render the area contained within the path using the non-zero winding number rule.
         case fill
 

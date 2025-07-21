@@ -9,6 +9,8 @@ window.display = {
 
     window.cgContext.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
     window.cgContext.fill(CGRect(x: 200, y: 100, width: 150, height: 200))
+
+    window.cgContext.draw(CGImage(url: "/Users/helbert.gomes/Downloads/Photo.jpg"), in: CGRect(x: 352, y: 123.6, width: 196, height: 202.8))
 }
 
 window.makeKeyAndOrderFront()

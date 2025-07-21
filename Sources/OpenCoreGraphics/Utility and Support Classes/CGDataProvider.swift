@@ -8,7 +8,7 @@ public class CGDataProvider {
     // MARK: - Getting Data from a Data Provider
     
     /// Returns a copy of the provider’s data.
-    public let data: Data?
+    public var data: Data?
 
     // MARK: - Instance Properties
     public var info: UnsafeMutablePointer<UInt8>?

@@ -409,7 +409,43 @@ open class CGWindowContext {
     /// The current path is cleared as a side effect of calling this function.
     open func strokePath() {
         guard let path = self.path else { return }
-        print(path)
+        
+        // Get all points from the path (already in device coordinates)
+        let allPoints = path.subpath.flatMap { $0.points }
+        
+        // Convert points to UV coordinates (0-1 range) for the shader
+        let normalizedPoints = allPoints.map { point in
+            CGPoint(
+                x: (point.x + 1.0) / 2.0,  // Convert from NDC (-1,1) to UV (0,1)
+                y: 1.0 - (point.y + 1.0) / 2.0   // Convert and flip Y for OpenGL
+            )
+        }
+
+        // Enable blending for transparency
+        glad_glEnable(GLenum(GL_BLEND))
+        glad_glBlendFunc(GLenum(GL_SRC_ALPHA), GLenum(GL_ONE_MINUS_SRC_ALPHA))
+
+        // Use the fill shader
+        CGShading.strokeShader.use()
+        CGShading.strokeShader.setUniform1i(name: "uPointCount", value: normalizedPoints.count)
+
+        // Set the points in the shader
+        for (index, point) in normalizedPoints.enumerated() {
+            let param = "uPoints[\(index)]"
+            CGShading.strokeShader.setUniform2f(name: param, value: point)
+        }
+
+        // Set the stroke color
+        CGShading.strokeShader.setUniform4f(name: "uColor", value: strokeColor)
+
+        // Bind VAO and draw
+        glad_glBindVertexArray(buffer.vao)
+        glad_glDrawElements(GLenum(GL_TRIANGLES), GLsizei(buffer.indices.count), GLenum(GL_UNSIGNED_INT), nil)
+        glad_glBindVertexArray(0)
+
+        // Disable blending
+        glad_glDisable(GLenum(GL_BLEND))
+
         self.path = nil
     }
 
@@ -453,6 +489,9 @@ open class CGWindowContext {
     /// The current path is cleared as a side effect of calling this function.
     /// - Parameter rect: A rectangle that defines the area for the ellipse to fit in.
     open func fillEllipse(in rect: CGRect) {
+        path = .init(ellipseIn: convertToDeviceSpace(rect), transform: ctm)
+        drawPath(using: .fill)
+        path = nil
     }
 
     /// Paints a rectangular path.
@@ -471,6 +510,9 @@ open class CGWindowContext {
     /// The current path is cleared as a side effect of calling this function.
     /// - Parameter rect: A rectangle that defines the area for the ellipse to fit in.
     open func strokeEllipse(in rect: CGRect) {
+        path = .init(ellipseIn: convertToDeviceSpace(rect), transform: ctm)
+        drawPath(using: .stroke)
+        path = nil
     }
 
     /// Strokes a sequence of line segments.
@@ -494,74 +536,24 @@ open class CGWindowContext {
     ///   - byTiling: If true, this method fills the context’s entire clipping region by tiling many copies of the image, and the rect parameter defines the origin and size of the tiling pattern.
     ///               If false (the default), this method draws a single copy of the image in the area defined by the rect parameter.
     open func draw(_ image: CGImage, in rect: CGRect, byTiling: Bool = false) {        
-        guard var data = image.dataProvider?.data else { 
-            return 
-        }
-
-        let rect = convertToDeviceSpace(rect)
-        let vertices: [Float] = [
-            Float(rect.maxX), Float(rect.maxY),  1.0, 1.0, // topRight
-            Float(rect.maxX), Float(rect.minY),  1.0, 0.0, // bottomRight
-            Float(rect.minX), Float(rect.minY),  0.0, 0.0, // bottomLeft
-            Float(rect.minX), Float(rect.maxY),  0.0, 1.0  // topLeft
-        ]
-
-        // Load buffers
-
-        var vao = UInt32(0)
-        glad_glGenVertexArrays(1, &vao)
-        defer { glad_glDeleteVertexArrays(1, &vao) }
-
-        var vbo = UInt32(0)
-        glad_glGenBuffers(1, &vbo)
-        defer { glad_glDeleteBuffers(1, &vbo) }
-
-        glad_glBindVertexArray(vao)
-
-        glad_glBindBuffer(GLenum(GL_ARRAY_BUFFER), vbo)
-        vertices.withUnsafeBytes {
-            glad_glBufferData(GLenum(GL_ARRAY_BUFFER), GLsizeiptr($0.count), $0.baseAddress, GLenum(GL_STATIC_DRAW))
-        }
-
-        glad_glVertexAttribPointer(0, 2, GLenum(GL_FLOAT), GLboolean(GL_FALSE), 4 * GLsizei(MemoryLayout<Float>.stride), nil)
-        glad_glEnableVertexAttribArray(0)
-
-        glad_glVertexAttribPointer(1, 2, GLenum(GL_FLOAT), GLboolean(GL_FALSE), 4 * GLsizei(MemoryLayout<Float>.stride), UnsafeRawPointer(bitPattern: 2 * MemoryLayout<Float>.size))
-        glad_glEnableVertexAttribArray(1)
-
-        let format = image.colorSpace == CGColorSpace.sRGB ? GL_RGBA : GL_RGB
-
-        // Load texture
-
-        var id = UInt32(0)
-        glad_glGenTextures(1, &id)
-        defer { glad_glDeleteTextures(1, &id) }
-        glad_glBindTexture(GLenum(GL_TEXTURE_2D), id)
-        
-        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_WRAP_S), GLint(GL_REPEAT))
-        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_WRAP_T), GLint(GL_REPEAT))
-        
-        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_MIN_FILTER), GLint(GL_LINEAR))
-        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_MAG_FILTER), GLint(GL_LINEAR))
-
-        data.withUnsafeMutableBytes {
-            glad_glTexImage2D(GLenum(GL_TEXTURE_2D), 0,  format,  GLsizei(image.width),  GLsizei(image.height),  0,  GLenum(format),  GLenum(GL_UNSIGNED_BYTE),  $0.baseAddress)
-        }
-
-        glad_glGenerateMipmap(GLenum(GL_TEXTURE_2D))
+        // let rect = convertToDeviceSpace(rect)
+        // let vertices: [Float] = [
+        //     Float(rect.maxX), Float(rect.maxY),  1.0, 1.0, // topRight
+        //     Float(rect.maxX), Float(rect.minY),  1.0, 0.0, // bottomRight
+        //     Float(rect.minX), Float(rect.minY),  0.0, 0.0, // bottomLeft
+        //     Float(rect.minX), Float(rect.maxY),  0.0, 1.0  // topLeft
+        // ]
 
         let shader = CGShading(.image)
         shader.use()
         glad_glActiveTexture(GLenum(GL_TEXTURE0))
-        glad_glBindTexture(GLenum(GL_TEXTURE_2D), id)
+        glad_glBindTexture(GLenum(GL_TEXTURE_2D), image.id)
         shader.setUniform1i(name: "uImage", value: 0)
 
 
-        glad_glBindVertexArray(vao)
+        glad_glBindVertexArray(buffer.vao)
         glad_glDrawArrays(GLenum(GL_TRIANGLE_FAN), 0, 4)
         glad_glBindVertexArray(0)
-
-        shader.delete()
     }
 
     /// Returns the current level of interpolation quality for a graphics context.
