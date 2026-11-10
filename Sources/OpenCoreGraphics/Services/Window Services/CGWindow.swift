@@ -8,12 +8,15 @@ open class CGWindow {
 
     // MARK: - Creating a Window 
 
-    /// Creates a window with the specified frame.
+    /// Creates a window with the specified frame and title.
     /// - Parameter frame: The frame of the window.
+    /// - Parameter title: The string displayed in the window title bar.
     /// - Returns: A new window.
-    public init(frame: CGRect) {
+    /// - Throws: A ``CGWindowError`` when GLFW or OpenGL initialization fails.
+    public init(frame: CGRect, title: String = "") throws {
         self.frame = frame
-        createWindow()
+        storedTitle = title
+        try createWindow()
     }
 
     /// Releases the window's GLFW reference when it is deallocated.
@@ -27,6 +30,9 @@ open class CGWindow {
 
     /// The GLFW window reference associated with the window.
     var windowRef: OpaquePointer?
+
+    /// The title to use before a GLFW window reference exists.
+    private var storedTitle = ""
 
     /// Indicates whether this window owns a GLFW platform reference.
     private var hasRetainedPlatform = false
@@ -109,9 +115,14 @@ open class CGWindow {
             if let windowRef {
                 return String(cString: glfwGetWindowTitle(windowRef))
             }
-            return ""
+            return storedTitle
         }
-        set { glfwSetWindowTitle(windowRef, newValue) }
+        set {
+            storedTitle = newValue
+            if let windowRef {
+                glfwSetWindowTitle(windowRef, newValue)
+            }
+        }
     }
 
     // MARK: - Accessing Screen Information
@@ -142,9 +153,9 @@ open class CGWindow {
 }
 
 extension CGWindow {
-    func createWindow() {
+    func createWindow() throws {
         guard GLFWPlatform.shared.retain() else {
-            fatalError("Failed to initialize GLFW")
+            throw CGWindowError.glfwInitFailed
         }
         hasRetainedPlatform = true
 
@@ -154,17 +165,20 @@ extension CGWindow {
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE)
         glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE)
 
-        guard let windowRef = glfwCreateWindow(Int32(frame.size.width), Int32(frame.size.height), title, nil, nil) else {
-            fatalError("GLFW: Window not created!")
-        }
-
-        glfwMakeContextCurrent(windowRef)
-
-        guard gladLoaderLoadGL() != GL_FALSE else {
-            fatalError("GLAD: Fail to initialize")
+        guard let windowRef = glfwCreateWindow(Int32(frame.size.width), Int32(frame.size.height), storedTitle, nil, nil) else {
+            destroy()
+            throw CGWindowError.windowCreationFailed
         }
 
         self.windowRef = windowRef
+        glfwMakeContextCurrent(windowRef)
+
+        guard gladLoaderLoadGL() != GL_FALSE else {
+            glfwMakeContextCurrent(nil)
+            destroy()
+            throw CGWindowError.gladLoadFailed
+        }
+
         setupCallbacks()
     }
 

@@ -194,4 +194,12 @@
 - Extraídas as chamadas `glfwInit` e `glfwTerminate` para o driver de sistema; elas não aparecem mais em `CGWindow.swift`.
 - Testes com driver falso cobrem aquisição múltipla, última liberação, release extra e nova tentativa após falha de inicialização, sem abrir janela.
 - `swift test` passou (55 testes em 13 suítes).
+
+---
+
+## 2026-11-10 - US-020
+- `CGWindow.init(frame:title:)` passou a lançar erros tipados `CGWindowError`; o título é armazenado antes da criação e enviado a `glfwCreateWindow`, e alterações posteriores atualizam o título nativo.
+- Falhas em `glfwInit`, `glfwCreateWindow` e `gladLoaderLoadGL` são diferenciadas; falhas após a retenção liberam a janela e a referência GLFW.
+- O Sample usa `try CGWindow(...)` e `CGWindow.swift` não contém `fatalError`.
+- Testes verificam que os três erros de criação são valores distintos; `swift test` passou (56 testes em 14 suítes).
 ---

@@ -1,7 +1,6 @@
 import OpenCoreGraphics
 
-let window = CGWindow(frame: CGRect(x: 0, y: 0, width: 512, height: 512))
-window.title = "OpenCoreGraphics Sample"
+let window = try CGWindow(frame: CGRect(x: 0, y: 0, width: 512, height: 512), title: "OpenCoreGraphics Sample")
 
 window.display = {
     let cgContext = window.cgContext

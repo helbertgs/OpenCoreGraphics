@@ -297,8 +297,8 @@
         "Build e testes passam"
       ],
       "priority": 20,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "CGWindow init(frame:title:) agora é throwing, guarda o título antes da criação e passa o valor para glfwCreateWindow. Falhas de inicialização GLFW, criação da janela e carregamento GLAD retornam CGWindowError distinto; os caminhos parciais liberam recursos e retenção. O Sample usa try e não há fatalError em CGWindow.swift. swift test passou com 56 testes em 14 suítes."
     },
     {
       "id": "US-021",
