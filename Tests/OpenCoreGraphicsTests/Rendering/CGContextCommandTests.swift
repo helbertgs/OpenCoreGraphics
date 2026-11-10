@@ -112,6 +112,70 @@ struct CGContextCommandTests {
         ))
     }
 
+    /// Verifies fill and stroke color convenience methods capture their color spaces.
+    @Test
+    func colorConvenienceMethodsCaptureColorsAndBlendMode() {
+        let (context, target) = makeRecordingContext()
+        let rect = CGRect(x: 1, y: 2, width: 3, height: 4)
+        let cmyk = CGColor(cyan: 0.1, magenta: 0.2, yellow: 0.3, black: 0.4, alpha: 0.5)
+        let gray = CGColor(gray: 0.6, alpha: 0.7)
+        let rgb = CGColor(red: 0.2, green: 0.3, blue: 0.4, alpha: 0.5)
+
+        context.setFillColor(cyan: 0.1, magenta: 0.2, yellow: 0.3, black: 0.4, alpha: 0.5)
+        context.fill(rect)
+        context.setFillColor(gray: 0.6, alpha: 0.7)
+        context.fill(rect)
+        context.setFillColor(red: 0.2, green: 0.3, blue: 0.4, alpha: 0.5)
+        context.fill(rect)
+        context.setFillColorSpace(.sRGB)
+        context.setFillColor(.white)
+        context.fill(rect)
+
+        context.setStrokeColor(cyan: 0.1, magenta: 0.2, yellow: 0.3, black: 0.4, alpha: 0.5)
+        context.setBlendMode(.multiply)
+        context.stroke(rect)
+        context.setStrokeColor(gray: 0.6, alpha: 0.7)
+        context.stroke(rect)
+        context.setStrokeColor(red: 0.2, green: 0.3, blue: 0.4, alpha: 0.5)
+        context.setStrokeColorSpace(.sRGB)
+        context.setStrokeColor(.white)
+        context.stroke(rect)
+        context.setRenderingIntent(.absoluteColorimetric)
+        context.flush()
+
+        #expect(target.commands[0] == .fillPath(path: CGPath(rect: rect), rule: .winding, color: cmyk, blendMode: .normal))
+        #expect(target.commands[1] == .fillPath(path: CGPath(rect: rect), rule: .winding, color: gray, blendMode: .normal))
+        #expect(target.commands[2] == .fillPath(path: CGPath(rect: rect), rule: .winding, color: rgb, blendMode: .normal))
+        #expect(target.commands[3] == .fillPath(path: CGPath(rect: rect), rule: .winding, color: .white, blendMode: .normal))
+        #expect(target.commands[4] == .strokePath(path: CGPath(rect: rect), color: cmyk, style: .init(width: 1, cap: .butt, join: .miter, miterLimit: 10, dash: []), blendMode: .multiply))
+        #expect(target.commands[5] == .strokePath(path: CGPath(rect: rect), color: gray, style: .init(width: 1, cap: .butt, join: .miter, miterLimit: 10, dash: []), blendMode: .multiply))
+        #expect(target.commands[6] == .strokePath(path: CGPath(rect: rect), color: .white, style: .init(width: 1, cap: .butt, join: .miter, miterLimit: 10, dash: []), blendMode: .multiply))
+    }
+
+    /// Verifies even-odd draw modes queue fill and stroke commands in order.
+    @Test
+    func evenOddDrawModesRecordCommands() throws {
+        let (context, target) = makeRecordingContext()
+        let rect = CGRect(x: 2, y: 3, width: 4, height: 5)
+        context.setFillColor(.black)
+        context.setStrokeColor(.white)
+        context.beginPath()
+        context.addRect(rect)
+        let path = try #require(context.path)
+
+        context.drawPath(using: .eoFill)
+        context.beginPath()
+        context.addRect(rect)
+        context.drawPath(using: .eoFillStroke)
+        context.flush()
+
+        #expect(target.commands == [
+            .fillPath(path: path, rule: .evenOdd, color: .black, blendMode: .normal),
+            .fillPath(path: path, rule: .evenOdd, color: .black, blendMode: .normal),
+            .strokePath(path: path, color: .white, style: .init(width: 1, cap: .butt, join: .miter, miterLimit: 10, dash: []), blendMode: .normal)
+        ])
+    }
+
     /// Creates a bitmap context connected to an in-memory recording target.
     /// - Returns: The context and its target for inspecting submitted commands.
     private func makeRecordingContext() -> (CGContext, RecordingRenderTarget) {

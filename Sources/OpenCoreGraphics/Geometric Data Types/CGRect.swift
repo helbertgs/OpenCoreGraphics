@@ -57,21 +57,21 @@ public struct CGRect : Codable, Equatable, Hashable, Sendable {
     /// 
     /// - Note: A rectangle is considered infinite if its width or height is infinite.
     public var isInfinite: Bool {
-        self == .infinite
+        size.width.isInfinite || size.height.isInfinite
     }
 
     /// A Boolean value indicating whether the rectangle is empty.
     /// 
     /// - Note: A rectangle is considered null if its width or height is equal to .nan.
     public var isNull: Bool {
-        self == .null
+        size.width.isNaN || size.height.isNaN
     }
 
     /// A Boolean value indicating whether the rectangle is empty.
     /// 
     /// - Note: A rectangle is considered empty if its width or height is equal to 0.
     public var isEmpty: Bool {
-        self == .zero
+        size.width == 0 || size.height == 0
     }
 
     /// The maximum x-coordinate of the rectangle.

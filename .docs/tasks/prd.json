@@ -267,8 +267,8 @@
         "Build e testes passam"
       ],
       "priority": 18,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "A cobertura de linhas foi registrada em .docs/tasks/coverage.md; todos os tipos mensuráveis atingem pelo menos 80%. swift test --enable-code-coverage passou com 53 testes em 12 suítes."
     },
     {
       "id": "US-019",

@@ -176,4 +176,13 @@
 - `swift test --filter CGAffineTransformTests` passou (3 testes).
 - **Learnings for future iterations:**
   - `CGPoint.applying` calcula `x*m11 + y*m21 + m41` e `x*m12 + y*m22 + m42`; os seis acessores seguem diretamente esses índices.
+
+---
+
+## 2026-11-10 - US-018
+- Adicionados testes para construção/cópia de cores, operações de pontos e vetores, predicados e contenção de retângulos, subscripts e operações de matrizes, cores e comandos de desenho do contexto.
+- Corrigida a escrita das colunas de `CGAffineTransform`, que substituía repetidamente `m12`, `m22`, `m32` ou `m42` em vez de preencher a coluna.
+- Corrigidos `CGRect.isInfinite`, `isNull` e `isEmpty` para detectar dimensões infinitas, NaN ou zero, inclusive quando a outra dimensão não coincide com o retângulo sentinela.
+- `swift test --enable-code-coverage` passou (53 testes); cada tipo mensurável listado no critério atinge pelo menos 80% de cobertura de linhas.
+- Resultados completos: `.docs/tasks/coverage.md`.
 ---
