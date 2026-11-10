@@ -5,6 +5,8 @@ import OpenSTB
 /// 
 /// A bitmap (or sampled) image is a rectangular array of pixels, with each pixel representing a single sample or data point in a source image.
 public class CGImage : Equatable, Hashable {
+    /// Stable token identifying this image instance in renderer caches.
+    let textureCacheIdentity = UUID()
 
     // MARK: - Creating Images
     
@@ -140,5 +142,45 @@ public class CGImage : Equatable, Hashable {
     /// - Parameter hasher: The hasher to use when combining the components of this instance.
     public func hash(into hasher: inout Hasher) {
         hasher.combine(ObjectIdentifier(self))
+    }
+}
+
+/// An immutable image value that can cross actor boundaries with a draw command.
+struct CGImageSnapshot: Equatable, Sendable {
+    /// The stable identity of the source image object.
+    let identity: UUID
+
+    /// The copied pixel bytes, when the image has a data provider.
+    let data: Data?
+
+    /// The image width in pixels.
+    let width: Int
+
+    /// The image height in pixels.
+    let height: Int
+
+    /// The number of bits in each component.
+    let bitsPerComponent: Int
+
+    /// The number of bits in each pixel.
+    let bitsPerPixel: Int
+
+    /// The byte stride between the starts of adjacent rows.
+    let bytesPerRow: Int
+
+    /// The alpha channel layout of the image.
+    let alphaInfo: CGImageAlphaInfo
+
+    /// Creates an immutable snapshot of an image and its pixel data.
+    /// - Parameter image: The image whose state will be captured.
+    init(image: CGImage) {
+        identity = image.textureCacheIdentity
+        data = image.dataProvider?.data
+        width = image.width
+        height = image.height
+        bitsPerComponent = image.bitsPerComponent
+        bitsPerPixel = image.bitsPerPixel
+        bytesPerRow = image.bytesPerRow
+        alphaInfo = image.alphaInfo
     }
 }

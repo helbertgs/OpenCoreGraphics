@@ -8,8 +8,14 @@ enum DrawCommand: Equatable, Sendable {
     /// Strokes a path using the selected line style and compositing mode.
     case strokePath(path: CGPath, color: CGColor, style: StrokeStyle, blendMode: CGBlendMode)
 
-    /// Draws image bytes into a destination rectangle.
-    case drawImage(data: Data?, width: Int, height: Int, destination: CGRect, blendMode: CGBlendMode)
+    /// Draws an image into transformed destination corners.
+    case drawImage(
+        image: CGImageSnapshot,
+        destination: [CGPoint],
+        interpolationQuality: CGInterpolationQuality,
+        byTiling: Bool,
+        blendMode: CGBlendMode
+    )
 
     /// Restricts subsequent drawing to the interior of a path.
     case clip(path: CGPath, rule: CGPath.CGPathFillRule)

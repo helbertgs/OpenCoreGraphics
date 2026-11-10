@@ -156,12 +156,59 @@ struct CGContextCommandTests {
         context.flush()
 
         #expect(target.commands[7] == .drawImage(
-            data: Data([255, 0, 0, 255]),
-            width: 1,
-            height: 1,
-            destination: firstRect,
+            image: CGImageSnapshot(image: image),
+            destination: [
+                CGPoint(x: firstRect.minX, y: firstRect.minY),
+                CGPoint(x: firstRect.maxX, y: firstRect.minY),
+                CGPoint(x: firstRect.maxX, y: firstRect.maxY),
+                CGPoint(x: firstRect.minX, y: firstRect.maxY)
+            ],
+            interpolationQuality: .default,
+            byTiling: false,
             blendMode: .normal
         ))
+    }
+
+    /// Verifies image commands capture the affine destination and sampling options.
+    @Test
+    func drawImageCapturesTransformedQuadAndSamplingOptions() throws {
+        let (context, target) = makeRecordingContext()
+        let image = CGImage(
+            width: 1,
+            height: 1,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: 4,
+            space: .sRGB,
+            bitmapInfo: .byteOrder32Big,
+            provider: CGDataProvider(data: Data([1, 2, 3, 4])),
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent
+        )
+        let rect = CGRect(x: 1, y: 2, width: 3, height: 4)
+        let transform = CGAffineTransform.translate(8, 9) * .rotate(.pi / 4)
+        context.ctm = transform
+        context.interpolationQuality = .none
+
+        context.draw(image, in: rect, byTiling: true)
+        context.flush()
+
+        let expectedCorners = [
+            CGPoint(x: rect.minX, y: rect.minY),
+            CGPoint(x: rect.maxX, y: rect.minY),
+            CGPoint(x: rect.maxX, y: rect.maxY),
+            CGPoint(x: rect.minX, y: rect.maxY)
+        ].map { $0.applying(transform) }
+        #expect(target.commands == [
+            .drawImage(
+                image: CGImageSnapshot(image: image),
+                destination: expectedCorners,
+                interpolationQuality: .none,
+                byTiling: true,
+                blendMode: .normal
+            )
+        ])
     }
 
     /// Verifies fill and stroke ellipse paths use the same current transformation.

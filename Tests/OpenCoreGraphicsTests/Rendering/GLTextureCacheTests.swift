@@ -14,6 +14,14 @@ struct GLTextureCacheTests {
         #expect(GLTexturePixelFormat.forChannelCount(5) == nil)
     }
 
+    /// Verifies only `.none` selects nearest filtering.
+    @Test
+    func mapsInterpolationQualityToTextureFilter() {
+        #expect(GLTextureFilter.forQuality(.none) == .nearest)
+        #expect(GLTextureFilter.forQuality(.default) == .linear)
+        #expect(GLTextureFilter.forQuality(.high) == .linear)
+    }
+
     /// Verifies repeated requests for one image create only one texture.
     @Test
     func reusesTextureForSameImageIdentity() throws {
@@ -84,7 +92,7 @@ private final class RecordingGLTextureLoader: GLTextureLoader {
     /// Returns a fake texture identifier and records the image request.
     /// - Parameter image: The image requested from the loader.
     /// - Returns: A fake texture with no OpenGL release side effect.
-    func makeTexture(from image: CGImage) throws -> GLTexture {
+    func makeTexture(from image: CGImageSnapshot) throws -> GLTexture {
         loadCount += 1
         return GLTexture(identifier: UInt32(loadCount), release: { _ in })
     }

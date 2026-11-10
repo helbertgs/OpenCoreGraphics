@@ -398,3 +398,13 @@
 - **Learnings for future iterations:**
   - O cache retém a própria imagem como chave; guardar somente `ObjectIdentifier` permitiria reutilização de identificador depois que a imagem fosse desalocada.
 ---
+
+## 2026-11-10 - US-043
+- `CGContext.draw(_:in:byTiling:)` captura snapshot Sendable, quad do destino transformado, qualidade de interpolação e opção de tiling.
+- `GLRenderer` desenha com o shader `image/`, mantém a textura no cache, aplica nearest em `.none` e linear nos demais níveis, e usa UVs que preservam a orientação top-down.
+- O Sample inclui `--test-image` com uma imagem BMP 64×64 de quatro quadrantes, desenhada em `CGRect(x: 300, y: 300, width: 128, height: 128)` para evidenciar orientação e escala.
+- Testes cobrem transformação do quad, UVs orientadas, repetição por tiling e seleção do filtro; `swift test` passou (111 testes em 23 suítes), `swift build --target OpenCoreGraphicsSample` passou e não houve warnings.
+- **Learnings for future iterations:**
+  - Para enviar comandos de imagem entre atores, capture bytes imutáveis e uma identidade estável no comando; mantenha o objeto de imagem mutável fora de `Sendable`.
+  - A primeira linha RGBA de `stb_image` é o topo da imagem; associe UV `v = 0` ao topo do quad para compensar o mapeamento de linhas do OpenGL.
+---

@@ -63,8 +63,8 @@ struct OpenGLTextureLoader: GLTextureLoader {
     /// - Parameter image: The bitmap image whose bytes will be uploaded.
     /// - Returns: A texture that owns the allocated OpenGL identifier.
     /// - Throws: `GLTextureError` when the bitmap layout or allocation is invalid.
-    func makeTexture(from image: CGImage) throws -> GLTexture {
-        guard let data = image.dataProvider?.data else {
+    func makeTexture(from image: CGImageSnapshot) throws -> GLTexture {
+        guard let data = image.data else {
             throw GLTextureError.missingPixelData
         }
         guard image.width > 0,

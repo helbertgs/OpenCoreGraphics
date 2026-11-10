@@ -118,6 +118,39 @@ enum GLRendererGeometry {
         }
     }
 
+    /// Triangulates the transformed image quad and assigns orientation-aware texture coordinates.
+    /// - Parameters:
+    ///   - destination: The four destination corners in lower-left, lower-right, upper-right, upper-left order.
+    ///   - imageSize: The image dimensions in pixels.
+    ///   - byTiling: Whether texture coordinates repeat at the image's native pixel size.
+    /// - Returns: Six vertices, or nil for an invalid quad or empty image.
+    static func imageVertices(
+        for destination: [CGPoint],
+        imageSize: CGSize,
+        byTiling: Bool
+    ) -> [GLBatchVertex]? {
+        guard destination.count == 4, imageSize.width > 0, imageSize.height > 0 else { return nil }
+        let horizontalRepeat = byTiling ? distance(destination[0], destination[1]) / imageSize.width : 1
+        let verticalRepeat = byTiling ? distance(destination[0], destination[3]) / imageSize.height : 1
+        let textureCoordinates = [
+            CGPoint(x: 0, y: verticalRepeat),
+            CGPoint(x: horizontalRepeat, y: verticalRepeat),
+            CGPoint(x: horizontalRepeat, y: 0),
+            CGPoint(x: 0, y: 0)
+        ]
+
+        return [0, 1, 2, 0, 2, 3].map { index in
+            let point = destination[index]
+            let textureCoordinate = textureCoordinates[index]
+            return GLBatchVertex(
+                positionX: Float(point.x),
+                positionY: Float(point.y),
+                textureX: Float(textureCoordinate.x),
+                textureY: Float(textureCoordinate.y)
+            )
+        }
+    }
+
     /// Triangulates four points that form an affine-transformed rectangle.
     /// - Parameter points: The rectangle corners in path order.
     /// - Returns: Six vertices, or nil when the points do not form a parallelogram.
@@ -153,6 +186,13 @@ enum GLRendererGeometry {
             normalized.removeLast()
         }
         return normalized.count >= 3 ? normalized : nil
+    }
+
+    /// Returns the Euclidean distance between two points.
+    private static func distance(_ first: CGPoint, _ second: CGPoint) -> Double {
+        let dx = second.x - first.x
+        let dy = second.y - first.y
+        return (dx * dx + dy * dy).squareRoot()
     }
 
     /// Checks that every polygon edge has all other vertices on the same side.
@@ -260,8 +300,14 @@ final class GLRenderer: CGRenderBackend {
     /// The solid-color program reused for each rectangle draw.
     private let program: GLProgram
 
+    /// The textured program used for image draw commands.
+    private let imageProgram: GLProgram
+
     /// The reusable vertex batch buffer.
     private let batchBuffer: GLBatchBuffer
+
+    /// The textures reused across image draw commands.
+    private let textureCache: GLTextureCache
 
     /// Creates the shader program and reusable geometry buffers.
     /// - Parameters:
@@ -274,7 +320,9 @@ final class GLRenderer: CGRenderBackend {
     ) throws {
         self.shaderCache = shaderCache
         program = try shaderCache.program(for: .solidColor)
+        imageProgram = try shaderCache.program(for: .image)
         batchBuffer = try GLBatchBuffer(driver: batchBufferDriver)
+        textureCache = GLTextureCache()
     }
 
     /// Executes commands synchronously on the main actor that owns the GL context.
@@ -320,11 +368,73 @@ final class GLRenderer: CGRenderBackend {
                 ) {
                     currentColor = rgba
                 }
+            case let .drawImage(image, destination, interpolationQuality, byTiling, blendMode):
+                renderImage(
+                    image,
+                    destination: destination,
+                    interpolationQuality: interpolationQuality,
+                    byTiling: byTiling,
+                    blendMode: blendMode,
+                    projection: projection
+                )
+                currentColor = nil
             default:
                 continue
             }
         }
 
+        batchBuffer.flush()
+    }
+
+    /// Draws an image quad using its cached texture and the textured shader.
+    /// - Parameters:
+    ///   - image: The immutable image state captured by the drawing context.
+    ///   - destination: The transformed destination corners.
+    ///   - interpolationQuality: The requested texture sampling quality.
+    ///   - byTiling: Whether the texture coordinates repeat beyond one image.
+    ///   - blendMode: The compositing mode captured by the drawing context.
+    ///   - projection: The destination's pixel-to-clip-space projection matrix.
+    private func renderImage(
+        _ image: CGImageSnapshot,
+        destination: [CGPoint],
+        interpolationQuality: CGInterpolationQuality,
+        byTiling: Bool,
+        blendMode: CGBlendMode,
+        projection: [Float]
+    ) {
+        guard let vertices = GLRendererGeometry.imageVertices(
+            for: destination,
+            imageSize: CGSize(width: image.width, height: image.height),
+            byTiling: byTiling
+        ) else {
+            return
+        }
+
+        batchBuffer.flush()
+        let texture: GLTexture
+        do {
+            texture = try textureCache.texture(for: image)
+        } catch {
+            preconditionFailure("Could not create texture for image draw command: \(error)")
+        }
+
+        texture.setInterpolationQuality(interpolationQuality)
+        imageProgram.use()
+        setProjection(projection, for: imageProgram)
+        glad_glUniform1i(imageProgram.uniformLocation(named: "uImage"), 0)
+        let vertexData = vertices.flatMap { [$0.positionX, $0.positionY, $0.textureX, $0.textureY] }
+        do {
+            try batchBuffer.append(
+                vertices: vertexData,
+                state: GLBatchState(
+                    program: imageProgram.identifier,
+                    texture: texture.identifier,
+                    blendMode: blendMode
+                )
+            )
+        } catch {
+            preconditionFailure("Image quad produced incomplete vertex data: \(error)")
+        }
         batchBuffer.flush()
     }
 
@@ -434,6 +544,14 @@ final class GLRenderer: CGRenderBackend {
     /// Sends the column-major projection matrix to the solid-color program.
     /// - Parameter values: The 16 projection matrix values.
     private func setProjection(_ values: [Float]) {
+        setProjection(values, for: program)
+    }
+
+    /// Sends the column-major projection matrix to a shader program.
+    /// - Parameters:
+    ///   - values: The 16 projection matrix values.
+    ///   - program: The shader program that receives the matrix.
+    private func setProjection(_ values: [Float], for program: GLProgram) {
         let location = program.uniformLocation(named: "uProjection")
         values.withUnsafeBufferPointer { buffer in
             guard let baseAddress = buffer.baseAddress else { return }

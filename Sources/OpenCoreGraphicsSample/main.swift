@@ -1,9 +1,20 @@
+import Foundation
 import OpenCoreGraphics
 
 let window = try CGWindow(frame: CGRect(x: 0, y: 0, width: 512, height: 512), title: "OpenCoreGraphics Sample")
 
 window.display = {
     let cgContext = window.cgContext
+
+    if CommandLine.arguments.contains("--test-image") {
+        guard let imageURL = Bundle.module.url(forResource: "orientation-test", withExtension: "bmp"),
+              let image = CGImage(url: imageURL.path) else {
+            preconditionFailure("The bundled orientation test image could not be loaded.")
+        }
+        cgContext.interpolationQuality = .none
+        cgContext.draw(image, in: CGRect(x: 300, y: 300, width: 128, height: 128))
+        return
+    }
 
     if CommandLine.arguments.contains("--test-stroke") {
         cgContext.setStrokeColor(CGColor(red: 0.2, green: 0.5, blue: 0.8, alpha: 1))

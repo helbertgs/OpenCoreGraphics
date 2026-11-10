@@ -35,6 +35,9 @@ let package = Package(
             name: "OpenCoreGraphicsSample",
             dependencies: [
                 "OpenCoreGraphics"
+            ],
+            resources: [
+                .copy("Resources")
             ]
         ),
         .testTarget(

@@ -646,8 +646,8 @@
         "Build e testes passam"
       ],
       "priority": 43,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "CGContext captura snapshot Sendable, quad transformado e opções de desenho; GLRenderer usa o shader image/, cacheia a textura e seleciona nearest para .none e linear nos demais níveis. UVs preservam a orientação top-down e byTiling repete a textura. O Sample inclui --test-image com BMP 64x64 de quadrantes em CGRect(x: 300, y: 300, width: 128, height: 128). swift test passou (111 testes em 23 suítes), swift build --target OpenCoreGraphicsSample passou e git diff --check não apontou problemas."
     },
     {
       "id": "US-044",

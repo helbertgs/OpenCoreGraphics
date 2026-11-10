@@ -561,10 +561,15 @@ open class CGContext {
     open func draw(_ image: CGImage, in rect: CGRect, byTiling: Bool = false) {
         pendingDrawCommands.append(
             .drawImage(
-                data: image.dataProvider?.data,
-                width: image.width,
-                height: image.height,
-                destination: convertToDeviceSpace(rect),
+                image: CGImageSnapshot(image: image),
+                destination: [
+                    CGPoint(x: rect.minX, y: rect.minY),
+                    CGPoint(x: rect.maxX, y: rect.minY),
+                    CGPoint(x: rect.maxX, y: rect.maxY),
+                    CGPoint(x: rect.minX, y: rect.maxY)
+                ].map { $0.applying(userSpaceToDeviceSpaceTransform) },
+                interpolationQuality: interpolationQuality,
+                byTiling: byTiling,
                 blendMode: blendMode
             )
         )

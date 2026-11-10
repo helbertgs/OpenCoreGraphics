@@ -114,6 +114,54 @@ struct GLRendererTests {
         #expect(maximumY == 14)
     }
 
+    /// Verifies image vertices preserve the transformed quad and correct top-down pixel orientation.
+    @Test
+    func mapsImagePixelsToDestinationQuad() throws {
+        let destination = [
+            CGPoint(x: 10, y: 20),
+            CGPoint(x: 138, y: 20),
+            CGPoint(x: 138, y: 148),
+            CGPoint(x: 10, y: 148)
+        ]
+        let vertices = try #require(
+            GLRendererGeometry.imageVertices(
+                for: destination,
+                imageSize: CGSize(width: 64, height: 64),
+                byTiling: false
+            )
+        )
+
+        #expect(vertices.map { CGPoint(x: Double($0.positionX), y: Double($0.positionY)) } == [
+            destination[0], destination[1], destination[2],
+            destination[0], destination[2], destination[3]
+        ])
+        #expect(vertices.map { CGPoint(x: Double($0.textureX), y: Double($0.textureY)) } == [
+            CGPoint(x: 0, y: 1), CGPoint(x: 1, y: 1), CGPoint(x: 1, y: 0),
+            CGPoint(x: 0, y: 1), CGPoint(x: 1, y: 0), CGPoint(x: 0, y: 0)
+        ])
+    }
+
+    /// Verifies tiling repeats at the source image's pixel dimensions.
+    @Test
+    func repeatsImageTextureCoordinatesWhenTiling() throws {
+        let destination = [
+            CGPoint(x: 0, y: 0),
+            CGPoint(x: 128, y: 0),
+            CGPoint(x: 128, y: 64),
+            CGPoint(x: 0, y: 64)
+        ]
+        let vertices = try #require(
+            GLRendererGeometry.imageVertices(
+                for: destination,
+                imageSize: CGSize(width: 64, height: 64),
+                byTiling: true
+            )
+        )
+
+        #expect(vertices.map(\.textureX) == [0, 2, 2, 0, 2, 0])
+        #expect(vertices.map(\.textureY) == [1, 1, 0, 1, 0, 0])
+    }
+
     /// Verifies pixel coordinates map to the expected column-major clip matrix.
     @Test
     func buildsPixelSpaceOrthographicProjection() throws {
