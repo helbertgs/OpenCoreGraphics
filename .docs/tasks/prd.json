@@ -403,8 +403,8 @@
         "Build e testes passam"
       ],
       "priority": 27,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "CGBuffer.swift e CGShading.swift foram removidos; a busca em Sources e Tests não encontrou os tipos nem fillShader/strokeShader. swift test passou."
     },
     {
       "id": "US-028",

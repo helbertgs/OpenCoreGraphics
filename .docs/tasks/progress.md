@@ -259,3 +259,11 @@
 - **Learnings for future iterations:**
   - O Sample usa `CGContext` de janela diretamente e chama `makeKeyAndOrderFront()` em um loop bloqueante; não o execute como teste automatizado sem gerenciamento da janela.
 ---
+
+## 2026-11-10 - US-027
+- Removidos os tipos legados públicos `CGBuffer` e `CGShading`.
+- Busca em `Sources` e `Tests` não encontrou referências a esses tipos ou aos shaders estáticos `fillShader`/`strokeShader`.
+- `swift test` passou (71 testes em 19 suítes).
+- **Learnings for future iterations:**
+  - O renderer atual usa `GLBatchBuffer`, `GLProgram` e shaders em recursos; as antigas estruturas de buffer e shader não são dependências da nova pipeline.
+---
