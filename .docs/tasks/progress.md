@@ -113,3 +113,12 @@
   - `CGAffineTransform.inverse` não reverte corretamente a translação em matrizes 2D; as conversões do contexto precisam da inversa 2D calculada explicitamente até a implementação geral ser corrigida.
   - `CGWindowContext` mantém a API duplicada de `CGContext` até a US-014; alterações em conversões de coordenadas precisam permanecer alinhadas nos dois tipos.
 ---
+
+## 2026-11-09 - US-011
+- Criados os tipos `DrawCommand` e `StrokeStyle`, ambos `Sendable` e `Equatable`, capturando parâmetros de preenchimento, traço, imagem, clipping e glifos.
+- O caso de imagem armazena uma cópia opcional de `Data` e dimensões, em vez de reter `CGImage`, que é mutável e não `Sendable`.
+- Teste verifica criação e igualdade de todos os cinco casos.
+- `swift test --filter DrawCommandTests` passou (1 teste).
+- **Learnings for future iterations:**
+  - Comandos que atravessam o limite do backend precisam carregar valores imutáveis e `Sendable`; para imagens, copie os bytes do provedor ao criar o comando.
+---

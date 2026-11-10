@@ -163,8 +163,8 @@
         "Build e testes passam"
       ],
       "priority": 11,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Criados DrawCommand e StrokeStyle como valores Sendable e equatable, com parâmetros capturados para preenchimento, traço, imagem, clipping e glifos. O comando de imagem armazena bytes imutáveis para evitar tornar CGImage mutável Sendable."
     },
     {
       "id": "US-012",
