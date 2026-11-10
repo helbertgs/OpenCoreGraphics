@@ -187,8 +187,8 @@
         "Typecheck passes"
       ],
       "priority": 11,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Alternativas comparadas em .docs/WindowLoopStrategy.md; US-012 bloqueada sem decisão específica sobre nova API pública ou alternativa compatível demonstrada."
     },
     {
       "id": "US-012",

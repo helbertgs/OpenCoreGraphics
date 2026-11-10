@@ -125,3 +125,13 @@
 - **Learnings for future iterations:**
   - O loop observado permite progresso de tarefa MainActor no macOS, mas não prova cooperação geral nem operação automática de múltiplas janelas.
 ---
+
+## 2026-11-10 - US-011
+- Comparadas alternativas de loop integrado, atualização incremental e API assíncrona aditiva, com isolamento, compatibilidade, cancelamento, despertar e múltiplas janelas.
+- `.docs/WindowLoopStrategy.md` registra a API assíncrona aditiva como direção preferida, sujeita à decisão específica exigida para uma nova declaração pública. A API síncrona existente permanece inalterada.
+- US-012 não está implementada: a cooperação garantida não foi demonstrada sob as restrições atuais de API. É necessária decisão antes de prosseguir.
+- Validação: 227 testes na suíte padrão com concorrência estrita; build estrito e `git diff --check` passaram. Casos GL opt-in foram ignorados na execução padrão.
+- Files changed: `.docs/WindowLoopStrategy.md`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`.
+- **Learnings for future iterations:**
+  - Polling ou espera síncrona no MainActor não constitui ponto de suspensão Swift; preservar a API legada não garante cooperação.
+---
