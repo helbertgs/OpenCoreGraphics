@@ -49,6 +49,9 @@ struct GLTestRunnerTests {
             }.joined(separator: "\n")
         return """
         \(reports)
+        GL_COMPARISON: mutable_before PASSED difference=0.0 tolerance=0.007
+        GL_COMPARISON: mutable_after PASSED difference=0.0 tolerance=0.007
+        GL_COMPARISON: mutable_queued PASSED difference=0.0 tolerance=0.007
         ✔ Test comparesSharedScenesAcrossBackends() passed after 0.001 seconds.
         ✔ Test comparesGlyphRenderingAcrossBackends() passed after 0.001 seconds.
         ✔ Test localFailureCannotHideInMean() passed after 0.001 seconds.
@@ -56,6 +59,33 @@ struct GLTestRunnerTests {
         ✔ Test invalidBuffersAreRejected() passed after 0.001 seconds.
         ✔ Test run with 5 tests in 3 suites passed after 0.001 seconds.
         """
+    }
+
+    /// Rejects a successful summary when a mutable-image comparison was not reported.
+    @Test
+    private func missingMutableImageReportIsRejected() throws {
+        let incomplete = successOutput.replacing(
+            "GL_COMPARISON: mutable_after PASSED difference=0.0 tolerance=0.007\n", with: ""
+        )
+        let result = try run("puts \(String(reflecting: incomplete))")
+        #expect(result.status == 1)
+        #expect(result.output.contains("mutable-image reports"))
+    }
+
+    /// Rejects inconsistent, duplicated, or overly permissive mutable-image reports.
+    @Test
+    private func invalidMutableImageReportsAreRejected() throws {
+        let valid = "GL_COMPARISON: mutable_before PASSED difference=0.0 tolerance=0.007"
+        let invalid = [
+            "GL_COMPARISON: mutable_before PASSED difference=1.0 tolerance=0.007",
+            "GL_COMPARISON: mutable_before PASSED difference=0.0 tolerance=1.0",
+            "\(valid)\nGL_COMPARISON: mutable_before FAILED difference=1.0 tolerance=0.007"
+        ]
+        for report in invalid {
+            let result = try run("puts \(String(reflecting: successOutput.replacing(valid, with: report)))")
+            #expect(result.status == 1)
+            #expect(result.output.contains("GL runner: FAILED"))
+        }
     }
 
     /// Rejects an otherwise successful run that omits localized glyph evidence.

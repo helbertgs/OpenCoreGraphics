@@ -32,6 +32,26 @@ cópia; o atlas constrói seu próprio buffer. A captura ainda exige que a orige
 não seja modificada simultaneamente durante a cópia. `CGContext`, `CGImage`,
 `CGDataProvider` e `CGFont` não recebem garantia `Sendable` por isso.
 
+## Conteúdo de imagem e texturas
+
+Cada desenho copia todos os bytes do `Data` do provider, inclusive memória
+externa usada por `Data(bytesNoCopy:)`. O cache mantém o último snapshot
+enviado por identidade e compara os bytes e metadados completos, sem depender
+de versão nem de hash: alterações via atribuição, operações mutantes de
+`Data` ou escrita na memória externa são detectadas na próxima captura.
+`info` não é fonte de pixels. Uma atualização malsucedida não altera o
+snapshot registrado; dados ausentes ou inválidos continuam sujeitos aos erros
+existentes do carregador.
+
+A cópia e, para conteúdo igual, a comparação custam O(n) por desenho, com
+armazenamento adicional O(n) para cada último snapshot e também para
+comandos pendentes; o custo não foi medido. O cache não tem orçamento de
+memória nesta etapa. Não há upload quando o conteúdo e os metadados não
+mudam. Antes de modificar uma textura, o renderer executa o lote anterior;
+assim, comandos pendentes com versões diferentes mantêm sua ordem. A origem
+externa deve permanecer válida e não pode ser escrita simultaneamente à
+captura; este mecanismo não sincroniza acesso concorrente.
+
 ## Evidência automatizada das fronteiras
 
 `RenderingConcurrencyTests` parte do `MainActor` e cria duas tarefas

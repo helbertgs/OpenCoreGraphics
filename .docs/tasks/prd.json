@@ -289,8 +289,8 @@
         "Typecheck passes"
       ],
       "priority": 17,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Cache compara snapshots completos por identidade; testes falsos e GL real verificam atualização, reutilização e ordem de versões enfileiradas."
     },
     {
       "id": "US-018",

@@ -181,3 +181,12 @@
 - **Learnings for future iterations:**
   - O snapshot Sendable não pode substituir o proprietário nativo de uma fonte; a pilha confinada deve manter o objeto vivo.
 ---
+
+## 2026-11-10 - US-017
+- Cache de texturas compara snapshots imutáveis completos por identidade e atualiza somente conteúdo alterado; preserva ordem dos lotes e não envia novamente dados inalterados.
+- Testes falsos cobrem mutações e uploads; GL real compara software antes, depois e com versões enfileiradas, com diferença média zero.
+- Validação: 264 testes na suíte padrão com concorrência estrita; build estrito; runner GL concluiu 5 testes em 3 suítes com cenas aprovadas; `git diff --check` passou. Cópia e comparação custam O(n); orçamento fica para US-018.
+- Files changed: `.docs/RenderingConcurrency.md`, `Sources/OpenCoreGraphics/Rendering/GL/GLTextureCache.swift`, testes GL e cache, `scripts/run-gl-tests.rb`, arquivos de progresso.
+- **Learnings for future iterations:**
+  - Memória externa precisa permanecer válida e não ser mutada durante a captura; comparar conteúdo evita textura obsoleta sem confiar apenas na identidade.
+---

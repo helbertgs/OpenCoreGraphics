@@ -134,10 +134,25 @@ glyph_reports_complete = glyph_reports.all? do |scene, metric|
   end
 end
 
-if status.success? && passed && glyph_reports_complete && !output.match?(/^.*(?:skipped|failed|Issue recorded)\b/i)
+mutable_reports_complete = %w[mutable_before mutable_after mutable_queued].all? do |scene|
+  matches = output.scan(/^GL_COMPARISON: #{scene} (PASSED|FAILED) difference=(\S+) tolerance=(\S+)\s*$/)
+  next false unless matches.length == 1
+  status_text, difference_text, tolerance_text = matches.first
+  begin
+    difference = Float(difference_text)
+    tolerance = Float(tolerance_text)
+    status_text == "PASSED" && difference.finite? && tolerance.finite? &&
+      difference >= 0 && tolerance >= 0 && tolerance <= 2.0 / 255.0 && difference <= tolerance
+  rescue ArgumentError
+    false
+  end
+end
+
+if status.success? && passed && glyph_reports_complete && mutable_reports_complete &&
+   !output.match?(/^.*(?:skipped|failed|Issue recorded)\b/i)
   puts "GL runner: PASSED: both GL tests and synthetic metric tests completed successfully."
   exit 0
 end
 
-warn "GL runner: FAILED: test failure, missing glyph reports, skipped test, or unsuccessful process exit."
+warn "GL runner: FAILED: test failure, missing glyph reports or mutable-image reports, skipped test, or unsuccessful process exit."
 exit 1

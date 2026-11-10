@@ -126,6 +126,90 @@ struct GLTextureCacheTests {
         #expect(loader.updatedImageData == Data([5, 6, 7, 8]))
     }
 
+    /// Verifies public provider mutations invalidate only when the captured bytes change.
+    @Test
+    private func detectsProviderDataMutationsAndReusesUnchangedUploads() throws {
+        let loader = RecordingGLTextureLoader()
+        let cache = GLTextureCache(loader: loader)
+        let image = makeImage()
+        let provider = try #require(image.dataProvider)
+        let original = CGImageSnapshot(image: image)
+        let texture = try cache.texture(for: original)
+
+        provider.data = Data([1, 2, 3, 4])
+        #expect(try cache.texture(for: image) === texture)
+        provider.data?[0] = 9
+        let changed = CGImageSnapshot(image: image)
+        #expect(original.identity == changed.identity)
+        #expect(original.data == Data([1, 2, 3, 4]))
+        #expect(changed != original)
+        #expect(try cache.texture(for: changed) === texture)
+        #expect(try cache.texture(for: image) === texture)
+        provider.data?.replaceSubrange(1..<3, with: [8, 7])
+        #expect(try cache.texture(for: image) === texture)
+        provider.data = Data([1, 2, 3, 4])
+        #expect(try cache.texture(for: image) === texture)
+
+        #expect(loader.loadCount == 1)
+        #expect(loader.uploadedImages == [
+            Data([1, 2, 3, 4]), Data([9, 2, 3, 4]),
+            Data([9, 8, 7, 4]), Data([1, 2, 3, 4])
+        ])
+    }
+
+    /// Verifies mutations through a no-copy external buffer are captured and uploaded.
+    @Test
+    private func detectsExternalStorageMutations() throws {
+        let count = 4096
+        let storage = UnsafeMutablePointer<UInt8>.allocate(capacity: count)
+        storage.initialize(repeating: 0, count: count)
+        defer {
+            storage.deinitialize(count: count)
+            storage.deallocate()
+        }
+        let image = makeImage()
+        let provider = try #require(image.dataProvider)
+        provider.data = Data(bytesNoCopy: storage, count: count, deallocator: .none)
+        let loader = RecordingGLTextureLoader()
+        let cache = GLTextureCache(loader: loader)
+        let before = CGImageSnapshot(image: image)
+        let texture = try cache.texture(for: before)
+        storage[0] = 255
+        let after = CGImageSnapshot(image: image)
+
+        #expect(before.identity == after.identity)
+        #expect(before.data?.first == 0)
+        #expect(after.data?.first == 255)
+        #expect(try cache.texture(for: after) === texture)
+        #expect(try cache.texture(for: image) === texture)
+        #expect(loader.loadCount == 1)
+        #expect(loader.updateCount == 1)
+        #expect(loader.updatedImageData?.first == 255)
+    }
+
+    /// Verifies a failed upload leaves the last successful snapshot available for retry.
+    @Test
+    private func retriesFailedContentUpdate() throws {
+        let loader = RecordingGLTextureLoader()
+        let cache = GLTextureCache(loader: loader)
+        let image = makeImage()
+        let provider = try #require(image.dataProvider)
+        let texture = try cache.texture(for: image)
+        provider.data = nil
+        loader.rejectMissingData = true
+        #expect(throws: GLTextureError.missingPixelData) {
+            try cache.texture(for: image)
+        }
+        provider.data = Data([1, 2, 3, 4])
+        #expect(try cache.texture(for: image) === texture)
+        #expect(loader.updateCount == 0)
+        provider.data = Data([5, 6, 7, 8])
+        #expect(try cache.texture(for: image) === texture)
+        #expect(loader.loadCount == 1)
+        #expect(loader.updateCount == 1)
+        #expect(loader.updatedImageData == Data([5, 6, 7, 8]))
+    }
+
     /// Verifies glyph atlas texture requests reuse and evict by atlas identity.
     @Test
     func reusesAndEvictsTextureForGlyphAtlas() throws {
@@ -250,11 +334,20 @@ private final class RecordingGLTextureLoader: GLTextureLoader {
     /// The pixel bytes from the most recent texture update.
     private(set) var updatedImageData: Data?
 
+    /// The bytes from each successful image creation or update, in upload order.
+    private(set) var uploadedImages: [Data] = []
+
+    /// Whether a missing image buffer causes the fake update to fail.
+    var rejectMissingData = false
+
     /// Returns a fake texture identifier and records the image request.
     /// - Parameter image: The image requested from the loader.
     /// - Returns: A fake texture with no OpenGL release side effect.
     func makeTexture(from image: CGImageSnapshot) throws -> GLTexture {
         loadCount += 1
+        if let data = image.data {
+            uploadedImages.append(data)
+        }
         return GLTexture(identifier: UInt32(loadCount), width: image.width, height: image.height, release: { _ in })
     }
 
@@ -276,7 +369,13 @@ private final class RecordingGLTextureLoader: GLTextureLoader {
     ///   - texture: The existing fake texture.
     ///   - image: The new pixel data.
     func updateTexture(_ texture: GLTexture, from image: CGImageSnapshot) throws {
+        if rejectMissingData && image.data == nil {
+            throw GLTextureError.missingPixelData
+        }
         updateCount += 1
         updatedImageData = image.data
+        if let data = image.data {
+            uploadedImages.append(data)
+        }
     }
 }

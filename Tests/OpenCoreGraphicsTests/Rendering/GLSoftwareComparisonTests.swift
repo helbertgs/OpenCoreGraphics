@@ -78,6 +78,88 @@ struct GLSoftwareComparisonTests {
                 "\(scene.rawValue) mean channel difference \(difference), allowed \(tolerance)"
             )
         }
+        try compareMutableImage(in: glContext, and: softwareContext)
+    }
+
+    /// Compares both renderers across external pixel changes and queued image versions.
+    /// - Parameters:
+    ///   - glContext: The window-backed OpenGL destination.
+    ///   - softwareContext: The independent bitmap destination.
+    private func compareMutableImage(in glContext: CGContext, and softwareContext: CGContext) throws {
+        let count = 4096
+        let storage = UnsafeMutablePointer<UInt8>.allocate(capacity: count)
+        storage.initialize(repeating: 0, count: count)
+        defer {
+            storage.deinitialize(count: count)
+            storage.deallocate()
+        }
+        storage[0] = 255
+        storage[3] = 255
+        let provider = CGDataProvider(data: Data(bytesNoCopy: storage, count: count, deallocator: .none))
+        let image = CGImage(
+            width: 1, height: 1, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: 4,
+            space: .sRGB, bitmapInfo: .byteOrder32Big, provider: provider,
+            decode: nil, shouldInterpolate: false, intent: .defaultIntent
+        )
+        let full = CGRect(x: 0, y: 0, width: Double(glContext.width), height: Double(glContext.height))
+        let left = CGRect(x: 0, y: 0, width: Double(glContext.width) / 2, height: Double(glContext.height))
+        let right = CGRect(
+            x: Double(glContext.width) / 2, y: 0,
+            width: Double(glContext.width) / 2, height: Double(glContext.height)
+        )
+        glContext.interpolationQuality = .none
+        softwareContext.interpolationQuality = .none
+        glContext.draw(image, in: full)
+        softwareContext.draw(image, in: full)
+        let before = try compareMutableImagePixels(glContext, softwareContext, scene: "mutable_before")
+
+        storage[0] = 0
+        storage[1] = 255
+        glContext.draw(image, in: full)
+        softwareContext.draw(image, in: full)
+        let after = try compareMutableImagePixels(glContext, softwareContext, scene: "mutable_after")
+        #expect(before != after, "The GL readback must change after external pixels change")
+
+        storage[0] = 255
+        storage[1] = 0
+        glContext.draw(image, in: left)
+        softwareContext.draw(image, in: left)
+        storage[0] = 0
+        storage[1] = 255
+        glContext.draw(image, in: right)
+        softwareContext.draw(image, in: right)
+        let queued = try compareMutableImagePixels(glContext, softwareContext, scene: "mutable_queued")
+        let bytes = [UInt8](queued)
+        let leftOffset = (glContext.height / 2 * glContext.width + glContext.width / 4) * 4
+        let rightOffset = (glContext.height / 2 * glContext.width + 3 * glContext.width / 4) * 4
+        #expect(bytes[leftOffset] > 240 && bytes[leftOffset + 1] < 15)
+        #expect(bytes[rightOffset] < 15 && bytes[rightOffset + 1] > 240)
+    }
+
+    /// Flushes and compares a mutable-image scene, recording its visual evidence.
+    /// - Parameters:
+    ///   - glContext: The window-backed destination.
+    ///   - softwareContext: The bitmap destination.
+    ///   - scene: The identifier used by the comparison report.
+    /// - Returns: The raw OpenGL framebuffer bytes.
+    private func compareMutableImagePixels(
+        _ glContext: CGContext,
+        _ softwareContext: CGContext,
+        scene: String
+    ) throws -> Data {
+        glContext.flush()
+        softwareContext.flush()
+        let glPixels = try #require(glContext.renderTarget?.readPixels())
+        let softwarePixels = try GLComparisonPixels(pixels: softwareContext.data, storedAsSRGB: true).data
+        let normalized = try GLComparisonPixels(pixels: glPixels).data
+        let difference = try #require(meanChannelDifference(normalized, softwarePixels))
+        let tolerance = 2.0 / 255.0
+        _ = try GLComparisonReport(
+            scene: scene, width: glContext.width, height: glContext.height,
+            difference: difference, tolerance: tolerance, glPixels: glPixels, softwarePixels: softwarePixels
+        )
+        #expect(difference <= tolerance, "\(scene) mean channel difference \(difference), allowed \(tolerance)")
+        return glPixels
     }
 
     /// Renders one scene using public context operations shared by both backends.

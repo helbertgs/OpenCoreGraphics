@@ -23,7 +23,7 @@ protocol GLTextureLoader {
     func updateTexture(_ texture: GLTexture, from image: CGImageSnapshot) throws
 }
 
-/// Reuses one OpenGL texture for each image object.
+/// Reuses one OpenGL texture per image identity, updating it when the captured state changes.
 @MainActor
 final class GLTextureCache {
     /// Creates textures when an image is first requested.
@@ -31,6 +31,9 @@ final class GLTextureCache {
 
     /// Textures indexed by stable identity tokens from their source images.
     private var textures: [UUID: GLTexture] = [:]
+
+    /// The last successfully uploaded immutable state for each image texture.
+    private var uploadedImages: [UUID: CGImageSnapshot] = [:]
 
     /// Textures indexed by stable identity tokens from their glyph atlases.
     private var glyphTextures: [UUID: GLTexture] = [:]
@@ -54,13 +57,7 @@ final class GLTextureCache {
     /// - Returns: The texture associated with this image identity.
     /// - Throws: A `GLTextureError` when the image cannot be uploaded.
     func texture(for image: CGImageSnapshot) throws -> GLTexture {
-        if let texture = textures[image.identity] {
-            return texture
-        }
-
-        let texture = try loader.makeTexture(from: image)
-        textures[image.identity] = texture
-        return texture
+        try updateTexture(for: image)
     }
 
     /// Returns the cached texture or creates one for a glyph coverage atlas.
@@ -77,18 +74,22 @@ final class GLTextureCache {
         return texture
     }
 
-    /// Updates the cached texture for this image identity, creating it on first use.
+    /// Updates changed cached content for this image identity, creating it on first use.
     /// - Parameter image: The latest immutable pixel state for the image identity.
     /// - Returns: The texture associated with this image identity.
     /// - Throws: A `GLTextureError` when the image cannot be uploaded.
     func updateTexture(for image: CGImageSnapshot) throws -> GLTexture {
         if let texture = textures[image.identity] {
-            try loader.updateTexture(texture, from: image)
+            if uploadedImages[image.identity] != image {
+                try loader.updateTexture(texture, from: image)
+                uploadedImages[image.identity] = image
+            }
             return texture
         }
 
         let texture = try loader.makeTexture(from: image)
         textures[image.identity] = texture
+        uploadedImages[image.identity] = image
         return texture
     }
 
@@ -96,6 +97,7 @@ final class GLTextureCache {
     /// - Parameter image: The image whose cached texture should be evicted.
     func evict(_ image: CGImage) {
         textures.removeValue(forKey: image.textureCacheIdentity)
+        uploadedImages.removeValue(forKey: image.textureCacheIdentity)
     }
 
     /// Removes a glyph atlas and its texture from the cache.
