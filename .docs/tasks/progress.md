@@ -553,3 +553,13 @@
 - **Learnings for future iterations:**
   - Em uma surface sRGB, converta também o destino premultiplicado para linear antes do blending e re-encode o resultado depois; a pista GLFW de sRGB não garante o formato efetivo, então consulte a attachment.
 ---
+
+  ## 2026-11-10 - US-057
+  - `CGContext` agora mantém sombra no graphics state, captura a configuração em cada comando de preenchimento/traço e a transforma para coordenadas do dispositivo.
+  - O renderer de software desloca a máscara de cobertura por amostragem bilinear e aplica um desfoque gaussiano separável antes de compor a forma.
+  - O backend GL ainda não faz o passe de desfoque e desenha a forma sem sombra; a limitação e o comando de demonstração `swift run OpenCoreGraphicsSample --test-shadow` estão documentados em `.docs/ShadowRendering.md`.
+  - `swift test` passou (154 testes em 28 suítes), `swift build --target OpenCoreGraphicsSample` e `git diff --check` passaram.
+  - Files changed: `Sources/OpenCoreGraphics/2D Drawing/CGContext.swift`, `Sources/OpenCoreGraphics/Rendering/DrawCommand.swift`, `Sources/OpenCoreGraphics/Rendering/SoftwareRenderer.swift`, `Sources/OpenCoreGraphics/Rendering/GL/GLRenderer.swift`, `Sources/OpenCoreGraphics/Services/Window Services/CGGraphicsState.swift`, `Sources/OpenCoreGraphicsSample/main.swift`, `Tests/OpenCoreGraphicsTests/Rendering/CGContextCommandTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/SoftwareRendererTests.swift`, `.docs/ShadowRendering.md`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
+  - **Learnings for future iterations:**
+    - Capture effects such as shadows in backend-independent draw commands so synchronous software and GL backends consume the same drawing state.
+  ---

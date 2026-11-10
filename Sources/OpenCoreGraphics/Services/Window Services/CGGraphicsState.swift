@@ -29,6 +29,29 @@ enum CGClipRegion: Equatable, Sendable {
     }
 }
 
+/// The color, offset, and blur radius captured for a path shadow.
+struct CGShadow: Equatable, Sendable {
+    /// The displacement from the source shape in device-space pixels.
+    let offset: CGSize
+
+    /// The Gaussian standard deviation in device-space pixels.
+    let blur: Double
+
+    /// The color composited beneath the source shape.
+    let color: CGColor
+
+    /// Creates a shadow with device-space rendering parameters.
+    /// - Parameters:
+    ///   - offset: The displacement from the source shape.
+    ///   - blur: The Gaussian standard deviation.
+    ///   - color: The shadow color and opacity.
+    init(offset: CGSize, blur: Double, color: CGColor) {
+        self.offset = offset
+        self.blur = blur
+        self.color = color
+    }
+}
+
 /// A value snapshot of the drawing parameters stored by a graphics context.
 struct CGGraphicsState: Sendable {
     /// The transform from user space to device space.
@@ -66,6 +89,9 @@ struct CGGraphicsState: Sendable {
 
     /// The compositing operation used when drawing.
     var blendMode: CGBlendMode = .normal
+
+    /// The shadow applied to subsequent path drawing, or nil when disabled.
+    var shadow: CGShadow?
 
     /// The quality hint used when interpolating images.
     var interpolationQuality: CGInterpolationQuality = .default

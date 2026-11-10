@@ -496,17 +496,49 @@ open class CGContext {
 
         switch mode {
         case .fill:
-            pendingDrawCommands.append(.fillPath(path: path, rule: .winding, color: fillColor, blendMode: blendMode))
+            pendingDrawCommands.append(
+                .fillPath(path: path, rule: .winding, color: fillColor, blendMode: blendMode, shadow: shadowForDrawing)
+            )
         case .eoFill:
-            pendingDrawCommands.append(.fillPath(path: path, rule: .evenOdd, color: fillColor, blendMode: blendMode))
+            pendingDrawCommands.append(
+                .fillPath(path: path, rule: .evenOdd, color: fillColor, blendMode: blendMode, shadow: shadowForDrawing)
+            )
         case .stroke:
-            pendingDrawCommands.append(.strokePath(path: path, color: strokeColor, style: currentStrokeStyle, blendMode: blendMode))
+            pendingDrawCommands.append(
+                .strokePath(
+                    path: path,
+                    color: strokeColor,
+                    style: currentStrokeStyle,
+                    blendMode: blendMode,
+                    shadow: shadowForDrawing
+                )
+            )
         case .fillStroke:
-            pendingDrawCommands.append(.fillPath(path: path, rule: .winding, color: fillColor, blendMode: blendMode))
-            pendingDrawCommands.append(.strokePath(path: path, color: strokeColor, style: currentStrokeStyle, blendMode: blendMode))
+            pendingDrawCommands.append(
+                .fillPath(path: path, rule: .winding, color: fillColor, blendMode: blendMode, shadow: shadowForDrawing)
+            )
+            pendingDrawCommands.append(
+                .strokePath(
+                    path: path,
+                    color: strokeColor,
+                    style: currentStrokeStyle,
+                    blendMode: blendMode,
+                    shadow: shadowForDrawing
+                )
+            )
         case .eoFillStroke:
-            pendingDrawCommands.append(.fillPath(path: path, rule: .evenOdd, color: fillColor, blendMode: blendMode))
-            pendingDrawCommands.append(.strokePath(path: path, color: strokeColor, style: currentStrokeStyle, blendMode: blendMode))
+            pendingDrawCommands.append(
+                .fillPath(path: path, rule: .evenOdd, color: fillColor, blendMode: blendMode, shadow: shadowForDrawing)
+            )
+            pendingDrawCommands.append(
+                .strokePath(
+                    path: path,
+                    color: strokeColor,
+                    style: currentStrokeStyle,
+                    blendMode: blendMode,
+                    shadow: shadowForDrawing
+                )
+            )
         }
 
         self.path = nil
@@ -519,7 +551,9 @@ open class CGContext {
     /// - Parameter rule: The rule for determining which areas to treat as the interior of the path.
     open func fillPath(using rule: CGPath.CGPathFillRule = .winding) {
         guard let path = self.path else { return }
-        pendingDrawCommands.append(.fillPath(path: path, rule: rule, color: fillColor, blendMode: blendMode))
+        pendingDrawCommands.append(
+            .fillPath(path: path, rule: rule, color: fillColor, blendMode: blendMode, shadow: shadowForDrawing)
+        )
         self.path = nil
     }
 
@@ -629,7 +663,15 @@ open class CGContext {
     /// The current path is cleared as a side effect of calling this function.
     open func strokePath() {
         guard let path = self.path else { return }
-        pendingDrawCommands.append(.strokePath(path: path, color: strokeColor, style: currentStrokeStyle, blendMode: blendMode))
+        pendingDrawCommands.append(
+            .strokePath(
+                path: path,
+                color: strokeColor,
+                style: currentStrokeStyle,
+                blendMode: blendMode,
+                shadow: shadowForDrawing
+            )
+        )
         self.path = nil
     }
 
@@ -643,6 +685,20 @@ open class CGContext {
             dashPhase: lineDashPhase,
             dashLengths: lineDash
         )
+    }
+
+    /// Transforms the current user-space shadow to the device coordinates captured by a command.
+    private var shadowForDrawing: CGShadow? {
+        guard let shadow else { return nil }
+        let transformedOffset = shadow.offset.applying(ctm)
+        let determinant = ctm.m11 * ctm.m22 - ctm.m21 * ctm.m12
+        let transformedBlur = shadow.blur * sqrt(abs(determinant))
+        guard transformedOffset.width.isFinite,
+              transformedOffset.height.isFinite,
+              transformedBlur.isFinite else {
+            return nil
+        }
+        return CGShadow(offset: transformedOffset, blur: transformedBlur, color: shadow.color)
     }
 
     // MARK: - Drawing Shapes
@@ -829,6 +885,9 @@ open class CGContext {
     /// The current stroke color space in a graphics context.
     private var strokeColorSpace: CGColorSpace = .genericRGBLinear
 
+    /// The shadow applied to subsequent path drawing.
+    private var shadow: CGShadow?
+
     /// The current  line width for a graphics context.
     private var lineWidth: Double = 1.0
 
@@ -836,6 +895,29 @@ open class CGContext {
     /// - Parameter color: The new fill color.
     public func setFillColor(_ color: CGColor) {
         self.fillColor = color
+    }
+
+    /// Sets the shadow used when drawing paths.
+    /// - Parameters:
+    ///   - offset: The shadow displacement in user-space units.
+    ///   - blur: The Gaussian standard deviation in user-space units.
+    ///   - color: The shadow color and opacity.
+    /// - Precondition: The offset and blur are finite, and the blur is nonnegative.
+    public func setShadow(offset: CGSize, blur: Double, color: CGColor) {
+        precondition(
+            offset.width.isFinite && offset.height.isFinite && blur.isFinite && blur >= 0,
+            "Shadow offsets and blur must be finite, and blur must be nonnegative."
+        )
+        shadow = CGShadow(offset: offset, blur: blur, color: color)
+    }
+
+    /// Sets a black shadow used when drawing paths.
+    /// - Parameters:
+    ///   - offset: The shadow displacement in user-space units.
+    ///   - blur: The Gaussian standard deviation in user-space units.
+    /// - Precondition: The offset and blur are finite, and the blur is nonnegative.
+    public func setShadow(offset: CGSize, blur: Double) {
+        setShadow(offset: offset, blur: blur, color: .black)
     }
 
     /// Sets the current fill color to a value in the DeviceCMYK color space.
@@ -1080,6 +1162,7 @@ open class CGContext {
         state.lineDash = lineDash
         state.lineDashPhase = lineDashPhase
         state.blendMode = blendMode
+        state.shadow = shadow
         state.interpolationQuality = interpolationQuality
         state.renderingIntent = renderingIntent
         state.clip = clipMask
@@ -1107,6 +1190,7 @@ open class CGContext {
         lineDash = state.lineDash
         lineDashPhase = state.lineDashPhase
         blendMode = state.blendMode
+        shadow = state.shadow
         interpolationQuality = state.interpolationQuality
         renderingIntent = state.renderingIntent
         clipMask = state.clip

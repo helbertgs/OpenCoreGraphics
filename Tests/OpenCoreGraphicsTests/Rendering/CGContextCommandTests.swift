@@ -272,6 +272,32 @@ struct CGContextCommandTests {
         ])
     }
 
+    /// Verifies shadows are captured in draw commands and restored with the graphics state.
+    @Test
+    func capturesAndRestoresShadowState() {
+        let (context, target) = makeRecordingContext()
+        let rect = CGRect(x: 1, y: 2, width: 3, height: 4)
+        let shadow = CGShadow(offset: CGSize(width: 4, height: 5), blur: 2, color: .black)
+        context.setFillColor(.white)
+        context.saveGState()
+        context.setShadow(offset: shadow.offset, blur: shadow.blur, color: shadow.color)
+        context.fill(rect)
+        context.restoreGState()
+        context.fill(rect)
+        context.flush()
+
+        #expect(target.commands == [
+            .fillPath(
+                path: CGPath(rect: rect),
+                rule: .winding,
+                color: .white,
+                blendMode: .normal,
+                shadow: shadow
+            ),
+            .fillPath(path: CGPath(rect: rect), rule: .winding, color: .white, blendMode: .normal)
+        ])
+    }
+
     /// Verifies four points create two independent transformed line segments.
     @Test
     func strokeLineSegmentsRecordsOneSubpathPerPointPair() throws {

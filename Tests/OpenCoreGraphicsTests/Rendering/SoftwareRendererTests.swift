@@ -20,6 +20,21 @@ struct SoftwareRendererTests {
         #expect(pixel(at: 2, y: 5, in: pixels) == [0, 0, 0, 0])
     }
 
+    /// Verifies a zero-blur shadow is displaced by the requested device-space offset.
+    @Test
+    func drawsShadowAtTheRequestedOffset() throws {
+        let context = try #require(makeContext())
+        context.data = Data(repeating: 0, count: 8 * 8 * 4)
+        context.setShadow(offset: CGSize(width: 4, height: 4), blur: 0, color: .black)
+        context.setFillColor(.white)
+        context.fill(CGRect(x: 1, y: 1, width: 1, height: 1))
+        context.flush()
+
+        let pixels = Array(context.data)
+        #expect(pixel(at: 5, y: 5, in: pixels) == [0, 0, 0, 255])
+        #expect(pixel(at: 1, y: 1, in: pixels) == [255, 255, 255, 255])
+    }
+
     /// Verifies premultiplied source-over composition on an opaque white destination.
     @Test
     func compositesSourceOverWithPremultipliedChannels() throws {

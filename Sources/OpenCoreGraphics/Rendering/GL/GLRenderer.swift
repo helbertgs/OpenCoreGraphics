@@ -460,7 +460,7 @@ final class GLRenderer: CGRenderBackend, CGPixelSurfaceRenderer, CGPixelReadback
 
         for command in commands {
             switch command {
-            case let .fillPath(path, rule, color, blendMode):
+            case let .fillPath(path, rule, color, blendMode, _):
                 renderFillPath(
                     path,
                     rule: rule,
@@ -469,7 +469,7 @@ final class GLRenderer: CGRenderBackend, CGPixelSurfaceRenderer, CGPixelReadback
                     size: size,
                     currentColor: &currentColor
                 )
-            case let .strokePath(path, color, style, blendMode):
+            case let .strokePath(path, color, style, blendMode, _):
                 guard let rgba = GLRendererGeometry.rgbaComponents(for: color) else { continue }
                 batchBuffer.flush()
                 let vertices = GLRendererGeometry.strokeVertices(for: path, style: style)

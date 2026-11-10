@@ -3,10 +3,22 @@ import Foundation
 /// A backend-independent drawing operation with all rendering state captured.
 enum DrawCommand: Equatable, Sendable {
     /// Fills a path using the selected interior rule and compositing mode.
-    case fillPath(path: CGPath, rule: CGPath.CGPathFillRule, color: CGColor, blendMode: CGBlendMode)
+    case fillPath(
+        path: CGPath,
+        rule: CGPath.CGPathFillRule,
+        color: CGColor,
+        blendMode: CGBlendMode,
+        shadow: CGShadow? = nil
+    )
 
     /// Strokes a path using the selected line style and compositing mode.
-    case strokePath(path: CGPath, color: CGColor, style: StrokeStyle, blendMode: CGBlendMode)
+    case strokePath(
+        path: CGPath,
+        color: CGColor,
+        style: StrokeStyle,
+        blendMode: CGBlendMode,
+        shadow: CGShadow? = nil
+    )
 
     /// Draws an image into transformed destination corners.
     case drawImage(

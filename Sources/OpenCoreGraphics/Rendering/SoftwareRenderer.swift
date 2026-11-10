@@ -21,15 +21,21 @@ final class SoftwareRenderer: CGRenderBackend {
     func execute(_ commands: [DrawCommand], size: CGSize) {
         for command in commands {
             switch command {
-            case let .fillPath(path, rule, color, blendMode):
+            case let .fillPath(path, rule, color, blendMode, shadow):
                 if let rectangle = alignedRectangle(in: path) {
-                    fill(rectangle, color: color, blendMode: blendMode)
+                    fill(rectangle, color: color, blendMode: blendMode, shadow: shadow)
                 } else {
-                    fill(PathFlattener.flatten(path), rule: rule, color: color, blendMode: blendMode)
+                    fill(
+                        PathFlattener.flatten(path),
+                        rule: rule,
+                        color: color,
+                        blendMode: blendMode,
+                        shadow: shadow
+                    )
                 }
-            case let .strokePath(path, color, style, blendMode):
+            case let .strokePath(path, color, style, blendMode, shadow):
                 let outlines = Stroker.outline(PathFlattener.flatten(path), style: style)
-                fill(outlines, rule: .winding, color: color, blendMode: blendMode)
+                fill(outlines, rule: .winding, color: color, blendMode: blendMode, shadow: shadow)
             case let .drawImage(image, destination, interpolationQuality, byTiling, blendMode):
                 drawImage(
                     image,
@@ -61,7 +67,7 @@ final class SoftwareRenderer: CGRenderBackend {
     ///   - rectangle: The pixel-aligned rectangle to fill.
     ///   - color: The source color.
     ///   - blendMode: The compositing operation.
-    private func fill(_ rectangle: CGRect, color: CGColor, blendMode: CGBlendMode) {
+    private func fill(_ rectangle: CGRect, color: CGColor, blendMode: CGBlendMode, shadow: CGShadow?) {
         let minimumX = max(0, min(Double(surface.width), rectangle.minX))
         let minimumY = max(0, min(Double(surface.height), rectangle.minY))
         let maximumX = max(0, min(Double(surface.width), rectangle.maxX))
@@ -72,6 +78,16 @@ final class SoftwareRenderer: CGRenderBackend {
         let lastY = Int(maximumY)
 
         guard firstX < lastX, firstY < lastY else { return }
+        if let shadow, blendMode != .clear {
+            var coverage = [UInt8](repeating: 0, count: surface.width * surface.height)
+            for y in firstY..<lastY {
+                for x in firstX..<lastX {
+                    coverage[y * surface.width + x] = 255
+                }
+            }
+            renderShadow(coverage, shadow: shadow, blendMode: blendMode)
+        }
+
         let source: [Double]
         if blendMode == .clear {
             source = [0, 0, 0, 0]
@@ -95,7 +111,13 @@ final class SoftwareRenderer: CGRenderBackend {
     ///   - rule: The fill rule used to determine interior regions.
     ///   - color: The source color.
     ///   - blendMode: The compositing operation.
-    private func fill(_ polylines: [Polyline], rule: CGPath.CGPathFillRule, color: CGColor, blendMode: CGBlendMode) {
+    private func fill(
+        _ polylines: [Polyline],
+        rule: CGPath.CGPathFillRule,
+        color: CGColor,
+        blendMode: CGBlendMode,
+        shadow: CGShadow?
+    ) {
         guard let coverage = ScanlineRasterizer.coverage(
             for: polylines,
             rule: rule,
@@ -103,6 +125,9 @@ final class SoftwareRenderer: CGRenderBackend {
             height: surface.height
         ) else {
             return
+        }
+        if let shadow, blendMode != .clear {
+            renderShadow(coverage, shadow: shadow, blendMode: blendMode)
         }
 
         let source: [Double]
@@ -128,6 +153,124 @@ final class SoftwareRenderer: CGRenderBackend {
                 )
             }
         }
+    }
+
+    /// Composites a displaced and blurred path mask before its source shape.
+    /// - Parameters:
+    ///   - coverage: The source shape's row-major coverage bytes.
+    ///   - shadow: The device-space shadow settings captured by the draw command.
+    ///   - blendMode: The compositing operation used for the shadow color.
+    private func renderShadow(_ coverage: [UInt8], shadow: CGShadow, blendMode: CGBlendMode) {
+        guard let source = rgbaComponents(for: shadow.color),
+              coverage.count == surface.width * surface.height,
+              shadow.offset.width.isFinite,
+              shadow.offset.height.isFinite,
+              shadow.blur.isFinite,
+              shadow.blur >= 0 else {
+            return
+        }
+
+        let shifted = shiftedCoverage(coverage, offset: shadow.offset)
+        let blurred = gaussianBlur(shifted, sigma: shadow.blur)
+        for y in 0..<surface.height {
+            for x in 0..<surface.width {
+                let index = y * surface.width + x
+                let clipCoverage = Double(clippingCoverage(atX: x, y: y)) / 255
+                let combinedCoverage = blurred[index] * clipCoverage
+                guard combinedCoverage > 0 else { continue }
+                composite(source, coverage: combinedCoverage, blendMode: blendMode, x: x, y: y)
+            }
+        }
+    }
+
+    /// Moves a coverage mask with bilinear sampling to preserve fractional offsets.
+    /// - Parameters:
+    ///   - coverage: The source mask in row-major order.
+    ///   - offset: The device-space displacement to apply.
+    /// - Returns: The displaced mask as normalized coverage values.
+    private func shiftedCoverage(_ coverage: [UInt8], offset: CGSize) -> [Double] {
+        var shifted = [Double](repeating: 0, count: coverage.count)
+        for y in 0..<surface.height {
+            for x in 0..<surface.width {
+                let sourceX = Double(x) - offset.width
+                let sourceY = Double(y) - offset.height
+                guard sourceX > -1,
+                      sourceX < Double(surface.width),
+                      sourceY > -1,
+                      sourceY < Double(surface.height) else {
+                    continue
+                }
+
+                let left = Int(floor(sourceX))
+                let top = Int(floor(sourceY))
+                let fractionX = sourceX - Double(left)
+                let fractionY = sourceY - Double(top)
+                let topLeft = maskCoverage(coverage, x: left, y: top)
+                let topRight = maskCoverage(coverage, x: left + 1, y: top)
+                let bottomLeft = maskCoverage(coverage, x: left, y: top + 1)
+                let bottomRight = maskCoverage(coverage, x: left + 1, y: top + 1)
+                let upper = topLeft * (1 - fractionX) + topRight * fractionX
+                let lower = bottomLeft * (1 - fractionX) + bottomRight * fractionX
+                shifted[y * surface.width + x] = upper * (1 - fractionY) + lower * fractionY
+            }
+        }
+        return shifted
+    }
+
+    /// Returns normalized mask coverage or zero outside the bitmap.
+    /// - Parameters:
+    ///   - coverage: The source mask in row-major order.
+    ///   - x: The pixel column to sample.
+    ///   - y: The pixel row to sample.
+    /// - Returns: The coverage in the unit range.
+    private func maskCoverage(_ coverage: [UInt8], x: Int, y: Int) -> Double {
+        guard x >= 0, x < surface.width, y >= 0, y < surface.height else { return 0 }
+        return Double(coverage[y * surface.width + x]) / 255
+    }
+
+    /// Applies a separable Gaussian filter to a row-major coverage mask.
+    /// - Parameters:
+    ///   - coverage: The normalized source coverage.
+    ///   - sigma: The Gaussian standard deviation in pixels.
+    /// - Returns: The blurred coverage mask.
+    private func gaussianBlur(_ coverage: [Double], sigma: Double) -> [Double] {
+        guard sigma > 0 else { return coverage }
+        let radius = Int(min(ceil(sigma * 3), Double(max(surface.width, surface.height))))
+        guard radius > 0 else { return coverage }
+        let offsets = (-radius)...radius
+        let weights = offsets.map { offset -> Double in
+            let distance = Double(offset)
+            return exp(-(distance * distance) / (2 * sigma * sigma))
+        }
+        let weightSum = weights.reduce(0, +)
+        let normalizedWeights = weights.map { $0 / weightSum }
+        var horizontal = [Double](repeating: 0, count: coverage.count)
+        var blurred = [Double](repeating: 0, count: coverage.count)
+
+        for y in 0..<surface.height {
+            for x in 0..<surface.width {
+                var value = 0.0
+                for (weightIndex, offset) in offsets.enumerated() {
+                    let sourceX = x + offset
+                    guard sourceX >= 0, sourceX < surface.width else { continue }
+                    value += coverage[y * surface.width + sourceX] * normalizedWeights[weightIndex]
+                }
+                horizontal[y * surface.width + x] = value
+            }
+        }
+
+        for y in 0..<surface.height {
+            for x in 0..<surface.width {
+                var value = 0.0
+                for (weightIndex, offset) in offsets.enumerated() {
+                    let sourceY = y + offset
+                    guard sourceY >= 0, sourceY < surface.height else { continue }
+                    value += horizontal[sourceY * surface.width + x] * normalizedWeights[weightIndex]
+                }
+                blurred[y * surface.width + x] = value
+            }
+        }
+        return blurred
     }
 
     /// Returns full coverage without a clip and zero outside an active mask.

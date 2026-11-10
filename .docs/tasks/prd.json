@@ -863,8 +863,8 @@
         "Build e testes passam"
       ],
       "priority": 57,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "CGContext registra sombras no estado e as captura nos comandos; o renderer de software desloca a cobertura e aplica desfoque gaussiano separável. O renderer GL desenha a forma sem sombra, conforme a limitação documentada em `.docs/ShadowRendering.md`. O Sample demonstra o resultado com `--test-shadow`. Testes validam o pixel deslocado e o save/restore do estado; `swift test` passou (154 testes em 28 suítes) e `swift build --target OpenCoreGraphicsSample` passou."
     },
     {
       "id": "US-058",

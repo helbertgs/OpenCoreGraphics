@@ -4,7 +4,7 @@ import OpenCoreGraphics
 let window = try CGWindow(frame: CGRect(x: 0, y: 0, width: 512, height: 512), title: "OpenCoreGraphics Sample")
 let softwareImage: CGImage?
 
-if CommandLine.arguments.contains("--software") {
+if CommandLine.arguments.contains("--software") || CommandLine.arguments.contains("--test-shadow") {
     guard let softwareContext = CGContext(
         data: nil,
         width: 512,
@@ -17,7 +17,15 @@ if CommandLine.arguments.contains("--software") {
         preconditionFailure("The software sample bitmap context could not be created.")
     }
 
-    if CommandLine.arguments.contains("--test-clip") {
+    if CommandLine.arguments.contains("--test-shadow") {
+        softwareContext.setShadow(
+            offset: CGSize(width: 14, height: 14),
+            blur: 8,
+            color: CGColor(red: 0, green: 0, blue: 0, alpha: 0.65)
+        )
+        softwareContext.setFillColor(CGColor(red: 0.2, green: 0.5, blue: 0.8, alpha: 1))
+        softwareContext.fill(CGRect(x: 120, y: 120, width: 260, height: 220))
+    } else if CommandLine.arguments.contains("--test-clip") {
         softwareContext.saveGState()
         softwareContext.clip(to: CGRect(x: 100, y: 100, width: 300, height: 300))
         softwareContext.beginPath()
