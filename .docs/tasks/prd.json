@@ -68,8 +68,8 @@
         "Typecheck passes"
       ],
       "priority": 4,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Seleção injetável por janela e proteção após encerramento testadas; teardown seleciona o contexto proprietário e retém recursos para nova tentativa se a seleção falhar. Desenho e callbacks em janelas abertas continuam nas US-005 e US-006."
     },
     {
       "id": "US-005",

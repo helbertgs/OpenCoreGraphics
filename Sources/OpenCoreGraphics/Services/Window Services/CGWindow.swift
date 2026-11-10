@@ -5,7 +5,6 @@ import OpenGLFW
 /// A window that an app displays on the screen.
 @MainActor 
 open class CGWindow {
-
     // MARK: - Creating a Window 
 
     /// Creates a window with the specified frame and title.
@@ -21,6 +20,7 @@ open class CGWindow {
             let renderer = try GLRenderer()
             self.renderer = renderer
             windowRenderTarget = WindowRenderTarget(size: framebufferSize, renderer: renderer)
+            windowRenderTarget?.contextSelector = contextSelector
         } catch {
             destroy()
             throw error
@@ -29,7 +29,6 @@ open class CGWindow {
 
     /// Releases the window's GLFW reference when it is deallocated.
     isolated deinit {
-        renderer = nil
         destroy()
     }
 
@@ -45,6 +44,9 @@ open class CGWindow {
 
     /// Indicates whether this window owns a GLFW platform reference.
     private var hasRetainedPlatform = false
+
+    /// Selects this window's OpenGL context and tracks when the window is closed.
+    private var contextSelector: GLFWContextSelector?
 
     /// The OpenGL renderer owned by this window.
     private var renderer: GLRenderer?
@@ -179,9 +181,11 @@ open class CGWindow {
 
 extension CGWindow {
     func createWindow() throws {
+        GLFWWindowTeardownRegistry.retryPending()
         guard GLFWPlatform.shared.retain() else {
             throw CGWindowError.glfwInitFailed
         }
+
         hasRetainedPlatform = true
 
         glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API)
@@ -219,10 +223,15 @@ extension CGWindow {
         }
 
         self.windowRef = windowRef
-        glfwMakeContextCurrent(windowRef)
+        let contextSelector = GLFWContextSelector.make(windowRef, .system)
+        self.contextSelector = contextSelector
+        if let error = contextSelector.select() {
+            NSLog("OpenCoreGraphics could not select the new window context: %@", String(describing: error))
+            destroy()
+            throw CGWindowError.windowCreationFailed
+        }
 
         guard gladLoaderLoadGL() != GL_FALSE else {
-            glfwMakeContextCurrent(nil)
             destroy()
             throw CGWindowError.gladLoadFailed
         }
@@ -302,11 +311,25 @@ extension CGWindow {
     }
 
     func destroy() {
-        if let windowRef = self.windowRef {
-            glfwDestroyWindow(windowRef)
+        GLFWWindowTeardownRegistry.retryPending()
+        guard let windowRef = self.windowRef else {
+            if hasRetainedPlatform {
+                hasRetainedPlatform = false
+                GLFWPlatform.shared.release()
+            }
+            return
+        }
+        if let teardown = prepareTeardown(window: windowRef) {
+            GLFWWindowTeardownRegistry.perform(teardown)
+            return
         }
 
-        windowRef = nil
+        GLFWWindowTeardownRegistry.disableCallbacks(windowRef)
+        contextSelector?.close()
+        glfwDestroyWindow(windowRef)
+        self.windowRef = nil
+        self.contextSelector = nil
+        self.windowRenderTarget = nil
         if hasRetainedPlatform {
             hasRetainedPlatform = false
             GLFWPlatform.shared.release()
@@ -314,6 +337,8 @@ extension CGWindow {
     }
 
     func clear() {
+        guard canUseOpenContext() else { return }
+
         let c = backgroundColor.components
         glad_glClearColor(Float(c[0]), Float(c[1]), Float(c[2]), Float(c[3]))
         glad_glDisable(GLenum(GL_SCISSOR_TEST))
@@ -329,6 +354,8 @@ extension CGWindow {
     }
 
     private func updateFramebufferSize(width: Int32, height: Int32) {
+        guard canUseOpenContext() else { return }
+
         let size = CGSize(width: width, height: height)
         framebufferSize = size
         glad_glViewport(0, 0, width, height)
@@ -377,5 +404,64 @@ extension CGWindow {
             let window: CGWindow = Unmanaged<CGWindow>.fromOpaque(glfwGetWindowUserPointer(windowRef)).takeUnretainedValue()
             window.frame = .init(origin: window.frame.origin, size: CGSize(width: width, height: height))
         }
+    }
+
+    /// Rejects window GL operations when no open context selector exists.
+    /// - Returns: Whether the window remains open for GL operations.
+    private func canUseOpenContext() -> Bool {
+        guard let contextSelector else {
+            NSLog("OpenCoreGraphics GLFW context selection failed: %@", String(describing: GLFWContextSelectionError.windowClosed))
+            return false
+        }
+        return contextSelector.ensureOpen() == nil
+    }
+
+    /// Transfers renderer ownership to a teardown before any attempt can destroy the window.
+    /// - Parameter window: The GLFW window that owns the renderer.
+    /// - Returns: The prepared teardown, or nil if no renderer and selector are available.
+    private func prepareTeardown(window: OpaquePointer) -> GLFWWindowTeardown? {
+        guard let renderer, let contextSelector else { return nil }
+        let rendererRelease = GLFWRendererReleaseBox.make(renderer)
+        let teardown = GLFWWindowTeardown(
+            window: window,
+            contextSelector: contextSelector,
+            contextDriver: .system,
+            disableCallbacks: GLFWWindowTeardownRegistry.disableCallbacks,
+            destroyWindow: { GLFWWindowTeardownRegistry.destroyWindow($0) },
+            releasePlatform: { GLFWPlatform.shared.release() },
+            releaseResources: { rendererRelease.release() },
+            recordFailure: { error in
+                NSLog("OpenCoreGraphics could not finish window teardown: %@", String(describing: error))
+            }
+        )
+        self.renderer = nil
+        windowRenderTarget = nil
+        self.contextSelector = nil
+        windowRef = nil
+        hasRetainedPlatform = false
+        return teardown
+    }
+}
+
+/// Retains a GL renderer until teardown selects and releases it in its owning context.
+@MainActor
+private final class GLFWRendererReleaseBox {
+    /// The renderer whose OpenGL-owned objects must be deinitialized on the main actor.
+    private var renderer: GLRenderer?
+
+    /// Creates a box that retains the renderer until context-safe teardown.
+    /// - Parameter renderer: The renderer to retain until it can be safely released.
+    private init(_ renderer: GLRenderer) {
+        self.renderer = renderer
+    }
+
+    /// Creates a renderer release box for a window teardown.
+    static let make: (GLRenderer) -> GLFWRendererReleaseBox = { renderer in
+        GLFWRendererReleaseBox(renderer)
+    }
+
+    /// Releases the renderer after the teardown has selected its owning context.
+    func release() {
+        renderer = nil
     }
 }

@@ -124,6 +124,36 @@ struct WindowRenderTargetTests {
             try target.presentSoftwareSurface(surface)
         }
     }
+
+    /// Verifies a window-owned target refuses rendering after its GLFW window closes.
+    @Test
+    func doesNotFlushAfterOwningWindowCloses() throws {
+        let context = try #require(OpaquePointer(bitPattern: 0xE))
+        var failures: [GLFWContextSelectionError] = []
+        let driver = GLFWContextDriver.injecting(
+            { context },
+            { _ in },
+            { failures.append($0) }
+        )
+        let selector = GLFWContextSelector.make(context, driver)
+        let renderer = RecordingRenderBackend()
+        let target = WindowRenderTarget(size: CGSize(width: 32, height: 24), renderer: renderer)
+        let command = DrawCommand.fillPath(
+            path: CGPath(rect: CGRect(x: 0, y: 0, width: 4, height: 4)),
+            rule: .winding,
+            color: .black,
+            blendMode: .normal
+        )
+        target.contextSelector = selector
+        target.submit(command)
+
+        selector.close()
+        target.flush()
+
+        #expect(renderer.commands.isEmpty)
+        #expect(target.contextError == .windowClosed)
+        #expect(failures == [.windowClosed])
+    }
 }
 
 /// Records backend calls without requiring an OpenGL context.

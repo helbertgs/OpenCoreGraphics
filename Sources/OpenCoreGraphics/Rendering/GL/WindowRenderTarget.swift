@@ -5,6 +5,9 @@ enum WindowRenderTargetError: Error, Equatable {
     /// The window renderer has already been released.
     case rendererUnavailable
 
+    /// The window owning the render target has been closed.
+    case windowClosed
+
     /// The assigned backend does not support textured software-surface presentation.
     case unsupportedRenderer
 
@@ -20,6 +23,12 @@ final class WindowRenderTarget: CGRenderTarget {
 
     /// The renderer owned by the window, which may be released during teardown.
     private weak var renderer: (any CGRenderBackend)?
+
+    /// The selector tracking whether the window that owns this target is still open.
+    var contextSelector: GLFWContextSelector?
+
+    /// The most recent context lifecycle failure observed by this target.
+    private(set) var contextError: GLFWContextSelectionError?
 
     /// Commands accumulated until the context flushes its current frame.
     private var pendingCommands: [DrawCommand] = []
@@ -57,6 +66,7 @@ final class WindowRenderTarget: CGRenderTarget {
     /// - Parameter surface: The pixel storage produced by the software renderer.
     /// - Throws: `WindowRenderTargetError` when the backend cannot present the surface.
     func presentSoftwareSurface(_ surface: PixelSurface) throws {
+        try ensureWindowIsOpen()
         guard let renderer else { throw WindowRenderTargetError.rendererUnavailable }
         guard let surfaceRenderer = renderer as? any CGPixelSurfaceRenderer else {
             throw WindowRenderTargetError.unsupportedRenderer
@@ -79,6 +89,7 @@ final class WindowRenderTarget: CGRenderTarget {
     /// - Returns: Bottom-up RGBA bytes, or nil when the renderer is unavailable.
     nonisolated func readPixels() -> Data? {
         MainActor.assumeIsolated {
+            guard (try? ensureWindowIsOpen()) != nil else { return nil }
             guard let renderer = renderer as? any CGPixelReadbackRenderer else { return nil }
             guard let pixels = renderer.readPixels(size: windowSize) else { return nil }
             return Data(pixels)
@@ -88,6 +99,10 @@ final class WindowRenderTarget: CGRenderTarget {
     /// Renders all commands queued for the current frame.
     nonisolated func flush() {
         MainActor.assumeIsolated {
+            guard (try? ensureWindowIsOpen()) != nil else {
+                pendingCommands.removeAll(keepingCapacity: true)
+                return
+            }
             guard let renderer else {
                 pendingCommands.removeAll(keepingCapacity: true)
                 return
@@ -109,9 +124,19 @@ final class WindowRenderTarget: CGRenderTarget {
 
     /// Resets the renderer's clip state and reapplies the current ordered regions.
     private func applyClipRegions() {
+        guard (try? ensureWindowIsOpen()) != nil else { return }
         guard let renderer else { return }
         let commands = [DrawCommand.resetClip] + clipRegions.map(\.drawCommand)
         renderer.execute(commands, size: windowSize)
+    }
+
+    /// Rejects target operations after their owning window closes and records the typed failure.
+    private func ensureWindowIsOpen() throws {
+        if let error = contextSelector?.ensureOpen() {
+            contextError = error
+            throw WindowRenderTargetError.windowClosed
+        }
+        contextError = nil
     }
 
     /// Copies logical RGBA pixels into top-down rows for the textured-image shader.

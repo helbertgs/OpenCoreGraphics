@@ -57,3 +57,14 @@
   - Nesta máquina a comparação usa framebuffer 128×128 linear com MSAA 4; corrija a comparação de espaço de cor, não o limite de erro.
   - Não extrapolar o resultado para múltiplas janelas, alpha parcial ou outros drivers; essas situações exigem testes próprios.
 ---
+
+## 2026-11-10 - US-004
+- Seletor de contexto GLFW por janela com driver injetável, seleção verificada e erros registrados; a seleção normal mantém o contexto selecionado atual.
+- Destinos retidos recusam operações após encerramento. O teardown remove callbacks, seleciona o contexto proprietário antes de liberar recursos e restaura o contexto anterior; falhas retêm recursos para tentativa posterior em eventos de ciclo de vida.
+- Testes cobrem alternância, falhas, fechamento, inicialização malsucedida e ordem de liberação, incluindo GLFW real e contexto B atual. Seleção para desenho e callbacks de janelas abertas permanece para US-005 e US-006; falha permanente de seleção conserva recursos pendentes.
+- Validação: 192 testes na suíte padrão; build e testes com concorrência estrita; testes de ciclo de vida com GL real; `ruby scripts/run-gl-tests.rb --timeout 90` passou com resumo conclusivo e sete cenas dentro das tolerâncias; `git diff --check` passou. SwiftLint não estava disponível.
+- Files changed: `Sources/OpenCoreGraphics/Services/Window Services/CGWindow.swift`, `GLFWContextSelector.swift`, `GLFWWindowTeardown.swift`, `Sources/OpenCoreGraphics/Rendering/GL/WindowRenderTarget.swift`, testes correspondentes, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`.
+- **Learnings for future iterations:**
+  - O teardown deve transferir todas as referências fortes ao renderer antes de liberar recursos; verificar a desalocação efetiva antes de destruir o contexto.
+  - Teardowns adiados precisam remover callbacks e user pointer antes de desalocar a janela Swift e manter a plataforma retida até a liberação.
+---
