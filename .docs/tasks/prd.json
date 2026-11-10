@@ -178,8 +178,8 @@
         "Build e testes passam"
       ],
       "priority": 12,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Adicionados os protocolos internos CGRenderTarget e CGRenderBackend e RecordingRenderTarget, que preserva comandos em ordem sem dependências de OpenGL. readPixels retorna nil para o alvo de gravação, que não executa rasterização."
     },
     {
       "id": "US-013",

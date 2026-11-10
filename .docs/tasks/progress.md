@@ -122,3 +122,12 @@
 - **Learnings for future iterations:**
   - Comandos que atravessam o limite do backend precisam carregar valores imutáveis e `Sendable`; para imagens, copie os bytes do provedor ao criar o comando.
 ---
+
+## 2026-11-09 - US-012
+- Criados os protocolos internos `CGRenderTarget` e `CGRenderBackend`, além do `RecordingRenderTarget`.
+- O alvo de gravação mantém a ordem das operações sem importar OpenGL e retorna `nil` para pixels, pois não rasteriza comandos.
+- Teste envia três comandos e verifica dimensões, ordem e ausência de buffer de pixels.
+- `swift test --filter CGRenderTargetTests` passou (1 teste).
+- **Learnings for future iterations:**
+  - `RecordingRenderTarget` é o alvo de injeção para testar filas de renderização sem criar uma janela ou contexto OpenGL.
+---
