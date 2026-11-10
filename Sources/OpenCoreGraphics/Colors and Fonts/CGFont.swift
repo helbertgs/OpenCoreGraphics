@@ -1,6 +1,5 @@
 import Foundation
 import OpenSTB
-@preconcurrency import OpenGLAD
 
 /// A set of character glyphs and layout information for drawing text.
 /// 

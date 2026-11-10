@@ -417,8 +417,8 @@
         "Build e testes passam"
       ],
       "priority": 28,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Tipos GL e recursos de shader foram movidos para Rendering/GL. Chamadas de textura do CGImage foram extraídas para GLImageTextureUpload; somente arquivos GL e CGWindow importam OpenGLAD ou contêm glad_. CGFont não mantém import OpenGL sem uso."
     },
     {
       "id": "US-029",

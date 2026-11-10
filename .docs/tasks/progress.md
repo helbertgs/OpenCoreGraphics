@@ -267,3 +267,12 @@
 - **Learnings for future iterations:**
   - O renderer atual usa `GLBatchBuffer`, `GLProgram` e shaders em recursos; as antigas estruturas de buffer e shader não são dependências da nova pipeline.
 ---
+
+## 2026-11-10 - US-028
+- Movidos `GLRenderer`, `GLShaderCache`, `GLProgram`, `GLBatchBuffer`, `CGShaderSource` e `WindowRenderTarget` para `Sources/OpenCoreGraphics/Rendering/GL/`.
+- As chamadas OpenGL de `CGImage.init(url:)` foram isoladas em `GLImageTextureUpload`; removido o import OpenGLAD sem uso de `CGFont`.
+- A busca confirma que `glad_*` e `import OpenGLAD` aparecem somente em `Rendering/GL/` e `CGWindow.swift`.
+- `swift test` passou (71 testes em 19 suítes).
+- **Learnings for future iterations:**
+  - `CGRenderTarget` e `DrawCommand` ficam na camada de rendering genérica; dependências OpenGL e carregamento de shaders devem permanecer em `Rendering/GL/`.
+---

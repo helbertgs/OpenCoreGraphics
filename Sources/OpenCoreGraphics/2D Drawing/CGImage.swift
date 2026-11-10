@@ -1,6 +1,5 @@
 import Foundation
 import OpenSTB
-@preconcurrency import OpenGLAD 
 
 /// A bitmap image or image mask.
 /// 
@@ -56,7 +55,6 @@ public class CGImage : Equatable, Hashable, Identifiable {
         var width: Int32 = 0
         var height: Int32 = 0
         var channels: Int32 = 0
-        var format: Int32 = GL_RGBA
 
         stbi_set_flip_vertically_on_load(1)
         
@@ -72,26 +70,18 @@ public class CGImage : Equatable, Hashable, Identifiable {
         self.width = Int(width)
         self.height = Int(height)
         self.colorSpace = channels == 4 ? CGColorSpace.sRGB : CGColorSpace.genericRGBLinear
-        format = channels == 4 ? GL_RGBA : GL_RGB
-
         stbi_image_free(image)
 
-        var id = UInt32(0)
-        glad_glGenTextures(1, &id)
-        defer { glad_glDeleteTextures(1, &id) }
-        glad_glBindTexture(GLenum(GL_TEXTURE_2D), id)
-        
-        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_WRAP_S), GLint(GL_REPEAT))
-        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_WRAP_T), GLint(GL_REPEAT))
-        
-        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_MIN_FILTER), GLint(GL_LINEAR))
-        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_MAG_FILTER), GLint(GL_LINEAR))
-
-        dataProvider.data?.withUnsafeMutableBytes {
-            glad_glTexImage2D(GLenum(GL_TEXTURE_2D), 0,  format,  GLsizei(width),  GLsizei(height),  0,  GLenum(format),  GLenum(GL_UNSIGNED_BYTE),  $0.baseAddress)
+        if let textureData = dataProvider.data {
+            MainActor.assumeIsolated {
+                GLImageTextureUpload.upload(
+                    data: textureData,
+                    width: width,
+                    height: height,
+                    channelCount: channels
+                )
+            }
         }
-
-        glad_glGenerateMipmap(GLenum(GL_TEXTURE_2D))
     }
 
     // MARK: - Examining an Image
