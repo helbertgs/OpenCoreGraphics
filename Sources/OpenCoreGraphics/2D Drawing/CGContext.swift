@@ -847,8 +847,12 @@ open class CGContext {
     public func flush() {
         guard let renderTarget else { return }
 
-        pendingDrawCommands.forEach(renderTarget.submit)
+        let commands = pendingDrawCommands
         pendingDrawCommands.removeAll(keepingCapacity: true)
+        MainActor.assumeIsolated {
+            commands.forEach(renderTarget.submit)
+            renderTarget.flush()
+        }
     }
 
     /// Marks a window context for update.

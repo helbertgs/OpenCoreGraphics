@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import OpenCoreGraphics
 
+@MainActor
 struct CGRenderTargetTests {
     /// Verifies that a recording target preserves submitted command order.
     @Test

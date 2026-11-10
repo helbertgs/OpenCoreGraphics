@@ -2,6 +2,7 @@ import Foundation
 import Testing
 @testable import OpenCoreGraphics
 
+@MainActor
 struct CGContextCommandTests {
     /// Verifies that filling captures the fill rule and clears the current path.
     @Test

@@ -5,6 +5,7 @@
 - O build usa o sistema do Xcode (`.build/out/...`); o aviso "found 2 file(s) which are unhandled" é o `Resources/default/*.glsl` ainda não declarado em `Package.swift` (resolvido na US-005).
 - `CGColor.components` é `[Double]`; qualquer chamada `glad_*` que recebe `GLfloat` precisa de `Float(...)`.
 - As conversões entre espaço de usuário e pixels usam `ctm`; `CGAffineTransform.inverse` não reverte corretamente translações 2D, então o contexto calcula a inversa 2D localmente.
+- Os protocolos internos de renderização OpenGL (`CGRenderTarget` e `CGRenderBackend`) são `@MainActor`, pois executam operações vinculadas ao contexto OpenGL atual; `CGContext.flush()` transfere os comandos locais via `MainActor.assumeIsolated`.
 - O working tree tem trabalho em andamento do usuário (arquivos novos/movidos ainda não commitados). Os commits das stories incluem **apenas** os arquivos tocados pela story, mais `.docs/tasks/prd.json` e `progress.md`.
 
 ---
@@ -226,4 +227,17 @@
 - `OpenGLBatchBufferDriver` usa OpenGLAD para upload dinâmico, configuração de atributos, desenho e liberação; `isolated deinit` remove ambos os buffers.
 - Driver falso verifica que cinco entradas em dois estados resultam em dois lotes, que os buffers são criados uma vez e liberados, e que dados incompletos falham explicitamente.
 - `swift test` passou (66 testes em 17 suítes).
+---
+
+## 2026-11-10 - US-024
+- Criado `GLRenderer` com programa sólido reutilizado, projeção ortográfica e triangulação de retângulos; criado `WindowRenderTarget` para enfileirar comandos e entregar lotes ao backend.
+- `CGWindow` agora cria renderer com o contexto GL atual, conecta o target ao `cgContext` e libera recursos do renderer antes da janela/contexto.
+- O viewport inicial usa as dimensões reais do framebuffer, evitando descartar todo o desenho antes do primeiro evento de redimensionamento.
+- O `CGContext` transforma os caminhos para device space antes de enfileirá-los; o renderer projeta esses pontos usando as dimensões do destino, com origem no canto inferior esquerdo.
+- Protocolos de target/backend são `@MainActor`; `CGContext.flush()` transfere seus comandos para o actor principal de forma síncrona.
+- Testes sem GPU cobrem os seis vértices dos retângulos, rejeição de paths não retangulares, projeção, RGB/gray/CMYK, e o flush do target.
+- `swift test`: 71 testes em 19 suítes.
+- **Learnings for future iterations:**
+  - Como as APIs síncronas de `CGContext` não são isoladas, `flush()` usa `MainActor.assumeIsolated`; chamar um contexto ligado ao target de janela exige estar no actor principal.
+  - O renderer achata os vértices tipados antes de chamar `GLBatchBuffer.append`, preservando a validação de tuplas já existente na US-023.
 ---

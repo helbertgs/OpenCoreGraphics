@@ -1,7 +1,8 @@
 import Foundation
 
 /// Receives backend-independent drawing commands and exposes rendered pixels.
-protocol CGRenderTarget {
+@MainActor
+protocol CGRenderTarget: Sendable {
     /// The dimensions of the drawing destination in pixels.
     var size: CGSize { get }
 
@@ -12,10 +13,19 @@ protocol CGRenderTarget {
     /// Returns the target's current pixel data when it has rendered an image.
     /// - Returns: Pixel bytes, or nil when the target does not produce pixel data.
     func readPixels() -> Data?
+
+    /// Completes rendering for the commands submitted since the previous flush.
+    func flush()
+}
+
+extension CGRenderTarget {
+    /// Does nothing for targets that render each submitted command immediately.
+    func flush() { }
 }
 
 /// Executes drawing commands for a destination of the supplied size.
-protocol CGRenderBackend {
+@MainActor
+protocol CGRenderBackend: AnyObject {
     /// Renders a sequence of commands into a destination.
     /// - Parameters:
     ///   - commands: The operations to render in order.

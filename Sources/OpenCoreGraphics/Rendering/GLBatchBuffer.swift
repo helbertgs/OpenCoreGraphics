@@ -1,5 +1,20 @@
 @preconcurrency import OpenGLAD
 
+/// One interleaved position and texture-coordinate pair for batch rendering.
+struct GLBatchVertex: Equatable, Sendable {
+    /// The horizontal position in device-space pixels.
+    let positionX: Float
+
+    /// The vertical position in device-space pixels.
+    let positionY: Float
+
+    /// The horizontal image texture coordinate.
+    let textureX: Float
+
+    /// The vertical image texture coordinate.
+    let textureY: Float
+}
+
 /// The immutable OpenGL state that must remain constant within a vertex batch.
 struct GLBatchState: Equatable, Hashable, Sendable {
     /// The linked OpenGL program identifier.
@@ -179,6 +194,7 @@ final class GLBatchBuffer {
         guard newVertices.count.isMultiple(of: 4) else {
             throw GLBatchBufferError.invalidVertexData
         }
+
         guard newVertices.isEmpty == false else { return }
 
         if let state, state != newState {

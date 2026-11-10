@@ -361,8 +361,8 @@
         "Build e testes passam"
       ],
       "priority": 24,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Implementado GLRenderer e WindowRenderTarget; caminhos já chegam em device space pelo CGContext e o renderer usa projeção ortográfica do tamanho do destino. Geometria, projeção, conversão de cores e flush cobertos sem contexto GL. Validação visual depende do Sample da US-026."
     },
     {
       "id": "US-025",

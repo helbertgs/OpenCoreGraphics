@@ -17,10 +17,19 @@ open class CGWindow {
         self.frame = frame
         storedTitle = title
         try createWindow()
+        do {
+            let renderer = try GLRenderer()
+            self.renderer = renderer
+            windowRenderTarget = WindowRenderTarget(size: frame.size, renderer: renderer)
+        } catch {
+            destroy()
+            throw error
+        }
     }
 
     /// Releases the window's GLFW reference when it is deallocated.
     isolated deinit {
+        renderer = nil
         destroy()
     }
 
@@ -37,9 +46,17 @@ open class CGWindow {
     /// Indicates whether this window owns a GLFW platform reference.
     private var hasRetainedPlatform = false
 
+    /// The OpenGL renderer owned by this window.
+    private var renderer: GLRenderer?
+
+    /// The render target shared with the window's drawing context.
+    private var windowRenderTarget: WindowRenderTarget?
+
     /// The OpenGL context associated with the window.
     public lazy var cgContext: CGContext = {
-        CGContext(width: Int(frame.size.width), height: Int(frame.size.height))
+        let context = CGContext(width: Int(frame.size.width), height: Int(frame.size.height))
+        context.renderTarget = windowRenderTarget
+        return context
     }()
 
     // MARK: - Configuring the Window’s Appearance
@@ -93,6 +110,7 @@ open class CGWindow {
     open func displayIfNeeded() {
         if viewsNeedDisplay {
             display()
+            cgContext.flush()
         }
     }
 
@@ -178,6 +196,11 @@ extension CGWindow {
             destroy()
             throw CGWindowError.gladLoadFailed
         }
+
+        var framebufferWidth: Int32 = 0
+        var framebufferHeight: Int32 = 0
+        glfwGetFramebufferSize(windowRef, &framebufferWidth, &framebufferHeight)
+        glad_glViewport(0, 0, framebufferWidth, framebufferHeight)
 
         setupCallbacks()
     }

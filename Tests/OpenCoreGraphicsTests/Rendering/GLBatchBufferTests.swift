@@ -30,6 +30,19 @@ struct GLBatchBufferTests {
         ])
     }
 
+    /// Verifies deinitialization deletes the reusable vertex array and buffer.
+    @Test
+    func deinitializationDeletesBuffers() throws {
+        let driver = RecordingGLBatchBufferDriver()
+        var buffer: GLBatchBuffer? = try GLBatchBuffer(driver: driver)
+
+        buffer = nil
+
+        #expect(buffer == nil)
+        #expect(driver.deletedVertexArrays == [11])
+        #expect(driver.deletedVertexBuffers == [12])
+    }
+
     /// Verifies malformed vertex data throws without submitting a partial batch.
     @Test
     func rejectsIncompleteVertexTuples() throws {
@@ -44,19 +57,6 @@ struct GLBatchBufferTests {
 
         #expect(driver.uploadCount == 0)
         #expect(driver.drawVertexCounts.isEmpty)
-    }
-
-    /// Verifies deinitialization deletes the reusable vertex array and buffer.
-    @Test
-    func deinitializationDeletesBuffers() throws {
-        let driver = RecordingGLBatchBufferDriver()
-        var buffer: GLBatchBuffer? = try GLBatchBuffer(driver: driver)
-
-        buffer = nil
-
-        #expect(buffer == nil)
-        #expect(driver.deletedVertexArrays == [11])
-        #expect(driver.deletedVertexBuffers == [12])
     }
 }
 
