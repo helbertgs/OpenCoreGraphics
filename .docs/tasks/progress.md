@@ -172,3 +172,12 @@
 - **Learnings for future iterations:**
   - Comparar ambos os backends com referência localizada independente evita que concordem em um resultado errado.
 ---
+
+## 2026-11-10 - US-016
+- Estados gráficos salvos retêm a fonte carregada e seus dados nativos, sem reabrir arquivo ao restaurar; o snapshot transferível permanece Sendable e a referência à fonte fica confinada ao contexto.
+- Testes com cópias temporárias comparam pixels após sobrescrita ou remoção e cobrem três níveis, tamanhos, ausência de fonte e restaurações repetidas.
+- Validação: 259 testes na suíte padrão com concorrência estrita; testes direcionados e build estrito; `git diff --check` passou. GL opt-in não foi executado nesta história.
+- Files changed: `Sources/OpenCoreGraphics/2D Drawing/CGContext.swift`, `Tests/OpenCoreGraphicsTests/2D Drawing/CGContextTests.swift`, arquivos de progresso.
+- **Learnings for future iterations:**
+  - O snapshot Sendable não pode substituir o proprietário nativo de uma fonte; a pilha confinada deve manter o objeto vivo.
+---

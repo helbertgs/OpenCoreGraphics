@@ -223,8 +223,8 @@ open class CGContext {
     /// Drawing commands waiting to be submitted to the render target.
     private var pendingDrawCommands: [DrawCommand] = []
 
-    /// The stack of saved graphics-state snapshots.
-    private var graphicsStateStack: [CGGraphicsState] = []
+    /// The stack of saved snapshots and the font objects they keep alive.
+    private var graphicsStateStack: [SavedGraphicsState] = []
 
     /// The current clipping coverage captured by graphics-state snapshots.
     private var clipMask: CoverageMask?
@@ -1297,21 +1297,22 @@ open class CGContext {
     /// fill color space, stroke color space, fill color, stroke color, alpha value, font, font size
     /// character spacing, text drawing mode, shadow parameters, the pattern phase, the font smoothing parameter, blend mode.
     public func saveGState() {
-        graphicsStateStack.append(currentGraphicsState)
+        graphicsStateStack.append(SavedGraphicsState(state: currentGraphicsState, font: font))
     }
 
     /// Sets the current graphics state to the state most recently saved.
     /// 
     /// Core Graphics removes the graphics state at the top of the stack so that the most recently saved state becomes the current graphics state.
     public func restoreGState() {
-        guard let state = graphicsStateStack.popLast() else {
+        guard let savedState = graphicsStateStack.popLast() else {
             return
         }
 
-        if state.clip != clipMask || state.clipRegions != clipRegions {
+        if savedState.state.clip != clipMask || savedState.state.clipRegions != clipRegions {
             flush()
         }
-        restoreGraphicsState(state)
+        restoreGraphicsState(savedState.state)
+        font = savedState.font
     }
 
     /// Creates a value snapshot of the current graphics-state parameters.
@@ -1371,7 +1372,6 @@ open class CGContext {
         if clipRegionsChanged {
             renderTarget?.setClipRegions(clipRegions)
         }
-        font = state.font.flatMap(CGFont.init)
         fontSize = state.fontSize
         characterSpacing = state.characterSpacing
         textDrawingMode = state.textDrawingMode
@@ -1493,6 +1493,20 @@ open class CGContext {
             alphaInfo: alphaInfo
         )
     }
+}
+
+/// A stack entry that retains the loaded font for its graphics-state snapshot.
+///
+/// The strong reference keeps `CGFont`'s native `stb_truetype` metadata and byte buffer
+/// alive until this entry is restored or discarded. This type deliberately does not
+/// conform to `Sendable`: neither `CGFont` nor its native handles have a concurrency
+/// safety guarantee, and each entry stays confined to its owning `CGContext`.
+private struct SavedGraphicsState {
+    /// The value-type drawing parameters captured when the state was saved.
+    let state: CGGraphicsState
+
+    /// The selected font object whose native data must outlive the saved state.
+    let font: CGFont?
 }
 
 /// Resolves the byte order and default alpha layout for bitmap-context creation.

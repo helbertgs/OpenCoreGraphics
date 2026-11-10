@@ -272,8 +272,8 @@
         "Typecheck passes"
       ],
       "priority": 16,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "A pilha de estado retém a fonte carregada sem reabrir arquivo; testes validam pixels após alteração e remoção, estados aninhados e ausência de fonte."
     },
     {
       "id": "US-017",

@@ -124,6 +124,18 @@ struct CGContextTests {
         #expect(context.path == pathAfterChanges)
     }
 
+    /// Verifies saved fonts survive overwriting their source files and restore exact glyph pixels.
+    @Test
+    func restoresNestedFontsAfterTheirSourceFilesAreOverwritten() throws {
+        try verifiesNestedFontsSurviveSourceFileChanges(removingSourceFiles: false)
+    }
+
+    /// Verifies saved fonts survive removal of their source files and restore exact glyph pixels.
+    @Test
+    func restoresNestedFontsAfterTheirSourceFilesAreRemoved() throws {
+        try verifiesNestedFontsSurviveSourceFileChanges(removingSourceFiles: true)
+    }
+
     /// Verifies that all context transforms compose in the same order.
     @Test
     func transformMethodsComposeOnTheRight() {
@@ -421,6 +433,144 @@ struct CGContextTests {
         #expect(state.fontSize == 12)
         #expect(state.characterSpacing == 0)
         #expect(state.textDrawingMode == .fill)
+    }
+
+    /// Checks three saved fonts against pixel baselines after their backing files change.
+    private func verifiesNestedFontsSurviveSourceFileChanges(removingSourceFiles: Bool) throws {
+        let bundledFontURL = try #require(
+            Bundle.module.url(forResource: "tiny-test", withExtension: "ttf", subdirectory: "Resources")
+        )
+        let fileManager = FileManager.default
+        let sourceData = try Data(contentsOf: bundledFontURL)
+        let fontURLs = (0..<3).map { _ in
+            fileManager.temporaryDirectory.appending(path: "\(UUID().uuidString).ttf")
+        }
+        defer {
+            for url in fontURLs {
+                try? fileManager.removeItem(at: url)
+            }
+        }
+
+        for url in fontURLs {
+            try fileManager.copyItem(at: bundledFontURL, to: url)
+        }
+
+        let firstFont = try #require(CGFont(fontURLs[0].path))
+        let secondFont = try #require(CGFont(fontURLs[1].path))
+        let thirdFont = try #require(CGFont(fontURLs[2].path))
+        let firstGlyph = try #require(firstFont.glyph(for: "A"))
+        let secondGlyph = try #require(secondFont.glyph(for: "A"))
+        let thirdGlyph = try #require(thirdFont.glyph(for: "A"))
+        let firstSize = 12.0
+        let secondSize = 18.0
+        let thirdSize = 24.0
+        let glyphPosition = OpenCoreGraphics.CGPoint(x: 8, y: 40)
+        let firstPixels = try renderedGlyphPixels(
+            font: firstFont,
+            size: firstSize,
+            glyph: firstGlyph,
+            at: glyphPosition
+        )
+        let secondPixels = try renderedGlyphPixels(
+            font: secondFont,
+            size: secondSize,
+            glyph: secondGlyph,
+            at: glyphPosition
+        )
+        let thirdPixels = try renderedGlyphPixels(
+            font: thirdFont,
+            size: thirdSize,
+            glyph: thirdGlyph,
+            at: glyphPosition
+        )
+        #expect(firstPixels != Data(repeating: 0, count: firstPixels.count))
+        #expect(firstPixels != secondPixels)
+        #expect(secondPixels != thirdPixels)
+
+        let context = try makeFontBitmapContext()
+        context.saveGState()
+        context.setFont(firstFont)
+        context.setFontSize(firstSize)
+        context.saveGState()
+        context.setFont(secondFont)
+        context.setFontSize(secondSize)
+        context.saveGState()
+        context.setFont(thirdFont)
+        context.setFontSize(thirdSize)
+        context.saveGState()
+        context.setFont(firstFont)
+        context.setFontSize(32)
+
+        for url in fontURLs {
+            if removingSourceFiles {
+                try fileManager.removeItem(at: url)
+            } else {
+                try Data(repeating: 0, count: sourceData.count).write(to: url, options: .atomic)
+            }
+        }
+
+        context.restoreGState()
+        context.data = Data(repeating: 0, count: context.bytesPerRow * context.height)
+        context.showGlyphs([thirdGlyph], at: [glyphPosition])
+        context.flush()
+        #expect(context.data == thirdPixels)
+
+        context.restoreGState()
+        context.data = Data(repeating: 0, count: context.bytesPerRow * context.height)
+        context.showGlyphs([secondGlyph], at: [glyphPosition])
+        context.flush()
+        #expect(context.data == secondPixels)
+
+        context.restoreGState()
+        context.data = Data(repeating: 0, count: context.bytesPerRow * context.height)
+        context.showGlyphs([firstGlyph], at: [glyphPosition])
+        context.flush()
+        #expect(context.data == firstPixels)
+
+        let emptyPixels = Data(repeating: 0, count: context.bytesPerRow * context.height)
+        context.restoreGState()
+        context.data = emptyPixels
+        context.showGlyphs([firstGlyph], at: [glyphPosition])
+        context.flush()
+        #expect(context.data == emptyPixels)
+
+        context.restoreGState()
+        context.data = emptyPixels
+        context.showGlyphs([firstGlyph], at: [glyphPosition])
+        context.flush()
+        #expect(context.data == emptyPixels)
+    }
+
+    /// Renders one glyph to a transparent bitmap and returns the complete pixel buffer.
+    private func renderedGlyphPixels(
+        font: CGFont,
+        size: Double,
+        glyph: CGGlyph,
+        at position: OpenCoreGraphics.CGPoint
+    ) throws -> Data {
+        let context = try makeFontBitmapContext()
+        context.setFont(font)
+        context.setFontSize(size)
+        context.showGlyphs([glyph], at: [position])
+        context.flush()
+        return context.data
+    }
+
+    /// Creates an allocated bitmap context for exact glyph-pixel comparisons.
+    private func makeFontBitmapContext() throws -> CGContext {
+        let context = try #require(
+            CGContext(
+                data: nil,
+                width: 64,
+                height: 64,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: .genericRGBLinear,
+                bitmapInfo: 0
+            )
+        )
+        context.setFillColor(.black)
+        return context
     }
 
     /// Creates a bitmap context for testing graphics-state behavior without a window.
