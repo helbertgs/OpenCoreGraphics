@@ -9,7 +9,13 @@ struct GLGlyphComparisonTests {
     /// Verifies the OpenGL glyph shader matches the software renderer for the bundled font fixture.
     @Test
     func comparesGlyphRenderingAcrossBackends() throws {
-        let window = try CGWindow(frame: CGRect(x: 0, y: 0, width: 64, height: 64), title: "Glyph comparison")
+        let window: CGWindow
+        do {
+            window = try CGWindow(frame: CGRect(x: 0, y: 0, width: 64, height: 64), title: "Glyph comparison")
+        } catch let error as CGWindowError {
+            print("GL_RUNNER_GRAPHICS_UNAVAILABLE: \(error)")
+            throw error
+        }
         let glContext = window.cgContext
         let softwareContext = try #require(
             CGContext(

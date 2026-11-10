@@ -21,3 +21,4 @@ In Windows and Linux, OpenCoreGraphics also includes services for working with d
 - **Build**: swift build
 - **Test**: swift test
 - **Run the Sample**: swift run
+- **Run the opt-in OpenGL comparisons**: `ruby scripts/run-gl-tests.rb --timeout 120` on a machine with a graphical session and an OpenGL 3.3 driver. The timeout covers the build and tests. The runner exits with 0 only when both comparisons complete successfully; 1 means a failure, timeout, interruption, skipped test or incomplete report, and 2 means invalid arguments or an explicitly reported unavailable graphics context. Ruby and Swift must be available on `PATH`.

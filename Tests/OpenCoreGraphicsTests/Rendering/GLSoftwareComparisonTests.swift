@@ -9,7 +9,13 @@ struct GLSoftwareComparisonTests {
     /// Verifies the two rendering backends stay within their scene-specific mean channel tolerances.
     @Test
     func comparesSharedScenesAcrossBackends() throws {
-        let window = try CGWindow(frame: CGRect(x: 0, y: 0, width: 64, height: 64), title: "Renderer comparison")
+        let window: CGWindow
+        do {
+            window = try CGWindow(frame: CGRect(x: 0, y: 0, width: 64, height: 64), title: "Renderer comparison")
+        } catch let error as CGWindowError {
+            print("GL_RUNNER_GRAPHICS_UNAVAILABLE: \(error)")
+            throw error
+        }
         let glContext = window.cgContext
         let softwareContext = try #require(
             CGContext(
