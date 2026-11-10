@@ -17,7 +17,7 @@ open class CGWindow {
         storedTitle = title
         try createWindow()
         do {
-            let renderer = try GLRenderer()
+            let renderer = try Self.rendererFactory()
             self.renderer = renderer
             windowRenderTarget = WindowRenderTarget(size: framebufferSize, renderer: renderer)
             windowRenderTarget?.contextSelector = contextSelector
@@ -45,11 +45,17 @@ open class CGWindow {
     /// Indicates whether this window owns a GLFW platform reference.
     private var hasRetainedPlatform = false
 
+    /// The context that was current before this window started initialization.
+    private var initializationPreviousContext: OpaquePointer?
+
     /// Selects this window's OpenGL context and tracks when the window is closed.
     private var contextSelector: GLFWContextSelector?
 
     /// The OpenGL renderer owned by this window.
     private var renderer: GLRenderer?
+
+    /// Creates the renderer after the window context is selected.
+    static var rendererFactory: @MainActor () throws -> GLRenderer = { try GLRenderer() }
 
     /// The render target shared with the window's drawing context.
     private var windowRenderTarget: WindowRenderTarget?
@@ -187,6 +193,7 @@ extension CGWindow {
         }
 
         hasRetainedPlatform = true
+        initializationPreviousContext = glfwGetCurrentContext()
 
         glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API)
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3)
@@ -329,6 +336,12 @@ extension CGWindow {
         GLFWWindowTeardownRegistry.disableCallbacks(windowRef)
         contextSelector?.close()
         glfwDestroyWindow(windowRef)
+        if glfwGetCurrentContext() != initializationPreviousContext {
+            glfwMakeContextCurrent(initializationPreviousContext)
+            if glfwGetCurrentContext() != initializationPreviousContext {
+                NSLog("OpenCoreGraphics could not restore the context after window initialization failed")
+            }
+        }
         self.windowRef = nil
         self.contextSelector = nil
         self.windowRenderTarget = nil
@@ -448,10 +461,10 @@ extension CGWindow {
 
     /// Transfers renderer ownership to a teardown before any attempt can destroy the window.
     /// - Parameter window: The GLFW window that owns the renderer.
-    /// - Returns: The prepared teardown, or nil if no renderer and selector are available.
+    /// - Returns: The prepared teardown, or nil if no context selector is available.
     private func prepareTeardown(window: OpaquePointer) -> GLFWWindowTeardown? {
-        guard let renderer, let contextSelector else { return nil }
-        let rendererRelease = GLFWRendererReleaseBox.make(renderer)
+        guard let contextSelector else { return nil }
+        let rendererRelease = renderer.map { GLFWRendererReleaseBox.make($0) }
         let teardown = GLFWWindowTeardown(
             window: window,
             contextSelector: contextSelector,
@@ -459,11 +472,19 @@ extension CGWindow {
             disableCallbacks: GLFWWindowTeardownRegistry.disableCallbacks,
             destroyWindow: { GLFWWindowTeardownRegistry.destroyWindow($0) },
             releasePlatform: { GLFWPlatform.shared.release() },
-            releaseResources: { rendererRelease.release() },
+            releaseResources: {
+                if let rendererRelease {
+                    glad_glUseProgram(0)
+                    rendererRelease.release()
+                }
+            },
             recordFailure: { error in
                 NSLog("OpenCoreGraphics could not finish window teardown: %@", String(describing: error))
             }
         )
+        if rendererRelease == nil {
+            teardown.initializationRestoreContext = .some(initializationPreviousContext)
+        }
         self.renderer = nil
         windowRenderTarget = nil
         self.contextSelector = nil

@@ -119,8 +119,8 @@
         "Typecheck passes"
       ],
       "priority": 7,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Liberação de buffers, texturas e programas verificada antes da destruição nos dois sentidos A/B; falhas de inicialização parcial e recuperação de teardown também foram testadas."
     },
     {
       "id": "US-008",

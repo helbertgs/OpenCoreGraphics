@@ -33,6 +33,21 @@ final class GLFWWindowTeardown {
     /// Indicates the renderer and GLFW window have both been released.
     private(set) var isComplete = false
 
+    /// Indicates the window was destroyed and only context restoration remains.
+    private var windowWasDestroyed = false
+
+    /// The previous context that must be restored before completing teardown.
+    private var restorationTarget: OpaquePointer?
+
+    /// Overrides the context to restore when initialization selected the new window earlier.
+    var initializationRestoreContext: OpaquePointer??
+
+    /// Indicates the original context has been captured for all subsequent retries.
+    private var hasRestorationTarget = false
+
+    /// The observed current context after a failed restoration attempt.
+    private var contextAfterFailedRestoration: OpaquePointer?
+
     /// Creates a teardown operation with injectable GLFW and resource operations.
     /// - Parameters:
     ///   - window: The GLFW window that owns the GL resources.
@@ -62,11 +77,16 @@ final class GLFWWindowTeardown {
         self.recordFailure = recordFailure
     }
 
-    /// Disables callbacks and ordinary GL use, then releases resources if selection succeeds.
+    /// Disables ordinary GL use and releases resources in their owning context.
+    /// A failed restoration remains pending without deleting the resources or window again.
     /// - Returns: `true` when the resources, GLFW window, and platform retain are released.
     @discardableResult
     func attempt() -> Bool {
         guard !isComplete else { return true }
+
+        if windowWasDestroyed {
+            return finishRestoration()
+        }
 
         if !isPrepared {
             disableCallbacks(window)
@@ -74,13 +94,26 @@ final class GLFWWindowTeardown {
             isPrepared = true
         }
 
-        let previousContext = contextDriver.currentContext()
+        guard !GLFWWindowTeardownRegistry.pending.contains(where: {
+            $0 !== self && !$0.isComplete && $0.windowWasDestroyed && $0.restorationTarget == window
+        }) else { return false }
+
+        if !hasRestorationTarget {
+            restorationTarget = initializationRestoreContext ?? contextDriver.currentContext()
+            hasRestorationTarget = true
+        }
+        let previousContext = restorationTarget
         contextDriver.makeContextCurrent(window)
         guard contextDriver.currentContext() == window else {
             recordFailure(.selectionFailed)
             if contextDriver.currentContext() != previousContext {
                 contextDriver.makeContextCurrent(previousContext)
+                if contextDriver.currentContext() != previousContext {
+                    recordFailure(.selectionFailed)
+                }
             }
+            hasRestorationTarget = false
+            initializationRestoreContext = nil
             return false
         }
 
@@ -89,12 +122,30 @@ final class GLFWWindowTeardown {
         destroyWindow(window)
 
         if previousContext != window {
-            contextDriver.makeContextCurrent(previousContext)
-            if contextDriver.currentContext() != previousContext {
-                recordFailure(.selectionFailed)
-            }
+            windowWasDestroyed = true
+            contextAfterFailedRestoration = contextDriver.currentContext()
+            return finishRestoration()
         }
 
+        releasePlatform()
+        isComplete = true
+        return true
+    }
+
+    /// Retries restoration without touching the already-destroyed window or its resources.
+    private func finishRestoration() -> Bool {
+        let currentContext = contextDriver.currentContext()
+        if currentContext != contextAfterFailedRestoration {
+            releasePlatform()
+            isComplete = true
+            return true
+        }
+        contextDriver.makeContextCurrent(restorationTarget)
+        guard contextDriver.currentContext() == restorationTarget else {
+            contextAfterFailedRestoration = contextDriver.currentContext()
+            recordFailure(.selectionFailed)
+            return false
+        }
         releasePlatform()
         isComplete = true
         return true
@@ -127,14 +178,13 @@ enum GLFWWindowTeardownRegistry {
         pending.append(teardown)
     }
 
-    /// Retries retained teardowns, preserving whichever unrelated context was current.
+    /// Retries retained teardowns without destroying a context still awaiting restoration.
     static func retryPending() {
         guard !pending.isEmpty else { return }
         let queuedTeardowns = pending
-        pending.removeAll(keepingCapacity: true)
-
-        for teardown in queuedTeardowns where !teardown.attempt() {
-            pending.append(teardown)
+        for teardown in queuedTeardowns {
+            _ = teardown.attempt()
         }
+        pending.removeAll { $0.isComplete }
     }
 }

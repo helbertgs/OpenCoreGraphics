@@ -139,7 +139,8 @@ struct GLFWContextSelectorTests {
         #expect(teardown.attempt())
         #expect(state.events == [
             "initialize", "disableCallbacks", "getContext", "selectWindow", "getContext",
-            "releaseResources", "destroyWindow", "restoreNil", "getContext", "terminate"
+            "releaseResources", "destroyWindow", "getContext", "getContext",
+            "restoreNil", "getContext", "terminate"
         ])
         #expect(currentContext == nil)
         #expect(state.isInitialized == false)
@@ -158,9 +159,8 @@ struct GLFWContextSelectorTests {
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3)
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE)
         glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE)
-        let context = try #require(
-            glfwCreateWindow(32, 32, "Context lifecycle test", nil, nil)
-        )
+        let createdContext = glfwCreateWindow(32, 32, "Context lifecycle test", nil, nil)
+        let context = try #require(createdContext)
         let selector = GLFWContextSelector.make(context, .system)
         #expect(selector.select() == nil)
         #expect(glfwGetCurrentContext() == context)

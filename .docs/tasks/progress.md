@@ -88,3 +88,13 @@
 - **Learnings for future iterations:**
   - Após um resize físico, guardar dimensões e barreiras pendentes permite retomar no próximo desenho ou readback sem esperar outro callback.
 ---
+
+## 2026-11-10 - US-007
+- O teardown desassocia o programa ativo, libera recursos no contexto proprietário antes de destruir a janela e retoma restaurações falhas sem repetir liberações.
+- Testes falsos e GL real cobrem ambas as ordens A/B, recursos, desalocação e inicialização parcial em `CGWindow`, inclusive contexto anterior e retentativas pendentes.
+- Uma exceção AppKit intermitente foi reproduzida; após separar chamada GLFW da macro de teste, 40 execuções combinadas passaram. Essa evidência é limitada ao ambiente observado.
+- Validação: 216 testes na suíte padrão com concorrência estrita; 9 testes direcionados de teardown e falha de inicialização com GL real; build estrito; executor GL concluiu duas suítes com sete cenas aprovadas; `git diff --check` passou. Casos gráficos são opt-in na suíte padrão.
+- Files changed: `Sources/OpenCoreGraphics/Services/Window Services/CGWindow.swift`, `GLFWWindowTeardown.swift`, testes de inicialização e teardown em `Tests/OpenCoreGraphicsTests/`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`.
+- **Learnings for future iterations:**
+  - Retentativas de teardown não devem restaurar um contexto anterior obsoleto ou destruir um contexto aguardando restauração.
+---
