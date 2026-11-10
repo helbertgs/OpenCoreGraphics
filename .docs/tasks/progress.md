@@ -199,3 +199,12 @@
 - **Learnings for future iterations:**
   - Flush antes de mutação ou descarte impede que um lote pendente referencie textura alterada ou liberada.
 ---
+
+## 2026-11-10 - US-019
+- Sequência determinística valida imagens repetidas, alteração de provider, eviction LRU e textura retida externamente; GL real verifica pixels após atualização e eviction e liberação no contexto proprietário.
+- Custo observado na carga sintética: seis frames, cinco uploads, uma atualização, 20 bytes enviados, duas evictions e bytes retidos de 8, 8, 16, 16, 16 e 16, com orçamento de 16 bytes; referência externa reteve outros 8 bytes fora da contabilidade. Tempo e ganho de desempenho não foram medidos.
+- Validação: 276 testes e 47 suítes na execução com concorrência estrita; build estrito; runner GL concluiu 28 testes em cinco suítes; testes direcionados e `git diff --check` passaram.
+- Files changed: testes de cache, integração e executor GL, `scripts/run-gl-tests.rb`, arquivos de progresso.
+- **Learnings for future iterations:**
+  - O orçamento limita somente entradas do cache: referências externas podem prolongar a vida da textura e não contam no orçamento.
+---

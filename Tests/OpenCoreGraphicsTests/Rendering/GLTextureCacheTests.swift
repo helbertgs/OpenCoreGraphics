@@ -402,6 +402,84 @@ struct GLTextureCacheTests {
         #expect(driver.drawnState == state)
     }
 
+    /// Exercises repeated frames, mutable providers, LRU eviction, and externally retained textures.
+    @Test
+    private func preservesContentAndBudgetAcrossFrameSequence() throws {
+        let loader = RecordingGLTextureLoader()
+        let cache = GLTextureCache(loader: loader)
+        cache.byteBudget = 16
+        let firstImage = makeImage()
+        let firstProvider = try #require(firstImage.dataProvider)
+        let firstSnapshot = CGImageSnapshot(image: firstImage)
+        let secondSnapshot = makeSnapshot(identity: UUID(), pixel: [5, 6, 7, 8])
+        let thirdSnapshot = makeSnapshot(identity: UUID(), pixel: [9, 10, 11, 12])
+
+        var firstTexture: GLTexture? = try cache.texture(for: firstSnapshot)
+        let firstIdentifier = try #require(firstTexture?.identifier)
+        #expect(loader.textureContents[firstIdentifier] == Data([1, 2, 3, 4]))
+        #expect(loader.loadCount == 1)
+        #expect(uploadedByteCount(in: loader) == 4)
+        #expect(cache.retainedByteCount == 8)
+
+        #expect(try cache.texture(for: firstSnapshot) === firstTexture)
+        #expect(loader.textureContents[firstIdentifier] == Data([1, 2, 3, 4]))
+        #expect(loader.loadCount == 1)
+        #expect(uploadedByteCount(in: loader) == 4)
+        #expect(cache.retainedByteCount == 8)
+
+        var secondTexture: GLTexture? = try cache.texture(for: secondSnapshot)
+        let secondIdentifier = try #require(secondTexture?.identifier)
+        #expect(loader.textureContents[secondIdentifier] == Data([5, 6, 7, 8]))
+        #expect(loader.loadCount == 2)
+        #expect(uploadedByteCount(in: loader) == 8)
+        #expect(cache.retainedByteCount == 16)
+
+        firstProvider.data = Data([13, 14, 15, 16])
+        let changedFirstSnapshot = CGImageSnapshot(image: firstImage)
+        #expect(changedFirstSnapshot.identity == firstSnapshot.identity)
+        #expect(try cache.texture(for: changedFirstSnapshot) === firstTexture)
+        #expect(loader.textureContents[firstIdentifier] == Data([13, 14, 15, 16]))
+        #expect(loader.textureContents[secondIdentifier] == Data([5, 6, 7, 8]))
+        #expect(loader.loadCount == 2)
+        #expect(loader.updateCount == 1)
+        #expect(uploadedByteCount(in: loader) == 12)
+        #expect(cache.retainedByteCount == 16)
+        firstTexture = nil
+
+        let thirdTexture = try cache.texture(for: thirdSnapshot)
+        let thirdIdentifier = thirdTexture.identifier
+        #expect(loader.textureContents[firstIdentifier] == Data([13, 14, 15, 16]))
+        #expect(loader.textureContents[thirdIdentifier] == Data([9, 10, 11, 12]))
+        #expect(loader.textureContents[secondIdentifier] == Data([5, 6, 7, 8]))
+        #expect(loader.loadCount == 3)
+        #expect(loader.updateCount == 1)
+        #expect(uploadedByteCount(in: loader) == 16)
+        #expect(cache.retainedByteCount == 16)
+        #expect(loader.releasedIdentifiers.isEmpty)
+
+        secondTexture = nil
+        #expect(loader.textureContents[secondIdentifier] == nil)
+        #expect(loader.releasedIdentifiers == [secondIdentifier])
+        #expect(cache.retainedByteCount == 16)
+
+        let recreatedSecondTexture = try cache.texture(for: secondSnapshot)
+        #expect(recreatedSecondTexture.identifier != secondIdentifier)
+        #expect(loader.textureContents[recreatedSecondTexture.identifier] == Data([5, 6, 7, 8]))
+        #expect(loader.textureContents[firstIdentifier] == nil)
+        #expect(loader.textureContents[thirdIdentifier] == Data([9, 10, 11, 12]))
+        #expect(loader.loadCount == 4)
+        #expect(loader.updateCount == 1)
+        #expect(uploadedByteCount(in: loader) == 20)
+        #expect(cache.retainedByteCount == 16)
+        #expect(loader.releasedIdentifiers == [secondIdentifier, firstIdentifier])
+
+        print(
+            "GL_TEXTURE_CACHE_METRICS: frames=6 uploads=5 updates=1 uploadedBytes=20 "
+                + "retainedBytes=8,8,16,16,16,16 budgetBytes=16 evictions=2 "
+                + "externallyRetainedBytes=8"
+        )
+    }
+
     /// Creates a small image backed by owned RGBA data for cache tests.
     private func makeImage() -> CGImage {
         CGImage(
@@ -494,6 +572,15 @@ struct GLTextureCacheTests {
             bitmapInfo: bitmapInfo
         )
     }
+
+    /// Computes the number of source bytes submitted by successful fake texture uploads.
+    /// - Parameter loader: The loader containing the recorded upload payloads.
+    /// - Returns: The sum of uploaded source-data lengths.
+    private func uploadedByteCount(in loader: RecordingGLTextureLoader) -> Int {
+        loader.uploadedImages.reduce(into: 0) { total, imageData in
+            total += imageData.count
+        }
+    }
 }
 
 /// Records texture creation requests without requiring a current OpenGL context.
@@ -510,6 +597,9 @@ private final class RecordingGLTextureLoader: GLTextureLoader {
 
     /// The bytes from each successful image creation or update, in upload order.
     private(set) var uploadedImages: [Data] = []
+
+    /// The latest uploaded bytes for each texture that has not been released.
+    private(set) var textureContents: [UInt32: Data] = [:]
 
     /// Whether a missing image buffer causes the fake update to fail.
     var rejectMissingData = false
@@ -537,9 +627,11 @@ private final class RecordingGLTextureLoader: GLTextureLoader {
         loadCount += 1
         if let data = image.data {
             uploadedImages.append(data)
+            textureContents[UInt32(loadCount)] = data
         }
         return GLTexture(identifier: UInt32(loadCount), width: image.width, height: image.height) { identifier in
             self.releasedIdentifiers.append(identifier)
+            self.textureContents.removeValue(forKey: identifier)
             self.onRelease(identifier)
         }
     }
@@ -570,6 +662,7 @@ private final class RecordingGLTextureLoader: GLTextureLoader {
         updatedImageData = image.data
         if let data = image.data {
             uploadedImages.append(data)
+            textureContents[texture.identifier] = data
         }
     }
 }

@@ -323,8 +323,8 @@
         "Typecheck passes"
       ],
       "priority": 19,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Carga determinística de seis frames verifica conteúdo, uploads, orçamento e LRU; GL real valida atualização, eviction, pixels e ciclo de vida."
     },
     {
       "id": "US-020",

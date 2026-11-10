@@ -20,7 +20,8 @@ rescue OptionParser::ParseError => error
 end
 
 command = ARGV.empty? ? [
-  "swift", "test", "--filter", "GLSoftwareComparisonTests|GLGlyphComparisonTests|GlyphMetricTests"
+  "swift", "test", "--filter",
+  "GLSoftwareComparisonTests|GLGlyphComparisonTests|GLTextureCacheTests|GLTextureCacheIntegrationTests|GlyphMetricTests"
 ] : ARGV
 artifacts_root = ENV["OPENCOREGRAPHICS_GL_ARTIFACTS"] || File.expand_path("../.build/gl-comparison", __dir__)
 artifacts = File.join(File.expand_path(artifacts_root), "run-#{Time.now.utc.strftime('%Y%m%dT%H%M%S')}-#{Process.pid}")
@@ -91,14 +92,14 @@ unless status.exited?
   exit 1
 end
 
-complete = output.match?(/^.*Test run with 5 tests in 3 suites (?:passed|failed) after .+ seconds(?: with \d+ issues?)?\.\s*$/)
+complete = output.match?(/^.*Test run with 28 tests in 5 suites (?:passed|failed) after .+ seconds(?: with \d+ issues?)?\.\s*$/)
 if !complete
-  warn "GL runner: INCOMPLETE: missing final Swift Testing result for both GL suites."
+  warn "GL runner: INCOMPLETE: missing final Swift Testing result for all selected suites."
   exit 1
 end
 
 unavailable = output.scan(/^GL_RUNNER_GRAPHICS_UNAVAILABLE: (.+)$/).flatten
-failed_tests = output.scan(/^.*Test (?:comparesSharedScenesAcrossBackends|comparesGlyphRenderingAcrossBackends)\(\) failed after .+ seconds(?: with \d+ issues?)?\.\s*$/)
+failed_tests = output.scan(/^.*Test (?:comparesSharedScenesAcrossBackends|comparesGlyphRenderingAcrossBackends|updatesAndEvictsRealTexturesWithoutChangingRenderedPixels)\(\) failed after .+ seconds(?: with \d+ issues?)?\.\s*$/)
 all_failed_tests = output.scan(/^.*Test (?!run with ).+ failed after .+ seconds(?: with \d+ issues?)?\.\s*$/)
 if !unavailable.empty? && unavailable.length == failed_tests.length && failed_tests.length == all_failed_tests.length &&
    !output.match?(/^.*(?:Expectation failed|Issue recorded|skipped)\b/i)
@@ -113,10 +114,12 @@ end
 passed = [
   /^.*Test comparesSharedScenesAcrossBackends\(\) passed after .+ seconds\.\s*$/,
   /^.*Test comparesGlyphRenderingAcrossBackends\(\) passed after .+ seconds\.\s*$/,
+  /^.*Test preservesContentAndBudgetAcrossFrameSequence\(\) passed after .+ seconds\.\s*$/,
+  /^.*Test updatesAndEvictsRealTexturesWithoutChangingRenderedPixels\(\) passed after .+ seconds\.\s*$/,
   /^.*Test localFailureCannotHideInMean\(\) passed after .+ seconds\.\s*$/,
   /^.*Test identicalWrongBackendsFailReference\(\) passed after .+ seconds\.\s*$/,
   /^.*Test invalidBuffersAreRejected\(\) passed after .+ seconds\.\s*$/,
-  /^.*Test run with 5 tests in 3 suites passed after .+ seconds\.\s*$/
+  /^.*Test run with 28 tests in 5 suites passed after .+ seconds\.\s*$/
 ].all? { |pattern| output.match?(pattern) }
 
 glyph_reports = %w[above below rotation horizontal vertical order spacing].product(%w[mean local])
@@ -148,11 +151,32 @@ mutable_reports_complete = %w[mutable_before mutable_after mutable_queued].all? 
   end
 end
 
+deterministic_cache_report =
+  "GL_TEXTURE_CACHE_METRICS: frames=6 uploads=5 updates=1 uploadedBytes=20 " \
+  "retainedBytes=8,8,16,16,16,16 budgetBytes=16 evictions=2 externallyRetainedBytes=8"
+deterministic_cache_complete = output.scan(/^#{Regexp.escape(deterministic_cache_report)}\s*$/).length == 1
+
+real_cache_reports = output.scan(
+  Regexp.new(
+    "^GL_TEXTURE_CACHE_REAL: updates=(\\d+) evictions=(\\d+) retainedBytes=(\\d+) budgetBytes=(\\d+) " \
+    "updatedPixel=\\[(\\d+), (\\d+), (\\d+), (\\d+)\\] " \
+    "evictedPixel=\\[(\\d+), (\\d+), (\\d+), (\\d+)\\] lifetime=verified\\s*$"
+  )
+)
+real_cache_complete = real_cache_reports.length == 1 && begin
+  updates, evictions, retained, budget, ur, ug, ub, ua, er, eg, eb, ea =
+    real_cache_reports.first.map(&:to_i)
+  updates == 1 && evictions == 1 && retained == budget && budget == 8 &&
+    ur < 10 && ug < 10 && ub > 245 && ua > 245 &&
+    er < 10 && eg > 245 && eb < 10 && ea > 245
+end
+
 if status.success? && passed && glyph_reports_complete && mutable_reports_complete &&
+   deterministic_cache_complete && real_cache_complete &&
    !output.match?(/^.*(?:skipped|failed|Issue recorded)\b/i)
-  puts "GL runner: PASSED: both GL tests and synthetic metric tests completed successfully."
+  puts "GL runner: PASSED: GL rendering, texture-cache lifecycle, and synthetic metric tests completed successfully."
   exit 0
 end
 
-warn "GL runner: FAILED: test failure, missing glyph reports or mutable-image reports, skipped test, or unsuccessful process exit."
+warn "GL runner: FAILED: test failure, missing glyph reports or mutable-image reports or texture-cache evidence, skipped test, or unsuccessful process exit."
 exit 1

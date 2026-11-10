@@ -52,12 +52,16 @@ struct GLTestRunnerTests {
         GL_COMPARISON: mutable_before PASSED difference=0.0 tolerance=0.007
         GL_COMPARISON: mutable_after PASSED difference=0.0 tolerance=0.007
         GL_COMPARISON: mutable_queued PASSED difference=0.0 tolerance=0.007
+        GL_TEXTURE_CACHE_METRICS: frames=6 uploads=5 updates=1 uploadedBytes=20 retainedBytes=8,8,16,16,16,16 budgetBytes=16 evictions=2 externallyRetainedBytes=8
+        GL_TEXTURE_CACHE_REAL: updates=1 evictions=1 retainedBytes=8 budgetBytes=8 updatedPixel=[0, 0, 255, 255] evictedPixel=[0, 255, 0, 255] lifetime=verified
         ✔ Test comparesSharedScenesAcrossBackends() passed after 0.001 seconds.
         ✔ Test comparesGlyphRenderingAcrossBackends() passed after 0.001 seconds.
+        ✔ Test preservesContentAndBudgetAcrossFrameSequence() passed after 0.001 seconds.
+        ✔ Test updatesAndEvictsRealTexturesWithoutChangingRenderedPixels() passed after 0.001 seconds.
         ✔ Test localFailureCannotHideInMean() passed after 0.001 seconds.
         ✔ Test identicalWrongBackendsFailReference() passed after 0.001 seconds.
         ✔ Test invalidBuffersAreRejected() passed after 0.001 seconds.
-        ✔ Test run with 5 tests in 3 suites passed after 0.001 seconds.
+        ✔ Test run with 28 tests in 5 suites passed after 0.001 seconds.
         """
     }
 
@@ -70,6 +74,33 @@ struct GLTestRunnerTests {
         let result = try run("puts \(String(reflecting: incomplete))")
         #expect(result.status == 1)
         #expect(result.output.contains("mutable-image reports"))
+    }
+
+    /// Rejects a successful run when deterministic or real texture-cache evidence is absent.
+    @Test
+    private func missingTextureCacheEvidenceIsRejected() throws {
+        let evidence = [
+            "GL_TEXTURE_CACHE_METRICS: frames=6 uploads=5 updates=1 uploadedBytes=20 retainedBytes=8,8,16,16,16,16 budgetBytes=16 evictions=2 externallyRetainedBytes=8\n",
+            "GL_TEXTURE_CACHE_REAL: updates=1 evictions=1 retainedBytes=8 budgetBytes=8 updatedPixel=[0, 0, 255, 255] evictedPixel=[0, 255, 0, 255] lifetime=verified\n"
+        ]
+        for report in evidence {
+            let incomplete = successOutput.replacing(report, with: "")
+            let result = try run("puts \(String(reflecting: incomplete))")
+            #expect(result.status == 1)
+            #expect(result.output.contains("texture-cache evidence"))
+        }
+    }
+
+    /// Rejects real OpenGL pixel evidence that does not match the asserted update color.
+    @Test
+    private func invalidRealTextureCachePixelsAreRejected() throws {
+        let invalid = successOutput.replacing(
+            "updatedPixel=[0, 0, 255, 255]",
+            with: "updatedPixel=[255, 0, 0, 255]"
+        )
+        let result = try run("puts \(String(reflecting: invalid))")
+        #expect(result.status == 1)
+        #expect(result.output.contains("texture-cache evidence"))
     }
 
     /// Rejects inconsistent, duplicated, or overly permissive mutable-image reports.
@@ -149,7 +180,8 @@ struct GLTestRunnerTests {
         let report = """
         ✘ Test comparesSharedScenesAcrossBackends() failed after 0.001 seconds with 1 issue.
         ✔ Test comparesGlyphRenderingAcrossBackends() passed after 0.001 seconds.
-        ✘ Test run with 5 tests in 3 suites failed after 0.001 seconds with 1 issue.
+        ✔ Test updatesAndEvictsRealTexturesWithoutChangingRenderedPixels() passed after 0.001 seconds.
+        ✘ Test run with 28 tests in 5 suites failed after 0.001 seconds with 1 issue.
         """
         let result = try run("puts \(String(reflecting: report))")
         #expect(result.status == 1)
@@ -162,7 +194,8 @@ struct GLTestRunnerTests {
         let report = """
         ✘ Test comparesSharedScenesAcrossBackends() failed after 0.001 seconds with 5 issues.
         ✔ Test comparesGlyphRenderingAcrossBackends() passed after 0.001 seconds.
-        ✘ Test run with 5 tests in 3 suites failed after 0.001 seconds with 5 issues.
+        ✔ Test updatesAndEvictsRealTexturesWithoutChangingRenderedPixels() passed after 0.001 seconds.
+        ✘ Test run with 28 tests in 5 suites failed after 0.001 seconds with 5 issues.
         """
         let result = try run("puts \(String(reflecting: report)); exit 1")
         #expect(result.status == 1)
@@ -191,9 +224,11 @@ struct GLTestRunnerTests {
     private func unavailableGraphicsIsReportedSeparately() throws {
         let report = """
         GL_RUNNER_GRAPHICS_UNAVAILABLE: glfwInitFailed
+        GL_RUNNER_GRAPHICS_UNAVAILABLE: glfwInitFailed
         ✘ Test comparesSharedScenesAcrossBackends() failed after 0.001 seconds with 1 issue.
         ✔ Test comparesGlyphRenderingAcrossBackends() passed after 0.001 seconds.
-        ✘ Test run with 5 tests in 3 suites failed after 0.001 seconds with 1 issue.
+        ✘ Test updatesAndEvictsRealTexturesWithoutChangingRenderedPixels() failed after 0.001 seconds with 1 issue.
+        ✘ Test run with 28 tests in 5 suites failed after 0.001 seconds with 2 issues.
         """
         let result = try run("puts \(String(reflecting: report)); exit 1")
         #expect(result.status == 2)
@@ -227,7 +262,8 @@ struct GLTestRunnerTests {
         GL_RUNNER_GRAPHICS_UNAVAILABLE: glfwInitFailed
         ✘ Test comparesSharedScenesAcrossBackends() failed after 0.001 seconds.
         ✘ Test comparesGlyphRenderingAcrossBackends() failed after 0.001 seconds.
-        ✘ Test run with 5 tests in 3 suites failed after 0.001 seconds.
+        ✘ Test updatesAndEvictsRealTexturesWithoutChangingRenderedPixels() failed after 0.001 seconds.
+        ✘ Test run with 28 tests in 5 suites failed after 0.001 seconds.
         """
         let result = try run("puts \(String(reflecting: report)); exit 1")
         #expect(result.status == 1)
@@ -241,7 +277,7 @@ struct GLTestRunnerTests {
         GL_RUNNER_GRAPHICS_UNAVAILABLE: glfwInitFailed
         ✘ Test comparesSharedScenesAcrossBackends() failed after 0.001 seconds.
         ✘ Test localFailureCannotHideInMean() failed after 0.001 seconds.
-        ✘ Test run with 5 tests in 3 suites failed after 0.001 seconds.
+        ✘ Test run with 28 tests in 5 suites failed after 0.001 seconds.
         """
         let result = try run("puts \(String(reflecting: report)); exit 1")
         #expect(result.status == 1)
