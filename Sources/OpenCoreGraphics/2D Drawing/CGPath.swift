@@ -28,6 +28,22 @@ public struct CGPath : Codable, Equatable, Hashable, Sendable {
     public init() {
     }
 
+    /// Returns whether two paths contain the same path elements and current point.
+    /// - Parameters:
+    ///   - lhs: The first path to compare.
+    ///   - rhs: The second path to compare.
+    /// - Returns: `true` when both paths have equivalent stored geometry.
+    public static func == (lhs: CGPath, rhs: CGPath) -> Bool {
+        lhs.subpath == rhs.subpath && lhs.currentPoint == rhs.currentPoint
+    }
+
+    /// Adds the path's stored geometry to a hash.
+    /// - Parameter hasher: The hasher that receives this path's identity.
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(subpath)
+        hasher.combine(currentPoint)
+    }
+
     /// Create a path of a rectangle.
     /// 
     /// This is a convenience function that creates a path of an rectangle. 
@@ -79,14 +95,20 @@ public struct CGPath : Codable, Equatable, Hashable, Sendable {
     /// Creates a copy of a graphics path.
     /// - Returns: A new, immutable copy of the specified path.
     public func copy() -> CGPath? {
-        nil
+        self
     }
 
     /// Creates a copy of a graphics path transformed by a transformation matrix.
     /// - Parameter transform: A pointer to an affine transformation matrix, or nil if no transformation is needed.
     /// - Returns: A copy of the path
     public func copy(using transform: CGAffineTransform) -> CGPath? {
-        nil
+        var copy = self
+        copy.subpath = subpath.map { element in
+            CGPathElement(type: element.type, points: element.points.map { $0.applying(transform) })
+        }
+        copy.currentPoint = subpath.isEmpty ? .zero : currentPoint.applying(transform)
+        copy.recalculateBounds()
+        return copy
     }
 
     // MARK: - Examining a Graphics Path
@@ -95,13 +117,13 @@ public struct CGPath : Codable, Equatable, Hashable, Sendable {
     /// 
     /// The bounding box is the smallest rectangle completely enclosing all points in the path, including control points for Bézier and quadratic curves. 
     /// If the path is empty, this value is ``.null``.
-    public private(set) var boundingBox: CGRect = .zero
+    public private(set) var boundingBox: CGRect = .null
 
     /// Returns the bounding box of a graphics path.
     /// 
     /// The path bounding box is the smallest rectangle completely enclosing all points in the path but not including control points for Bézier and quadratic curves. 
     /// If the path is empty, this value is ``.null``.
-    public private(set) var boundingBoxOfPath: CGRect = .zero
+    public private(set) var boundingBoxOfPath: CGRect = .null
 
     /// Returns the current point in a graphics path.
     /// 
@@ -118,7 +140,42 @@ public struct CGPath : Codable, Equatable, Hashable, Sendable {
     ///   - transform: An affine transform to apply to the point before checking for containment in the path. Defaults to the ``.identity`` transform if not specified.
     /// - Returns: true if the point is interior to the path; otherwise, false.
     public func contains(_ point: CGPoint, using rule: CGPathFillRule = .winding, transform: CGAffineTransform = .identity) -> Bool {
-        false
+        let transformedPoint = point.applying(transform)
+        var windingNumber = 0
+        var crossingCount = 0
+
+        for polygon in flattenedSubpaths() where polygon.count > 1 {
+            for index in polygon.indices {
+                let start = polygon[index]
+                let end = polygon[(index + 1) % polygon.count]
+                if isOnSegment(transformedPoint, start: start, end: end) {
+                    return true
+                }
+
+                if (start.y > transformedPoint.y) != (end.y > transformedPoint.y) {
+                    let crossingX = start.x + (transformedPoint.y - start.y)
+                        * (end.x - start.x) / (end.y - start.y)
+                    if transformedPoint.x < crossingX {
+                        crossingCount += 1
+                    }
+                }
+
+                let cross = (end.x - start.x) * (transformedPoint.y - start.y)
+                    - (transformedPoint.x - start.x) * (end.y - start.y)
+                if start.y <= transformedPoint.y, end.y > transformedPoint.y, cross > 0 {
+                    windingNumber += 1
+                } else if start.y > transformedPoint.y, end.y <= transformedPoint.y, cross < 0 {
+                    windingNumber -= 1
+                }
+            }
+        }
+
+        switch rule {
+        case .evenOdd:
+            return crossingCount.isMultiple(of: 2) == false
+        case .winding:
+            return windingNumber != 0
+        }
     }
 
     /// Indicates whether or not a graphics path is empty.
@@ -139,7 +196,7 @@ public struct CGPath : Codable, Equatable, Hashable, Sendable {
     ///   - transform: An affine transform to apply to the point before adding to the path.
     mutating public func move(to point: CGPoint, transform: CGAffineTransform = .identity) {
         let element = CGPathElement(type: .moveToPoint, points: [point.applying(transform)])
-        subpath.append(element)
+        append(element)
 
         currentPoint = point.applying(transform)
     }
@@ -152,7 +209,7 @@ public struct CGPath : Codable, Equatable, Hashable, Sendable {
     ///   - transform: An affine transform to apply to the point before adding to the path. 
     mutating public func addLine(to point: CGPoint, transform: CGAffineTransform = .identity) {
         let element = CGPathElement(type: .addLineToPoint, points: [ currentPoint, point.applying(transform)])
-        subpath.append(element)
+        append(element)
         currentPoint = point.applying(transform)
     }
 
@@ -190,7 +247,7 @@ public struct CGPath : Codable, Equatable, Hashable, Sendable {
             topLeft,
         ])
 
-        subpath.append(element)
+        append(element)
         currentPoint = bottomLeft
     }
 
@@ -384,7 +441,7 @@ public struct CGPath : Codable, Equatable, Hashable, Sendable {
                 end.applying(transform)
             ]
         )
-        subpath.append(element)
+        append(element)
         currentPoint = end.applying(transform)
     }
 
@@ -405,7 +462,7 @@ public struct CGPath : Codable, Equatable, Hashable, Sendable {
                 end.applying(transform)
             ]
         )
-        subpath.append(element)
+        append(element)
         currentPoint = end.applying(transform)
     }
 
@@ -420,7 +477,7 @@ public struct CGPath : Codable, Equatable, Hashable, Sendable {
         for element in path.subpath {
             let transformedPoints = element.points.map { $0.applying(transform) }
             let newElement = CGPathElement(type: element.type, points: transformedPoints)
-            subpath.append(newElement)
+            append(newElement)
         }
         if let last = path.subpath.last, let lastPoint = last.points.last {
             currentPoint = lastPoint
@@ -440,8 +497,231 @@ public struct CGPath : Codable, Equatable, Hashable, Sendable {
         }
 
         let element = CGPathElement(type: .closeSubpath, points: [])
-        subpath.append(element)
+        append(element)
         currentPoint = startingPoint
+    }
+}
+
+private extension CGPath {
+    /// Appends one element and expands both cached bounding rectangles.
+    mutating func append(_ element: CGPathElement) {
+        subpath.append(element)
+        boundingBox = union(boundingBox, calculatedBounds(for: element, includingControlPoints: true))
+        boundingBoxOfPath = union(boundingBoxOfPath, calculatedBounds(for: element, includingControlPoints: false))
+    }
+
+    /// Recomputes the control-point and geometric bounds from all path elements.
+    mutating func recalculateBounds() {
+        boundingBox = calculatedBounds(includingControlPoints: true)
+        boundingBoxOfPath = calculatedBounds(includingControlPoints: false)
+    }
+
+    /// Calculates either control-point bounds or the actual bounds of the path curves.
+    func calculatedBounds(includingControlPoints: Bool) -> CGRect {
+        subpath.reduce(.null) { bounds, element in
+            union(bounds, calculatedBounds(for: element, includingControlPoints: includingControlPoints))
+        }
+    }
+
+    /// Calculates the control-point or geometric bounds for one path element.
+    func calculatedBounds(for element: CGPathElement, includingControlPoints: Bool) -> CGRect {
+        var minX = Double.infinity
+        var minY = Double.infinity
+        var maxX = -Double.infinity
+        var maxY = -Double.infinity
+
+        func include(_ point: CGPoint) {
+            minX = min(minX, point.x)
+            minY = min(minY, point.y)
+            maxX = max(maxX, point.x)
+            maxY = max(maxY, point.y)
+        }
+
+        let points = element.points
+        if includingControlPoints {
+            points.forEach(include)
+        }
+
+        switch element.type {
+        case .moveToPoint, .addLineToPoint, .addRectToPoint:
+            points.forEach(include)
+        case .addQuadCurveToPoint:
+            guard points.count >= 3 else { return .null }
+            let start = points[0]
+            let control = points[1]
+            let end = points[2]
+            include(start)
+            include(end)
+            for t in quadraticExtrema(start.x, control.x, end.x) +
+                quadraticExtrema(start.y, control.y, end.y) {
+                include(quadraticPoint(start, control, end, at: t))
+            }
+        case .addCurveToPoint:
+            guard points.count >= 4 else { return .null }
+            let start = points[0]
+            let control1 = points[1]
+            let control2 = points[2]
+            let end = points[3]
+            include(start)
+            include(end)
+            for t in cubicExtrema(start.x, control1.x, control2.x, end.x) +
+                cubicExtrema(start.y, control1.y, control2.y, end.y) {
+                include(cubicPoint(start, control1, control2, end, at: t))
+            }
+        case .none, .closeSubpath:
+            break
+        }
+
+        guard minX.isFinite, minY.isFinite, maxX.isFinite, maxY.isFinite else { return .null }
+        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+    }
+
+    /// Combines two rectangles while preserving the null rectangle as an identity value.
+    func union(_ lhs: CGRect, _ rhs: CGRect) -> CGRect {
+        guard lhs.isNull == false else { return rhs }
+        guard rhs.isNull == false else { return lhs }
+        let minX = min(lhs.minX, rhs.minX)
+        let minY = min(lhs.minY, rhs.minY)
+        let maxX = max(lhs.maxX, rhs.maxX)
+        let maxY = max(lhs.maxY, rhs.maxY)
+        return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+    }
+
+    /// Converts each subpath to line segments suitable for point-in-path testing.
+    func flattenedSubpaths() -> [[CGPoint]] {
+        var result: [[CGPoint]] = []
+        var current: [CGPoint] = []
+
+        func finishCurrentSubpath() {
+            guard current.isEmpty == false else { return }
+            result.append(current)
+            current.removeAll(keepingCapacity: true)
+        }
+
+        for element in subpath {
+            let points = element.points
+            switch element.type {
+            case .moveToPoint:
+                finishCurrentSubpath()
+                if let point = points.first {
+                    current = [point]
+                }
+            case .addLineToPoint:
+                guard let start = points.first, let end = points.last else { continue }
+                if current.isEmpty {
+                    current.append(start)
+                } else if current.last != start {
+                    current.append(start)
+                }
+                current.append(end)
+            case .addQuadCurveToPoint:
+                guard points.count >= 3 else { continue }
+                let start = points[0]
+                let control = points[1]
+                let end = points[2]
+                if current.isEmpty {
+                    current.append(start)
+                } else if current.last != start {
+                    current.append(start)
+                }
+                for step in 1...32 {
+                    current.append(quadraticPoint(start, control, end, at: Double(step) / 32))
+                }
+            case .addCurveToPoint:
+                guard points.count >= 4 else { continue }
+                let start = points[0]
+                let control1 = points[1]
+                let control2 = points[2]
+                let end = points[3]
+                if current.isEmpty {
+                    current.append(start)
+                } else if current.last != start {
+                    current.append(start)
+                }
+                for step in 1...32 {
+                    current.append(cubicPoint(start, control1, control2, end, at: Double(step) / 32))
+                }
+            case .addRectToPoint:
+                finishCurrentSubpath()
+                current = points
+            case .closeSubpath:
+                finishCurrentSubpath()
+            case .none:
+                break
+            }
+        }
+
+        finishCurrentSubpath()
+        return result
+    }
+
+    /// Determines whether a point lies on a line segment within floating-point tolerance.
+    func isOnSegment(_ point: CGPoint, start: CGPoint, end: CGPoint) -> Bool {
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        let cross = (point.x - start.x) * dy - (point.y - start.y) * dx
+        let tolerance = 1e-10 * max(1, max(abs(dx), abs(dy)))
+        return abs(cross) <= tolerance
+            && point.x >= min(start.x, end.x) - tolerance
+            && point.x <= max(start.x, end.x) + tolerance
+            && point.y >= min(start.y, end.y) - tolerance
+            && point.y <= max(start.y, end.y) + tolerance
+    }
+
+    /// Returns interior parameter values where a quadratic component reaches an extremum.
+    func quadraticExtrema(_ start: Double, _ control: Double, _ end: Double) -> [Double] {
+        let denominator = start - 2 * control + end
+        guard abs(denominator) > Double.ulpOfOne else { return [] }
+        let t = (start - control) / denominator
+        return t > 0 && t < 1 ? [t] : []
+    }
+
+    /// Returns interior parameter values where a cubic component reaches an extremum.
+    func cubicExtrema(_ start: Double, _ control1: Double, _ control2: Double, _ end: Double) -> [Double] {
+        let a = -start + 3 * control1 - 3 * control2 + end
+        let b = 2 * (start - 2 * control1 + control2)
+        let c = control1 - start
+
+        if abs(a) <= Double.ulpOfOne {
+            guard abs(b) > Double.ulpOfOne else { return [] }
+            let t = -c / b
+            return t > 0 && t < 1 ? [t] : []
+        }
+
+        let discriminant = b * b - 4 * a * c
+        guard discriminant >= 0 else { return [] }
+        let root = sqrt(discriminant)
+        return [(-b + root) / (2 * a), (-b - root) / (2 * a)].filter { $0 > 0 && $0 < 1 }
+    }
+
+    /// Evaluates a quadratic Bézier curve at a normalized parameter value.
+    func quadraticPoint(_ start: CGPoint, _ control: CGPoint, _ end: CGPoint, at t: Double) -> CGPoint {
+        let inverse = 1 - t
+        return CGPoint(
+            x: inverse * inverse * start.x + 2 * inverse * t * control.x + t * t * end.x,
+            y: inverse * inverse * start.y + 2 * inverse * t * control.y + t * t * end.y
+        )
+    }
+
+    /// Evaluates a cubic Bézier curve at a normalized parameter value.
+    func cubicPoint(
+        _ start: CGPoint,
+        _ control1: CGPoint,
+        _ control2: CGPoint,
+        _ end: CGPoint,
+        at t: Double
+    ) -> CGPoint {
+        let inverse = 1 - t
+        return CGPoint(
+            x: inverse * inverse * inverse * start.x
+                + 3 * inverse * inverse * t * control1.x
+                + 3 * inverse * t * t * control2.x
+                + t * t * t * end.x,
+            y: inverse * inverse * inverse * start.y
+                + 3 * inverse * inverse * t * control1.y
+                + 3 * inverse * t * t * control2.y
+                + t * t * t * end.y
+        )
     }
 }
 

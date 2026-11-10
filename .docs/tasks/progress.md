@@ -295,3 +295,13 @@
 - **Learnings for future iterations:**
   - Para obter a origem de um subpath no modelo atual, localize o elemento `moveToPoint` ou `addRectToPoint` mais recente; não derive a origem de `currentPoint`.
 ---
+
+## 2026-11-10 - US-031
+- Implementados `copy()` e `copy(using:)`, bounds de controle e geométricos com extremos de curvas Bézier, e `contains` com regras winding/even-odd.
+- Os bounds são acumulados por elemento, evitando recalcular todo o caminho a cada operação; caminhos vazios mantêm bounds nulos.
+- `Equatable` e `Hashable` comparam a geometria armazenada e o ponto atual, sem comparar bounds derivados com NaN.
+- Testes cobrem bounds quadráticos/cúbicos, cópias, containment retangular e estrela de cinco pontas; `swift test` passou (79 testes em 19 suítes).
+- **Learnings for future iterations:**
+  - `CGRect.null` contém NaN; igualdade sintetizada baseada em bounds nulos não é reflexiva, então compare a geometria e o estado corrente no caminho.
+  - Atualize bounds incrementando com os bounds do novo elemento para manter custo linear ao construir caminhos longos.
+---

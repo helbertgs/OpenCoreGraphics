@@ -464,8 +464,8 @@
         "Build e testes passam"
       ],
       "priority": 31,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "boundingBox e boundingBoxOfPath acumulam bounds de controle e geometria, incluindo extremos exatos de curvas Bézier; cópias preservam ou transformam a geometria; contains achata curvas e aplica winding/evenOdd. Igualdade e hash comparam geometria e ponto atual, sem depender de CGRect.null (NaN). Testes direcionados e swift test passaram (79 testes em 19 suítes)."
     },
     {
       "id": "US-032",

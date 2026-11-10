@@ -144,11 +144,13 @@ struct CGPathTests {
     @Test
     func closeEmptySubpathDoesNotChangePath() {
         var path = CGPath()
-        let emptyPath = path
 
         path.closeSubpath()
 
-        #expect(path == emptyPath)
+        #expect(path.isEmpty)
+        #expect(path.currentPoint == .zero)
+        #expect(path.boundingBox.isNull)
+        #expect(path.boundingBoxOfPath.isNull)
     }
 
     /// Verifies closing a subpath that is already closed is a no-op.
@@ -163,6 +165,83 @@ struct CGPathTests {
         path.closeSubpath()
 
         #expect(path == closedPath)
+    }
+
+    /// Verifies bounds distinguish Bézier control points from points on the curves.
+    @Test
+    func calculatesControlPointAndPathBounds() {
+        var path = CGPath()
+        path.move(to: CGPoint(x: 0, y: 0))
+        path.addQuadCurve(to: CGPoint(x: 10, y: 0), control: CGPoint(x: 5, y: 10))
+
+        #expect(path.boundingBox == CGRect(x: 0, y: 0, width: 10, height: 10))
+        #expect(path.boundingBoxOfPath == CGRect(x: 0, y: 0, width: 10, height: 5))
+
+        path.addLine(to: CGPoint(x: 12, y: 3))
+        #expect(path.boundingBox == CGRect(x: 0, y: 0, width: 12, height: 10))
+        #expect(path.boundingBoxOfPath == CGRect(x: 0, y: 0, width: 12, height: 5))
+    }
+
+    /// Verifies a cubic curve's geometric bounds exclude its control points.
+    @Test
+    func calculatesCubicCurveBounds() {
+        var path = CGPath()
+        path.move(to: CGPoint(x: 0, y: 0))
+        path.addCurve(
+            to: CGPoint(x: 10, y: 0),
+            control1: CGPoint(x: 0, y: 10),
+            control2: CGPoint(x: 10, y: 10)
+        )
+
+        #expect(path.boundingBox == CGRect(x: 0, y: 0, width: 10, height: 10))
+        #expect(path.boundingBoxOfPath == CGRect(x: 0, y: 0, width: 10, height: 7.5))
+    }
+
+    /// Verifies empty paths expose null bounds and copies preserve or transform geometry.
+    @Test
+    func copiesPathWithAndWithoutTransform() throws {
+        let emptyPath = CGPath()
+        #expect(emptyPath.boundingBox.isNull)
+        #expect(emptyPath.boundingBoxOfPath.isNull)
+        #expect(emptyPath == CGPath())
+        #expect(Set([emptyPath, CGPath()]).count == 1)
+
+        let path = CGPath(rect: CGRect(x: 1, y: 2, width: 3, height: 4))
+        let copy = try #require(path.copy())
+        let transformedCopy = try #require(path.copy(using: .translate(5, 7)))
+
+        #expect(copy == path)
+        #expect(transformedCopy.boundingBox == CGRect(x: 6, y: 9, width: 3, height: 4))
+        #expect(transformedCopy.currentPoint == CGPoint(x: 6, y: 9))
+    }
+
+    /// Verifies rectangle containment and the effect of the point transform.
+    @Test
+    func containsPointsInsideAndOutsideRectangle() {
+        let path = CGPath(rect: CGRect(x: 0, y: 0, width: 10, height: 10))
+
+        #expect(path.contains(CGPoint(x: 5, y: 5)))
+        #expect(!path.contains(CGPoint(x: 15, y: 5)))
+        #expect(path.contains(CGPoint(x: 3, y: 4), transform: .translate(2, 1)))
+    }
+
+    /// Verifies winding and even-odd rules differ in the center of a five-point star.
+    @Test
+    func fillRulesDifferInFivePointStarCenter() {
+        let starPoints = [
+            CGPoint(x: 0, y: -10),
+            CGPoint(x: 5.87785, y: 8.09017),
+            CGPoint(x: -9.510565, y: -3.09017),
+            CGPoint(x: 9.510565, y: -3.09017),
+            CGPoint(x: -5.87785, y: 8.09017)
+        ]
+        var path = CGPath()
+        path.move(to: starPoints[0])
+        starPoints.dropFirst().forEach { path.addLine(to: $0) }
+        path.closeSubpath()
+
+        #expect(path.contains(.zero, using: .winding))
+        #expect(!path.contains(.zero, using: .evenOdd))
     }
 
     @Test func isEmpty() {
