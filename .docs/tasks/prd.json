@@ -631,8 +631,8 @@
         "Build e testes passam"
       ],
       "priority": 42,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Criados GLTexture, GLTextureLoader/OpenGLTextureLoader e GLTextureCache @MainActor; a chave CGImage usa igualdade por identidade, e evict(_:) remove a textura do cache. GLTexture libera o identificador em isolated deinit. O loader escolhe RED/RGB/RGBA pelo número de canais (expande grayscale-alpha para RGBA). Testes usam loader falso, verificam reuso, eviction, formato e liberação. swift test passou (107 testes em 23 suítes)."
     },
     {
       "id": "US-043",

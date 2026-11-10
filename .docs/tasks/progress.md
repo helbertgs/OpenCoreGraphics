@@ -390,3 +390,11 @@
 - **Learnings for future iterations:**
   - `.copy("Resources")` mantém a pasta dentro de `Bundle.module`; busque arquivos com o parâmetro `subdirectory: "Resources"`.
 ---
+
+## 2026-11-10 - US-042
+- Criados `GLTexture`, `GLTextureLoader` e `GLTextureCache` no main actor; a textura é criada no primeiro pedido, reutilizada por identidade de `CGImage` e removida por `evict(_:)`.
+- `GLTexture` libera o identificador OpenGL em `isolated deinit`; o loader seleciona RED/RGB/RGBA pelo número de canais e converte grayscale-alpha para RGBA.
+- Testes usam loader falso para reuso e eviction, verificam seleção de formato e a chamada de liberação no deinit. `swift test` passou (107 testes em 23 suítes), sem warnings.
+- **Learnings for future iterations:**
+  - O cache retém a própria imagem como chave; guardar somente `ObjectIdentifier` permitiria reutilização de identificador depois que a imagem fosse desalocada.
+---
