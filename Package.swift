@@ -39,7 +39,10 @@ let package = Package(
         ),
         .testTarget(
             name: "OpenCoreGraphicsTests",
-            dependencies: ["OpenCoreGraphics"]
+            dependencies: ["OpenCoreGraphics"],
+            resources: [
+                .copy("Resources")
+            ]
         ),
     ]
 )

@@ -4,7 +4,7 @@ import OpenSTB
 /// A bitmap image or image mask.
 /// 
 /// A bitmap (or sampled) image is a rectangular array of pixels, with each pixel representing a single sample or data point in a source image.
-public class CGImage : Equatable, Hashable, Identifiable {
+public class CGImage : Equatable, Hashable {
 
     // MARK: - Creating Images
     
@@ -37,7 +37,6 @@ public class CGImage : Equatable, Hashable, Identifiable {
         shouldInterpolate: Bool,
         intent: CGColorRenderingIntent
     ) {
-        self.id = 0
         self.width = width
         self.height = height
         self.bitsPerComponent = bitsPerComponent
@@ -51,42 +50,38 @@ public class CGImage : Equatable, Hashable, Identifiable {
         self.renderingIntent = intent
     }
 
-    public init(url: String) {
+    /// Loads and decodes an image file into owned RGBA pixel data.
+    /// - Parameter url: The path to the image file.
+    /// - Returns: A decoded image, or nil if the file is missing, invalid, or too large.
+    public init?(url: String) {
         var width: Int32 = 0
         var height: Int32 = 0
         var channels: Int32 = 0
-
-        stbi_set_flip_vertically_on_load(1)
-        
-        guard let image: UnsafeMutablePointer<UInt8> = stbi_load(url, &width, &height, &channels, 0) else {
-            fatalError("failed to load image: \(url)")
+        guard let image = url.withCString({ filename in
+            stbi_load(filename, &width, &height, &channels, 4)
+        }) else {
+            return nil
         }
+        defer { stbi_image_free(image) }
 
-        let data  = Data(bytes: image, count: Int(width * height * channels))
-        let dataProvider = CGDataProvider(data: data)
-        dataProvider.info = image
-        
+        guard width > 0, height > 0, (1...4).contains(channels) else { return nil }
+        let (bytesPerRow, rowOverflow) = Int(width).multipliedReportingOverflow(by: 4)
+        let (byteCount, dataOverflow) = bytesPerRow.multipliedReportingOverflow(by: Int(height))
+        guard rowOverflow == false, dataOverflow == false else { return nil }
+
+        let dataProvider = CGDataProvider(data: Data(bytes: image, count: byteCount))
         self.dataProvider = dataProvider
         self.width = Int(width)
         self.height = Int(height)
-        self.colorSpace = channels == 4 ? CGColorSpace.sRGB : CGColorSpace.genericRGBLinear
-        stbi_image_free(image)
-
-        if let textureData = dataProvider.data {
-            MainActor.assumeIsolated {
-                GLImageTextureUpload.upload(
-                    data: textureData,
-                    width: width,
-                    height: height,
-                    channelCount: channels
-                )
-            }
-        }
+        self.bitsPerComponent = 8
+        self.bitsPerPixel = 32
+        self.bytesPerRow = bytesPerRow
+        self.colorSpace = .sRGB
+        self.alphaInfo = .last
+        self.bitmapInfo = .byteOrder32Big
     }
 
     // MARK: - Examining an Image
-
-    public private(set) var id: UInt32 = 0
 
     /// Returns whether a bitmap image is an image mask.
     public private(set) var isMask: Bool = false
@@ -129,35 +124,21 @@ public class CGImage : Equatable, Hashable, Identifiable {
 
     // MARK: - Equatable and Hashable
 
-    /// Returns a Boolean value indicating whether two values are equal.
+    /// Returns whether both image references identify the same image object.
     /// - Parameters:
     ///   - lhs: A value to compare.
     ///   - rhs: Another value to compare.
     public static func == (_ lhs: CGImage, _ rhs: CGImage) -> Bool {
-        lhs.id == rhs.id && 
-        lhs.isMask == rhs.isMask &&
-        lhs.width == rhs.width &&
-        lhs.height == rhs.height &&
-        lhs.bitsPerComponent == rhs.bitsPerComponent &&
-        lhs.bitsPerPixel == rhs.bitsPerPixel &&
-        lhs.bytesPerRow == rhs.bytesPerRow &&
-        lhs.colorSpace == rhs.colorSpace
+        lhs === rhs
     }
 
-    /// Hashes the essential components of this value by feeding them into the given hasher.
+    /// Hashes this image's object identity by feeding it into the given hasher.
     /// 
     /// Implement this method to conform to the Hashable protocol. 
     /// The components used for hashing must be the same as the components compared in your type’s == operator implementation. 
     /// Call ``hasher.combine(_:)`` with each of these components.
     /// - Parameter hasher: The hasher to use when combining the components of this instance.
     public func hash(into hasher: inout Hasher) {
-        hasher.combine(id)
-        hasher.combine(isMask)
-        hasher.combine(width)
-        hasher.combine(height)
-        hasher.combine(bitsPerComponent)
-        hasher.combine(bitsPerPixel)
-        hasher.combine(bytesPerRow)
-        hasher.combine(colorSpace)
+        hasher.combine(ObjectIdentifier(self))
     }
 }

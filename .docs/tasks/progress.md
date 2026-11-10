@@ -382,3 +382,11 @@
 - **Learnings for future iterations:**
   - Para garantir segmentos independentes, emita `move(to:)` antes de cada par; `addLine(to:)` sozinho conectaria os pares.
 ---
+
+## 2026-11-10 - US-041
+- `CGImage(url:)` é failable e decodifica usando `stb_image` para RGBA de 8 bits, validando dimensões e limites de alocação antes de copiar o buffer para `Data`.
+- Removidos `id`/`Identifiable`, chamadas OpenGL e ponteiro guardado no provider; a imagem agora usa igualdade/hash por identidade de objeto.
+- Adicionados BMPs 1×1 e 2×2 aos recursos do target de testes; testes conferem bytes, dimensões, metadados alpha/bitmap, identidade e URL ausente. `swift test` passou (103 testes em 22 suítes).
+- **Learnings for future iterations:**
+  - `.copy("Resources")` mantém a pasta dentro de `Bundle.module`; busque arquivos com o parâmetro `subdirectory: "Resources"`.
+---

@@ -616,8 +616,8 @@
         "Build e testes passam"
       ],
       "priority": 41,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "CGImage(url:) agora é failable, decodifica com stb_image em RGBA 8-bit, valida dimensões/canais e copia os bytes para Data antes de liberar o buffer. Removidos id/Identifiable e todo uso de OpenGL; igualdade/hash agora usam identidade do objeto. Testes com BMPs 1x1 e 2x2 validam bytes/metadados e o caminho ausente retorna nil. swift test passou (103 testes em 22 suítes)."
     },
     {
       "id": "US-042",
