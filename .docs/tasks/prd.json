@@ -711,8 +711,8 @@
         "Build e testes passam"
       ],
       "priority": 47,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "`ScanlineRasterizer` calcula cobertura com 16 amostras por pixel e aplica regras winding/evenOdd. O `SoftwareRenderer` usa essa cobertura para formas não retangulares e a mistura com alpha pré-multiplicado. Testes validam cobertura total e parcial no círculo e o centro da estrela sob ambas as regras. `swift test` passou (125 testes em 25 suítes), sem warnings."
     },
     {
       "id": "US-048",

@@ -6,6 +6,7 @@
 - `CGColor.components` é `[Double]`; qualquer chamada `glad_*` que recebe `GLfloat` precisa de `Float(...)`.
 - As conversões entre espaço de usuário e pixels usam `ctm`; `CGAffineTransform.inverse` não reverte corretamente translações 2D, então o contexto calcula a inversa 2D localmente.
 - `CGRenderTarget` e `CGRenderBackend` não são isolados por ator, para permitir renderização síncrona em bitmap. O target de janela mantém seu estado no `MainActor` e usa `MainActor.assumeIsolated` nos requisitos síncronos; o backend OpenGL aplica a mesma fronteira ao acessar o contexto GL.
+- O renderer de bitmap mantém o fast path para retângulos alinhados e rasteriza outras formas pelo `PathFlattener` e amostragem scanline 4×4; cobertura parcial é aplicada como alpha antes do source-over.
 - O working tree tem trabalho em andamento do usuário (arquivos novos/movidos ainda não commitados). Os commits das stories incluem **apenas** os arquivos tocados pela story, mais `.docs/tasks/prd.json` e `progress.md`.
 - Valores `struct` que controlam memória alocada usam um proprietário por referência com `deinit`; cópias do valor compartilham a alocação sem duplicar nem liberar o ponteiro prematuramente.
 
@@ -437,4 +438,14 @@
 - **Learnings for future iterations:**
   - Para renderização compartilhada por software e OpenGL, mantenha os protocolos internos sem isolamento global e confine a fronteira OpenGL ao adapter da janela/backend.
   - `PixelSurface.pixel` e `setPixel` abstraem RGBA lógico sobre armazenamento RGBA/BGRA; renderizadores devem operar nesses canais lógicos em vez de indexar diretamente o buffer.
+---
+
+## 2026-11-10 - US-047
+- Criado `ScanlineRasterizer`, que calcula interseções por scanline e amostra cada pixel em uma grade 4×4 para gerar cobertura de 8 bits.
+- O `SoftwareRenderer` preserva o fast path de retângulos alinhados e usa cobertura antialias para formas achatadas; as regras `winding` e `evenOdd` controlam a inclusão e a cobertura participa da composição pré-multiplicada.
+- Testes validam pixel central totalmente coberto e pixel de borda parcialmente coberto em círculo de raio 8, além de estrela de cinco pontas parametrizada para ambas as regras; `swift test` passou (125 testes em 25 suítes), sem warnings.
+- Files changed: `Sources/OpenCoreGraphics/Rendering/SoftwareRenderer.swift`, `Tests/OpenCoreGraphicsTests/Rendering/SoftwareRendererTests.swift`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
+- **Learnings for future iterations:**
+  - Preencha cada subpath fechado implicitamente, inclusive os que `PathFlattener` reporta como abertos, conforme o comportamento do preenchimento de caminhos.
+  - Os samples 4×4 são deslocados para o interior de cada subpixel; a regra half-open nas interseções evita contar vértices duas vezes no scanline.
 ---
