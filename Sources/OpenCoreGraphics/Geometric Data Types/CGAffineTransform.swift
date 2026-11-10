@@ -53,10 +53,64 @@ public struct CGAffineTransform: Codable, CustomStringConvertible, Equatable, Ha
     /// The entry at position [4,4] in the matrix.
     internal var m44: Double = 0.0
 
+    /// The horizontal scale or shear component of the transform.
+    public var a: Double {
+        get { m11 }
+        set { m11 = newValue }
+    }
+
+    /// The vertical shear component of the transform.
+    public var b: Double {
+        get { m12 }
+        set { m12 = newValue }
+    }
+
+    /// The horizontal shear component of the transform.
+    public var c: Double {
+        get { m21 }
+        set { m21 = newValue }
+    }
+
+    /// The vertical scale or shear component of the transform.
+    public var d: Double {
+        get { m22 }
+        set { m22 = newValue }
+    }
+
+    /// The horizontal translation component of the transform.
+    public var tx: Double {
+        get { m41 }
+        set { m41 = newValue }
+    }
+
+    /// The vertical translation component of the transform.
+    public var ty: Double {
+        get { m42 }
+        set { m42 = newValue }
+    }
+
     // MARK: - Initializers
 
     /// Initializes a new affine transform with the zero values.
     public init() { }
+
+    /// Initializes a 2D affine transform while retaining the 4×4 matrix representation.
+    /// - Parameters:
+    ///   - a: The horizontal scale or shear component.
+    ///   - b: The vertical shear component.
+    ///   - c: The horizontal shear component.
+    ///   - d: The vertical scale or shear component.
+    ///   - tx: The horizontal translation.
+    ///   - ty: The vertical translation.
+    public init(a: Double, b: Double, c: Double, d: Double, tx: Double, ty: Double) {
+        self.init(1)
+        self.a = a
+        self.b = b
+        self.c = c
+        self.d = d
+        self.tx = tx
+        self.ty = ty
+    }
 
     /// Initializes a new affine transform with the specified vector.
     /// - Parameters:

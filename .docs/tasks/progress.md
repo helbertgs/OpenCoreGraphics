@@ -168,3 +168,12 @@
 - **Learnings for future iterations:**
   - `CGBitmapLayout`, `CGComponent`, `CGImageComponentInfo` e `CGImageAlphaInfo` já cobrem os tipos necessários; não foi preciso adicionar enums.
 ---
+
+## 2026-11-09 - US-017
+- `CGAffineTransform` ganhou os acessores 2D `a`, `b`, `c`, `d`, `tx`, `ty` e o inicializador nomeado correspondente.
+- A representação continua 4×4; os valores 2D mapeiam às entradas da matriz usadas por CGPoint e pelas funções de translação.
+- Testes cobrem leitura/escrita dos seis componentes, transformação da origem e `translate(5, 7)`.
+- `swift test --filter CGAffineTransformTests` passou (3 testes).
+- **Learnings for future iterations:**
+  - `CGPoint.applying` calcula `x*m11 + y*m21 + m41` e `x*m12 + y*m22 + m42`; os seis acessores seguem diretamente esses índices.
+---

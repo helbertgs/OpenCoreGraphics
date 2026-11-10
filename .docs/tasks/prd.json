@@ -253,8 +253,8 @@
         "Build e testes passam"
       ],
       "priority": 17,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Adicionados os seis acessores 2D de leitura/escrita e init(a:b:c:d:tx:ty:), mantendo os campos na matriz 4×4. Testes validam mapeamento, tradução e transformação da origem."
     },
     {
       "id": "US-018",
