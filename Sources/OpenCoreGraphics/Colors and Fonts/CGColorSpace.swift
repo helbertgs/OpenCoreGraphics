@@ -37,7 +37,40 @@ public enum CGColorSpace : String, CaseIterable, Codable, Equatable, Hashable, S
     /// The gray color space using a linear transfer function.
     case linearGray
 
+    // MARK: - Inspecting a Color Space
+
+    /// The enum name used to identify this color space.
+    public var name: String {
+        rawValue
+    }
+
+    /// The color model used by this color space.
+    public var model: CGColorModel {
+        switch self {
+        case .sRGB, .genericRGBLinear:
+            .rgb
+        case .genericCMYK:
+            .cmyk
+        case .linearGray:
+            .gray
+        }
+    }
+
+    /// The number of color components, excluding alpha, in this color space.
+    public var numberOfComponents: Int {
+        switch self {
+        case .sRGB, .genericRGBLinear:
+            3
+        case .genericCMYK:
+            4
+        case .linearGray:
+            1
+        }
+    }
+
     // MARK: - Instance Methods
+
+    /// Indicates whether the color space supports high-dynamic-range colors.
     public func isHDR() -> Bool {
         false
     }

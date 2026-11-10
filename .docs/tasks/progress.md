@@ -151,3 +151,11 @@
 - **Learnings for future iterations:**
   - O alias legado foi colocado ao lado da implementação canônica; não há mais dependências de `CGWindowContext` no código de produção.
 ---
+
+## 2026-11-09 - US-015
+- Adicionadas as propriedades `name`, `model` e `numberOfComponents` a `CGColorSpace`.
+- Teste parametrizado cobre sRGB, RGB linear genérico, CMYK genérico e cinza linear.
+- `swift test --filter CGColorSpaceTests` passou (4 casos).
+- **Learnings for future iterations:**
+  - `CGColorModel` já contém os modelos necessários; os metadados do enum podem ser derivados diretamente dos quatro casos sem novos tipos auxiliares.
+---

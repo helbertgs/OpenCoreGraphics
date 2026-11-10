@@ -224,8 +224,8 @@
         "Build e testes passam"
       ],
       "priority": 15,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "CGColorSpace.name retorna o nome do caso e model/numberOfComponents mapeiam os quatro espaços suportados. Teste parametrizado valida todos os metadados."
     },
     {
       "id": "US-016",
