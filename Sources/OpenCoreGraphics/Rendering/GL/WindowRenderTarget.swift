@@ -34,13 +34,17 @@ private struct PendingFramebufferResize {
 }
 
 /// Queues window drawing commands for the main-actor OpenGL renderer.
+///
+/// The synchronous `CGRenderTarget` requirements are a legacy bridge from `CGContext`.
+/// Their runtime checks require the caller already to be on the main actor; they do not
+/// schedule work there or provide a compiler-checked guarantee at that boundary.
 @MainActor
 final class WindowRenderTarget: CGRenderTarget {
     /// The pixel dimensions of the window render destination.
     private var windowSize: CGSize
 
     /// The renderer owned by the window, which may be released during teardown.
-    private weak var renderer: (any CGRenderBackend)?
+    private weak var renderer: (any CGWindowRenderBackend)?
 
     /// The selector tracking whether the window that owns this target is still open.
     var contextSelector: GLFWContextSelector?
@@ -64,7 +68,7 @@ final class WindowRenderTarget: CGRenderTarget {
     /// - Parameters:
     ///   - size: The window dimensions in pixels.
     ///   - renderer: The OpenGL renderer owned by the window.
-    init(size: CGSize, renderer: any CGRenderBackend) {
+    init(size: CGSize, renderer: any CGWindowRenderBackend) {
         windowSize = size
         self.renderer = renderer
     }

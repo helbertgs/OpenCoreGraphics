@@ -136,8 +136,8 @@
         "Typecheck passes"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Contrato interno GL isolado ao MainActor e bitmap não isolado; limitação da ponte síncrona existente e propriedade de snapshots documentadas em .docs/RenderingConcurrency.md."
     },
     {
       "id": "US-009",

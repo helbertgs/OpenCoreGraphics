@@ -47,7 +47,18 @@ protocol CGRenderBackend: AnyObject {
     func execute(_ commands: [DrawCommand], size: CGSize)
 }
 
+/// Executes window drawing commands on the main actor after selecting the owning GL context.
+@MainActor
+protocol CGWindowRenderBackend: AnyObject {
+    /// Renders a sequence of commands into a window destination.
+    /// - Parameters:
+    ///   - commands: The operations to render in order.
+    ///   - size: The destination dimensions in pixels.
+    func execute(_ commands: [DrawCommand], size: CGSize)
+}
+
 /// Renders a software bitmap directly through a window's textured OpenGL pipeline.
+@MainActor
 protocol CGPixelSurfaceRenderer: AnyObject {
     /// Replaces the cached surface texture and draws it across the destination.
     /// - Parameters:
@@ -57,6 +68,7 @@ protocol CGPixelSurfaceRenderer: AnyObject {
 }
 
 /// Reads rendered pixels from an OpenGL framebuffer.
+@MainActor
 protocol CGPixelReadbackRenderer: AnyObject {
     /// Copies the framebuffer into bottom-up RGBA bytes.
     /// - Parameter size: The framebuffer dimensions in pixels.

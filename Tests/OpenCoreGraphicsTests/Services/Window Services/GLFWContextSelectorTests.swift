@@ -344,7 +344,7 @@ private final class GLFWWeakResourceHolder {
 }
 
 /// Counts render submissions made while verifying real GLFW lifecycle protection.
-private final class RecordingWindowRenderBackend: CGRenderBackend {
+private final class RecordingWindowRenderBackend: CGWindowRenderBackend {
     /// The number of render submissions received.
     private(set) var executionCount = 0
 

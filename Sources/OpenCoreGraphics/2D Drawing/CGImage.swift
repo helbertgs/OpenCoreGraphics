@@ -224,7 +224,7 @@ struct CGImageSnapshot: Equatable, Sendable {
     /// - Parameter image: The image whose state will be captured.
     init(image: CGImage) {
         identity = image.textureCacheIdentity
-        data = image.dataProvider?.data
+        data = image.dataProvider?.data.map { Data(Array($0)) }
         width = image.width
         height = image.height
         bitsPerComponent = image.bitsPerComponent
@@ -260,7 +260,7 @@ struct CGImageSnapshot: Equatable, Sendable {
         bitmapInfo: CGBitmapInfo
     ) {
         self.identity = identity
-        self.data = data
+        self.data = Data(Array(data))
         self.width = width
         self.height = height
         self.bitsPerComponent = bitsPerComponent

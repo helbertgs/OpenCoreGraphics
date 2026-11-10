@@ -98,3 +98,12 @@
 - **Learnings for future iterations:**
   - Retentativas de teardown não devem restaurar um contexto anterior obsoleto ou destruir um contexto aguardando restauração.
 ---
+
+## 2026-11-10 - US-008
+- Separado contrato interno de backend de janela, isolado ao MainActor, do backend síncrono de bitmap. A ponte pública síncrona preexistente continua exigindo execução no MainActor em runtime, sem simular troca de executor; limitação documentada.
+- Snapshots de imagens copiam também armazenamento externo; testes verificam isolamento dos dados, Sendable e backend de bitmap fora do MainActor.
+- Validação: 219 testes na suíte padrão com concorrência estrita; build estrito; testes direcionados e verificação de isolamento em typecheck; executor GL com duas suítes concluídas e sete cenas aprovadas; `git diff --check` passou. A suíte padrão ignora casos gráficos opt-in.
+- Files changed: `.docs/RenderingConcurrency.md`, `Sources/OpenCoreGraphics/2D Drawing/CGImage.swift`, `Sources/OpenCoreGraphics/Rendering/CGRenderTarget.swift`, `Sources/OpenCoreGraphics/Rendering/GL/GLRenderer.swift`, `WindowRenderTarget.swift`, testes correspondentes e arquivos de progresso.
+- **Learnings for future iterations:**
+  - `Data` construído sem cópia pode apontar para memória externa mutável; snapshots transferíveis precisam adquirir bytes próprios.
+---

@@ -596,7 +596,7 @@ struct WindowRenderTargetTests {
 }
 
 /// Records backend calls without requiring an OpenGL context.
-private final class RecordingRenderBackend: CGRenderBackend, CGPixelSurfaceRenderer {
+private final class RecordingRenderBackend: CGWindowRenderBackend, CGPixelSurfaceRenderer {
     /// The commands received from the render target.
     private(set) var commands: [DrawCommand] = []
 
@@ -629,7 +629,7 @@ private final class RecordingRenderBackend: CGRenderBackend, CGPixelSurfaceRende
 }
 
 /// Backend that does not support direct pixel-surface presentation.
-private final class RecordingRenderBackendWithoutSurfaceSupport: CGRenderBackend {
+private final class RecordingRenderBackendWithoutSurfaceSupport: CGWindowRenderBackend {
     /// Ignores commands because this backend is only used to verify capability errors.
     /// - Parameters:
     ///   - commands: The drawing operations submitted for rendering.
@@ -694,7 +694,7 @@ private final class RecordingContextDriverState {
 }
 
 /// Records window-renderer calls together with the fake current context.
-private final class RecordingContextRenderBackend: CGRenderBackend, CGPixelSurfaceRenderer, CGPixelReadbackRenderer {
+private final class RecordingContextRenderBackend: CGWindowRenderBackend, CGPixelSurfaceRenderer, CGPixelReadbackRenderer {
     /// The fixed window label assigned to this fake renderer.
     private let name: String
 
@@ -731,11 +731,7 @@ private final class RecordingContextRenderBackend: CGRenderBackend, CGPixelSurfa
     func execute(_ commands: [DrawCommand], size: OpenCoreGraphics.CGSize) {
         self.commands.append(contentsOf: commands)
         executionSizes.append(size)
-        let contextState = self.contextState
-        let name = self.name
-        MainActor.assumeIsolated {
-            contextState.record("execute", owner: name)
-        }
+        contextState.record("execute", owner: name)
     }
 
     /// Records a software surface presentation.
@@ -744,22 +740,14 @@ private final class RecordingContextRenderBackend: CGRenderBackend, CGPixelSurfa
     ///   - size: The destination dimensions.
     func renderSoftwareSurface(_ image: CGImageSnapshot, size: OpenCoreGraphics.CGSize) {
         presentationCount += 1
-        let contextState = self.contextState
-        let name = self.name
-        MainActor.assumeIsolated {
-            contextState.record("present", owner: name)
-        }
+        contextState.record("present", owner: name)
     }
 
     /// Records a readback and returns this window's distinct pixel color.
     /// - Parameter size: The framebuffer dimensions.
     /// - Returns: The fake framebuffer's RGBA bytes.
     func readPixels(size: OpenCoreGraphics.CGSize) -> [UInt8]? {
-        let contextState = self.contextState
-        let name = self.name
-        MainActor.assumeIsolated {
-            contextState.record("read", owner: name)
-        }
+        contextState.record("read", owner: name)
         return pixels
     }
 }
