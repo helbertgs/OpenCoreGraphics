@@ -879,8 +879,8 @@
         "Build e testes passam"
       ],
       "priority": 58,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "`CGGradient` valida e armazena paradas ordenadas; os métodos públicos de gradiente linear e radial capturam geometria transformada, opções e blend mode. Software interpola por pixel em RGBA pré-multiplicado linear; GL usa o shader dedicado em `Resources/gradient/` com uniforms de geometria e paradas. O Sample demonstra ambos com `--test-gradient`. `swift test` passou (159 testes em 29 suítes) e `swift build --target OpenCoreGraphicsSample` passou."
     },
     {
       "id": "US-059",

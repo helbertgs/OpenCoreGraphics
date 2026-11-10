@@ -557,6 +557,85 @@ open class CGContext {
         self.path = nil
     }
 
+    /// Paints the destination with a linear gradient between two user-space points.
+    /// - Parameters:
+    ///   - gradient: The ordered color stops to interpolate.
+    ///   - start: The point corresponding to the gradient's first stop.
+    ///   - end: The point corresponding to the gradient's last stop.
+    ///   - options: Whether to extend the first or last color beyond its stop.
+    open func drawLinearGradient(
+        _ gradient: CGGradient,
+        start: CGPoint,
+        end: CGPoint,
+        options: CGGradientDrawingOptions = []
+    ) {
+        let deviceStart = start.applying(ctm)
+        let deviceEnd = end.applying(ctm)
+        guard deviceStart.x.isFinite,
+              deviceStart.y.isFinite,
+              deviceEnd.x.isFinite,
+              deviceEnd.y.isFinite else {
+            return
+        }
+
+        pendingDrawCommands.append(
+            .linearGradient(
+                gradient: gradient,
+                start: deviceStart,
+                end: deviceEnd,
+                options: options,
+                blendMode: blendMode
+            )
+        )
+    }
+
+    /// Paints the destination with a gradient between two user-space circles.
+    /// - Parameters:
+    ///   - gradient: The ordered color stops to interpolate.
+    ///   - startCenter: The center of the first circle.
+    ///   - startRadius: The radius of the first circle.
+    ///   - endCenter: The center of the last circle.
+    ///   - endRadius: The radius of the last circle.
+    ///   - options: Whether to extend the first or last color beyond its stop.
+    /// - Precondition: Both radii are finite and nonnegative.
+    open func drawRadialGradient(
+        _ gradient: CGGradient,
+        startCenter: CGPoint,
+        startRadius: Double,
+        endCenter: CGPoint,
+        endRadius: Double,
+        options: CGGradientDrawingOptions = []
+    ) {
+        precondition(
+            startRadius.isFinite && startRadius >= 0 && endRadius.isFinite && endRadius >= 0,
+            "Gradient radii must be finite and nonnegative."
+        )
+        let deviceStartCenter = startCenter.applying(ctm)
+        let deviceEndCenter = endCenter.applying(ctm)
+        let deviceStartRadius = deviceSpaceRadius(startRadius)
+        let deviceEndRadius = deviceSpaceRadius(endRadius)
+        guard deviceStartCenter.x.isFinite,
+              deviceStartCenter.y.isFinite,
+              deviceEndCenter.x.isFinite,
+              deviceEndCenter.y.isFinite,
+              deviceStartRadius.isFinite,
+              deviceEndRadius.isFinite else {
+            return
+        }
+
+        pendingDrawCommands.append(
+            .radialGradient(
+                gradient: gradient,
+                startCenter: deviceStartCenter,
+                startRadius: deviceStartRadius,
+                endCenter: deviceEndCenter,
+                endRadius: deviceEndRadius,
+                options: options,
+                blendMode: blendMode
+            )
+        )
+    }
+
     /// Intersects the current clipping region with the current path.
     /// - Parameter rule: The fill rule used to determine the path's interior.
     open func clip(using rule: CGPath.CGPathFillRule = .winding) {
@@ -699,6 +778,14 @@ open class CGContext {
             return nil
         }
         return CGShadow(offset: transformedOffset, blur: transformedBlur, color: shadow.color)
+    }
+
+    /// Converts a user-space radius to a representative device-space radius.
+    /// - Parameter radius: The radius in user-space units.
+    /// - Returns: The radius scaled by the geometric mean of the CTM axes.
+    private func deviceSpaceRadius(_ radius: Double) -> Double {
+        let determinant = ctm.m11 * ctm.m22 - ctm.m21 * ctm.m12
+        return radius * sqrt(abs(determinant))
     }
 
     // MARK: - Drawing Shapes

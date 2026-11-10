@@ -298,6 +298,52 @@ struct CGContextCommandTests {
         ])
     }
 
+    /// Verifies gradient commands capture transformed geometry, options, and blend mode.
+    @Test
+    func gradientOperationsRecordDeviceSpaceCommands() throws {
+        let (context, target) = makeRecordingContext()
+        let gradient = try #require(CGGradient(colors: [.black, .white], locations: [0, 1]))
+        let linearOptions: CGGradientDrawingOptions = [.drawsBeforeStartLocation]
+        let radialOptions: CGGradientDrawingOptions = [.drawsAfterEndLocation]
+        context.ctm = .translate(10, 20)
+        context.setBlendMode(.screen)
+
+        context.drawLinearGradient(
+            gradient,
+            start: CGPoint(x: 1, y: 2),
+            end: CGPoint(x: 3, y: 4),
+            options: linearOptions
+        )
+        context.drawRadialGradient(
+            gradient,
+            startCenter: CGPoint(x: 1, y: 2),
+            startRadius: 2,
+            endCenter: CGPoint(x: 3, y: 4),
+            endRadius: 4,
+            options: radialOptions
+        )
+        context.flush()
+
+        #expect(target.commands == [
+            .linearGradient(
+                gradient: gradient,
+                start: CGPoint(x: 11, y: 22),
+                end: CGPoint(x: 13, y: 24),
+                options: linearOptions,
+                blendMode: .screen
+            ),
+            .radialGradient(
+                gradient: gradient,
+                startCenter: CGPoint(x: 11, y: 22),
+                startRadius: 2,
+                endCenter: CGPoint(x: 13, y: 24),
+                endRadius: 4,
+                options: radialOptions,
+                blendMode: .screen
+            )
+        ])
+    }
+
     /// Verifies four points create two independent transformed line segments.
     @Test
     func strokeLineSegmentsRecordsOneSubpathPerPointPair() throws {

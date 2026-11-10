@@ -20,6 +20,26 @@ enum DrawCommand: Equatable, Sendable {
         shadow: CGShadow? = nil
     )
 
+    /// Draws a linear color ramp between two device-space points.
+    case linearGradient(
+        gradient: CGGradient,
+        start: CGPoint,
+        end: CGPoint,
+        options: CGGradientDrawingOptions,
+        blendMode: CGBlendMode
+    )
+
+    /// Draws a radial color ramp between two device-space circles.
+    case radialGradient(
+        gradient: CGGradient,
+        startCenter: CGPoint,
+        startRadius: Double,
+        endCenter: CGPoint,
+        endRadius: Double,
+        options: CGGradientDrawingOptions,
+        blendMode: CGBlendMode
+    )
+
     /// Draws an image into transformed destination corners.
     case drawImage(
         image: CGImageSnapshot,

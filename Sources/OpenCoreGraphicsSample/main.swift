@@ -4,7 +4,9 @@ import OpenCoreGraphics
 let window = try CGWindow(frame: CGRect(x: 0, y: 0, width: 512, height: 512), title: "OpenCoreGraphics Sample")
 let softwareImage: CGImage?
 
-if CommandLine.arguments.contains("--software") || CommandLine.arguments.contains("--test-shadow") {
+if CommandLine.arguments.contains("--software")
+    || CommandLine.arguments.contains("--test-shadow")
+    || CommandLine.arguments.contains("--test-gradient") {
     guard let softwareContext = CGContext(
         data: nil,
         width: 512,
@@ -17,7 +19,9 @@ if CommandLine.arguments.contains("--software") || CommandLine.arguments.contain
         preconditionFailure("The software sample bitmap context could not be created.")
     }
 
-    if CommandLine.arguments.contains("--test-shadow") {
+    if CommandLine.arguments.contains("--test-gradient") {
+        drawGradientSample(in: softwareContext)
+    } else if CommandLine.arguments.contains("--test-shadow") {
         softwareContext.setShadow(
             offset: CGSize(width: 14, height: 14),
             blur: 8,
@@ -182,3 +186,46 @@ window.display = {
 }
 
 window.makeKeyAndOrderFront()
+
+/// Draws linear and radial gradients in clipped sample regions.
+/// - Parameter context: The context used to render the gradient demonstration.
+private func drawGradientSample(in context: CGContext) {
+    guard let linearGradient = CGGradient(
+        colors: [
+            CGColor(red: 0.1, green: 0.3, blue: 0.9, alpha: 1),
+            CGColor(red: 0.2, green: 0.8, blue: 0.7, alpha: 1),
+            CGColor(red: 1, green: 0.8, blue: 0.2, alpha: 1)
+        ],
+        locations: [0, 0.55, 1]
+    ), let radialGradient = CGGradient(
+        colors: [.white, CGColor(red: 1, green: 0.2, blue: 0.15, alpha: 1)],
+        locations: [0, 1]
+    ) else {
+        preconditionFailure("The sample gradients could not be created.")
+    }
+
+    let options: CGGradientDrawingOptions = [.drawsBeforeStartLocation, .drawsAfterEndLocation]
+    let linearBounds = CGRect(x: 32, y: 120, width: 208, height: 272)
+    context.saveGState()
+    context.clip(to: linearBounds)
+    context.drawLinearGradient(
+        linearGradient,
+        start: CGPoint(x: linearBounds.minX, y: linearBounds.midY),
+        end: CGPoint(x: linearBounds.maxX, y: linearBounds.midY),
+        options: options
+    )
+    context.restoreGState()
+
+    let radialBounds = CGRect(x: 272, y: 120, width: 208, height: 272)
+    context.saveGState()
+    context.clip(to: radialBounds)
+    context.drawRadialGradient(
+        radialGradient,
+        startCenter: CGPoint(x: radialBounds.midX, y: radialBounds.midY),
+        startRadius: 0,
+        endCenter: CGPoint(x: radialBounds.midX, y: radialBounds.midY),
+        endRadius: 100,
+        options: options
+    )
+    context.restoreGState()
+}

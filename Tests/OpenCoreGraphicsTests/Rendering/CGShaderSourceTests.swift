@@ -3,12 +3,14 @@ import Testing
 
 /// Tests loading packaged shader sources and reporting missing files.
 struct CGShaderSourceTests {
-    /// Verifies every default and image shader is bundled and has a GLSL version.
+    /// Verifies every built-in shader is bundled and has a GLSL version.
     @Test(arguments: [
         (directory: "default", fileName: "vertex"),
         (directory: "default", fileName: "fragment"),
         (directory: "image", fileName: "vertex"),
-        (directory: "image", fileName: "fragment")
+        (directory: "image", fileName: "fragment"),
+        (directory: "gradient", fileName: "vertex"),
+        (directory: "gradient", fileName: "fragment")
     ])
     func packagedShaderContainsVersion(directory: String, fileName: String) throws {
         let source = try CGShaderSource.load(directory: directory, fileName: fileName)

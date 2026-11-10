@@ -340,6 +340,9 @@ final class GLRenderer: CGRenderBackend, CGPixelSurfaceRenderer, CGPixelReadback
     /// The textured program used for image draw commands.
     private let imageProgram: GLProgram
 
+    /// The program used to interpolate linear and radial gradients.
+    private let gradientProgram: GLProgram
+
     /// The reusable vertex batch buffer.
     private let batchBuffer: GLBatchBuffer
 
@@ -367,6 +370,7 @@ final class GLRenderer: CGRenderBackend, CGPixelSurfaceRenderer, CGPixelReadback
         self.shaderCache = shaderCache
         program = try shaderCache.program(for: .solidColor)
         imageProgram = try shaderCache.program(for: .image)
+        gradientProgram = try shaderCache.program(for: .gradient)
         batchBuffer = try GLBatchBuffer(driver: batchBufferDriver)
         textureCache = GLTextureCache()
     }
@@ -482,6 +486,42 @@ final class GLRenderer: CGRenderBackend, CGPixelSurfaceRenderer, CGPixelReadback
                 ) {
                     currentColor = rgba
                 }
+            case let .linearGradient(gradient, start, end, options, blendMode):
+                renderGradient(
+                    gradient,
+                    kind: 0,
+                    start: start,
+                    startRadius: 0,
+                    end: end,
+                    endRadius: 0,
+                    options: options,
+                    blendMode: blendMode,
+                    projection: projection,
+                    size: size
+                )
+                currentColor = nil
+            case let .radialGradient(
+                gradient,
+                startCenter,
+                startRadius,
+                endCenter,
+                endRadius,
+                options,
+                blendMode
+            ):
+                renderGradient(
+                    gradient,
+                    kind: 1,
+                    start: startCenter,
+                    startRadius: startRadius,
+                    end: endCenter,
+                    endRadius: endRadius,
+                    options: options,
+                    blendMode: blendMode,
+                    projection: projection,
+                    size: size
+                )
+                currentColor = nil
             case let .drawImage(image, destination, interpolationQuality, byTiling, blendMode):
                 renderImage(
                     image,
@@ -505,6 +545,98 @@ final class GLRenderer: CGRenderBackend, CGPixelSurfaceRenderer, CGPixelReadback
             }
         }
 
+        batchBuffer.flush()
+    }
+
+    /// Draws a linear or radial gradient across the clipped destination.
+    /// - Parameters:
+    ///   - gradient: The ordered color stops to interpolate.
+    ///   - kind: Zero for linear geometry and one for radial geometry.
+    ///   - start: The linear start point or radial start center.
+    ///   - startRadius: The radial start radius, or zero for a linear gradient.
+    ///   - end: The linear end point or radial end center.
+    ///   - endRadius: The radial end radius, or zero for a linear gradient.
+    ///   - options: The behavior outside the first and last stops.
+    ///   - blendMode: The compositing operation for the gradient.
+    ///   - projection: The destination's pixel-to-clip-space projection matrix.
+    ///   - size: The destination dimensions in pixels.
+    private func renderGradient(
+        _ gradient: CGGradient,
+        kind: Int32,
+        start: CGPoint,
+        startRadius: Double,
+        end: CGPoint,
+        endRadius: Double,
+        options: CGGradientDrawingOptions,
+        blendMode: CGBlendMode,
+        projection: [Float],
+        size: CGSize
+    ) {
+        let colors = gradient.colors.compactMap(GLRendererGeometry.rgbaComponents(for:))
+        guard colors.count == gradient.colors.count else { return }
+
+        batchBuffer.flush()
+        applyClipState()
+        gradientProgram.use()
+        setProjection(projection, for: gradientProgram)
+        glad_glUniform1i(gradientProgram.uniformLocation(named: "uKind"), kind)
+        glad_glUniform2f(
+            gradientProgram.uniformLocation(named: "uStart"),
+            Float(start.x),
+            Float(start.y)
+        )
+        glad_glUniform2f(
+            gradientProgram.uniformLocation(named: "uEnd"),
+            Float(end.x),
+            Float(end.y)
+        )
+        glad_glUniform1f(
+            gradientProgram.uniformLocation(named: "uStartRadius"),
+            Float(startRadius)
+        )
+        glad_glUniform1f(
+            gradientProgram.uniformLocation(named: "uEndRadius"),
+            Float(endRadius)
+        )
+        glad_glUniform1i(
+            gradientProgram.uniformLocation(named: "uDrawsBeforeStart"),
+            options.contains(.drawsBeforeStartLocation) ? 1 : 0
+        )
+        glad_glUniform1i(
+            gradientProgram.uniformLocation(named: "uDrawsAfterEnd"),
+            options.contains(.drawsAfterEndLocation) ? 1 : 0
+        )
+        glad_glUniform1i(
+            gradientProgram.uniformLocation(named: "uStopCount"),
+            GLint(colors.count)
+        )
+
+        let colorLocation = gradientProgram.uniformLocation(named: "uColors[0]")
+        let colorValues = colors.flatMap { $0 }
+        colorValues.withUnsafeBufferPointer { buffer in
+            guard let baseAddress = buffer.baseAddress else { return }
+            glad_glUniform4fv(colorLocation, GLsizei(colors.count), baseAddress)
+        }
+        let locationLocation = gradientProgram.uniformLocation(named: "uLocations[0]")
+        let locations = gradient.locations.map(Float.init)
+        locations.withUnsafeBufferPointer { buffer in
+            guard let baseAddress = buffer.baseAddress else { return }
+            glad_glUniform1fv(locationLocation, GLsizei(locations.count), baseAddress)
+        }
+
+        do {
+            try batchBuffer.append(
+                vertices: GLRendererGeometry.coverVertices(for: size)
+                    .flatMap { [$0.positionX, $0.positionY, $0.textureX, $0.textureY] },
+                state: GLBatchState(
+                    program: gradientProgram.identifier,
+                    texture: nil,
+                    blendMode: blendMode
+                )
+            )
+        } catch {
+            preconditionFailure("Gradient cover produced incomplete vertex data: \(error)")
+        }
         batchBuffer.flush()
     }
 

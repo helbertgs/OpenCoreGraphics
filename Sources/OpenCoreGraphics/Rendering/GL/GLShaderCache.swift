@@ -6,6 +6,9 @@ enum ShaderKind: Hashable, Sendable {
     /// The textured image program.
     case image
 
+    /// The linear and radial gradient program.
+    case gradient
+
     /// The packaged resource directory for this shader kind.
     var resourceDirectory: String {
         switch self {
@@ -13,6 +16,8 @@ enum ShaderKind: Hashable, Sendable {
             "default"
         case .image:
             "image"
+        case .gradient:
+            "gradient"
         }
     }
 }

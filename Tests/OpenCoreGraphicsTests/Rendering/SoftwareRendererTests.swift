@@ -35,6 +35,48 @@ struct SoftwareRendererTests {
         #expect(pixel(at: 1, y: 1, in: pixels) == [255, 255, 255, 255])
     }
 
+    /// Verifies a black-to-white linear gradient produces evenly spaced pixel values.
+    @Test
+    func interpolatesLinearGradientAcrossPixelCenters() throws {
+        let context = try #require(makeContext(width: 11, height: 1))
+        let gradient = try #require(CGGradient(colors: [.black, .white], locations: [0, 1]))
+        context.data = Data(repeating: 0, count: 11 * 4)
+        context.drawLinearGradient(
+            gradient,
+            start: CGPoint(x: 0.5, y: 0.5),
+            end: CGPoint(x: 10.5, y: 0.5)
+        )
+        context.flush()
+
+        let pixels = Array(context.data)
+        let expected = [0, 26, 51, 77, 102, 128, 153, 179, 204, 230, 255]
+        for (index, value) in expected.enumerated() {
+            #expect(abs(Int(pixel(at: index, y: 0, in: pixels, width: 11)[0]) - value) <= 1)
+        }
+    }
+
+    /// Verifies a radial gradient uses its ending radius and extends the last stop.
+    @Test
+    func interpolatesRadialGradientAndExtendsAfterEnd() throws {
+        let context = try #require(makeContext(width: 9, height: 1))
+        let gradient = try #require(CGGradient(colors: [.black, .white], locations: [0, 1]))
+        context.data = Data(repeating: 0, count: 9 * 4)
+        context.drawRadialGradient(
+            gradient,
+            startCenter: CGPoint(x: 0.5, y: 0.5),
+            startRadius: 0,
+            endCenter: CGPoint(x: 0.5, y: 0.5),
+            endRadius: 4,
+            options: .drawsAfterEndLocation
+        )
+        context.flush()
+
+        let pixels = Array(context.data)
+        #expect(pixel(at: 0, y: 0, in: pixels, width: 9) == [0, 0, 0, 255])
+        #expect(pixel(at: 2, y: 0, in: pixels, width: 9) == [128, 128, 128, 255])
+        #expect(pixel(at: 8, y: 0, in: pixels, width: 9) == [255, 255, 255, 255])
+    }
+
     /// Verifies premultiplied source-over composition on an opaque white destination.
     @Test
     func compositesSourceOverWithPremultipliedChannels() throws {

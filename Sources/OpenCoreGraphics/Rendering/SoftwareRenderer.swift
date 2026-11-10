@@ -36,6 +36,24 @@ final class SoftwareRenderer: CGRenderBackend {
             case let .strokePath(path, color, style, blendMode, shadow):
                 let outlines = Stroker.outline(PathFlattener.flatten(path), style: style)
                 fill(outlines, rule: .winding, color: color, blendMode: blendMode, shadow: shadow)
+            case let .linearGradient(gradient, start, end, options, blendMode):
+                drawLinearGradient(
+                    gradient,
+                    start: start,
+                    end: end,
+                    options: options,
+                    blendMode: blendMode
+                )
+            case let .radialGradient(gradient, startCenter, startRadius, endCenter, endRadius, options, blendMode):
+                drawRadialGradient(
+                    gradient,
+                    startCenter: startCenter,
+                    startRadius: startRadius,
+                    endCenter: endCenter,
+                    endRadius: endRadius,
+                    options: options,
+                    blendMode: blendMode
+                )
             case let .drawImage(image, destination, interpolationQuality, byTiling, blendMode):
                 drawImage(
                     image,
@@ -48,6 +66,187 @@ final class SoftwareRenderer: CGRenderBackend {
                 continue
             }
         }
+    }
+
+    /// Interpolates linear-gradient colors at each pixel center.
+    /// - Parameters:
+    ///   - gradient: The ordered color stops to render.
+    ///   - start: The gradient's device-space start point.
+    ///   - end: The gradient's device-space end point.
+    ///   - options: The behavior outside the first and last stops.
+    ///   - blendMode: The compositing operation for the gradient.
+    private func drawLinearGradient(
+        _ gradient: CGGradient,
+        start: CGPoint,
+        end: CGPoint,
+        options: CGGradientDrawingOptions,
+        blendMode: CGBlendMode
+    ) {
+        guard let colors = linearGradientColors(gradient) else { return }
+        let deltaX = end.x - start.x
+        let deltaY = end.y - start.y
+        let lengthSquared = deltaX * deltaX + deltaY * deltaY
+
+        for y in 0..<surface.height {
+            for x in 0..<surface.width {
+                let pointX = Double(x) + 0.5
+                let pointY = Double(y) + 0.5
+                let position = lengthSquared > 0
+                    ? ((pointX - start.x) * deltaX + (pointY - start.y) * deltaY) / lengthSquared
+                    : 0
+                guard let source = gradientColor(
+                    at: position,
+                    gradient: gradient,
+                    colors: colors,
+                    options: options
+                ) else {
+                    continue
+                }
+                compositeGradientPixel(source, x: x, y: y, blendMode: blendMode)
+            }
+        }
+    }
+
+    /// Interpolates radial-gradient colors using the circles' device-space geometry.
+    /// - Parameters:
+    ///   - gradient: The ordered color stops to render.
+    ///   - startCenter: The first circle's device-space center.
+    ///   - startRadius: The first circle's device-space radius.
+    ///   - endCenter: The last circle's device-space center.
+    ///   - endRadius: The last circle's device-space radius.
+    ///   - options: The behavior outside the first and last stops.
+    ///   - blendMode: The compositing operation for the gradient.
+    private func drawRadialGradient(
+        _ gradient: CGGradient,
+        startCenter: CGPoint,
+        startRadius: Double,
+        endCenter: CGPoint,
+        endRadius: Double,
+        options: CGGradientDrawingOptions,
+        blendMode: CGBlendMode
+    ) {
+        guard let colors = linearGradientColors(gradient) else { return }
+        for y in 0..<surface.height {
+            for x in 0..<surface.width {
+                let point = CGPoint(x: Double(x) + 0.5, y: Double(y) + 0.5)
+                guard let position = radialGradientPosition(
+                    at: point,
+                    startCenter: startCenter,
+                    startRadius: startRadius,
+                    endCenter: endCenter,
+                    endRadius: endRadius
+                ), let source = gradientColor(
+                    at: position,
+                    gradient: gradient,
+                    colors: colors,
+                    options: options
+                ) else {
+                    continue
+                }
+                compositeGradientPixel(source, x: x, y: y, blendMode: blendMode)
+            }
+        }
+    }
+
+    /// Converts each gradient stop to premultiplied linear RGBA.
+    /// - Parameter gradient: The gradient whose stops should be converted.
+    /// - Returns: The converted stops, or nil if any color is unsupported.
+    private func linearGradientColors(_ gradient: CGGradient) -> [[Double]]? {
+        let colors = gradient.colors.compactMap(rgbaComponents(for:))
+        return colors.count == gradient.colors.count ? colors : nil
+    }
+
+    /// Interpolates premultiplied stop colors at one normalized gradient position.
+    /// - Parameters:
+    ///   - position: The gradient parameter for a pixel.
+    ///   - gradient: The ordered gradient stops.
+    ///   - colors: Their premultiplied linear RGBA values.
+    ///   - options: The behavior outside the first and last stops.
+    /// - Returns: The interpolated color, or nil for an unextended out-of-range position.
+    private func gradientColor(
+        at position: Double,
+        gradient: CGGradient,
+        colors: [[Double]],
+        options: CGGradientDrawingOptions
+    ) -> [Double]? {
+        guard position.isFinite,
+              let firstLocation = gradient.locations.first,
+              let lastLocation = gradient.locations.last,
+              let firstColor = colors.first,
+              let lastColor = colors.last else {
+            return nil
+        }
+        if position < firstLocation {
+            return options.contains(.drawsBeforeStartLocation) ? firstColor : nil
+        }
+        if position > lastLocation {
+            return options.contains(.drawsAfterEndLocation) ? lastColor : nil
+        }
+
+        guard let upperIndex = gradient.locations.firstIndex(where: { $0 >= position }) else {
+            return lastColor
+        }
+        if upperIndex == 0 { return firstColor }
+        let lowerIndex = upperIndex - 1
+        let lowerLocation = gradient.locations[lowerIndex]
+        let upperLocation = gradient.locations[upperIndex]
+        let fraction = upperLocation == lowerLocation
+            ? 1
+            : (position - lowerLocation) / (upperLocation - lowerLocation)
+        return (0..<4).map { component in
+            colors[lowerIndex][component] * (1 - fraction) + colors[upperIndex][component] * fraction
+        }
+    }
+
+    /// Solves for the parameter of the circle that passes through a point.
+    /// - Parameters:
+    ///   - point: The device-space pixel center.
+    ///   - startCenter: The first circle's center.
+    ///   - startRadius: The first circle's radius.
+    ///   - endCenter: The last circle's center.
+    ///   - endRadius: The last circle's radius.
+    /// - Returns: The largest finite real solution, or nil when no circle passes through the point.
+    private func radialGradientPosition(
+        at point: CGPoint,
+        startCenter: CGPoint,
+        startRadius: Double,
+        endCenter: CGPoint,
+        endRadius: Double
+    ) -> Double? {
+        let deltaX = endCenter.x - startCenter.x
+        let deltaY = endCenter.y - startCenter.y
+        let radiusDelta = endRadius - startRadius
+        let pointX = point.x - startCenter.x
+        let pointY = point.y - startCenter.y
+        let a = deltaX * deltaX + deltaY * deltaY - radiusDelta * radiusDelta
+        let b = -2 * (pointX * deltaX + pointY * deltaY + startRadius * radiusDelta)
+        let c = pointX * pointX + pointY * pointY - startRadius * startRadius
+
+        if abs(a) <= Double.ulpOfOne {
+            guard b != 0 else { return c == 0 ? 0 : nil }
+            let position = -c / b
+            return position.isFinite ? position : nil
+        }
+
+        let discriminant = b * b - 4 * a * c
+        guard discriminant >= 0, discriminant.isFinite else { return nil }
+        let root = sqrt(discriminant)
+        let first = (-b - root) / (2 * a)
+        let second = (-b + root) / (2 * a)
+        let position = max(first, second)
+        return position.isFinite ? position : nil
+    }
+
+    /// Composites one gradient pixel through the current clip mask.
+    /// - Parameters:
+    ///   - source: Premultiplied linear RGBA components.
+    ///   - x: The destination pixel column.
+    ///   - y: The destination pixel row.
+    ///   - blendMode: The compositing operation for the pixel.
+    private func compositeGradientPixel(_ source: [Double], x: Int, y: Int, blendMode: CGBlendMode) {
+        let clipCoverage = Double(clippingCoverage(atX: x, y: y)) / 255
+        guard clipCoverage > 0 else { return }
+        composite(source, coverage: clipCoverage, blendMode: blendMode, x: x, y: y)
     }
 
     /// Returns a snapshot of the rendered bitmap bytes.
