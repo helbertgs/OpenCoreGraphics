@@ -570,8 +570,8 @@
         "Build e testes passam"
       ],
       "priority": 38,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "GLRenderer usa stencil-then-cover com INCR_WRAP/DECR_WRAP para winding e INVERT para evenOdd; retângulos e quadriláteros convexos mantêm o caminho direto de dois triângulos. O contexto solicita 8 bits de stencil e não há limite fixo de vértices. O Sample aceita --test-rendering para exibir a estrela sob as duas regras. swift test passou (96 testes em 21 suítes)."
     },
     {
       "id": "US-039",

@@ -29,6 +29,72 @@ struct GLRendererTests {
         #expect(GLRendererGeometry.rectangleVertices(for: path) == nil)
     }
 
+    /// Verifies a convex quadrilateral remains a direct two-triangle fill.
+    @Test
+    func triangulatesConvexQuadrilateralWithoutStencil() throws {
+        var path = CGPath()
+        path.move(to: CGPoint(x: 0, y: 0))
+        path.addLine(to: CGPoint(x: 8, y: 0))
+        path.addLine(to: CGPoint(x: 6, y: 5))
+        path.addLine(to: CGPoint(x: 1, y: 7))
+        path.closeSubpath()
+
+        let vertices = try #require(GLRendererGeometry.convexPolygonVertices(for: path))
+
+        #expect(vertices.count == 6)
+    }
+
+    /// Verifies a self-intersecting star is routed through stencil geometry.
+    @Test
+    func triangulatesSelfIntersectingStarForStencil() throws {
+        let points = [
+            CGPoint(x: 100, y: 0),
+            CGPoint(x: 200, y: 150),
+            CGPoint(x: 160, y: 300),
+            CGPoint(x: 40, y: 300),
+            CGPoint(x: 0, y: 150)
+        ]
+        var path = CGPath()
+        path.move(to: points[0])
+        for index in [2, 4, 1, 3] {
+            path.addLine(to: points[index])
+        }
+        path.closeSubpath()
+        let convexVertices = GLRendererGeometry.convexPolygonVertices(for: path)
+        let stencilVertices = GLRendererGeometry.stencilVertices(for: path)
+
+        #expect(convexVertices == nil)
+        #expect(stencilVertices.count == 9)
+    }
+
+    /// Verifies paths with more than sixteen vertices retain every contour point.
+    @Test
+    func removesTheSixteenVertexLimitForStencilGeometry() throws {
+        var points: [CGPoint] = []
+        for index in 0..<5 {
+            points.append(CGPoint(x: Double(index * 20), y: 0))
+        }
+        for index in 0..<5 {
+            points.append(CGPoint(x: 100, y: Double(index * 20)))
+        }
+        for index in 0..<5 {
+            points.append(CGPoint(x: Double(100 - index * 20), y: 100))
+        }
+        for index in 0..<5 {
+            points.append(CGPoint(x: 0, y: Double(100 - index * 20)))
+        }
+        var path = CGPath()
+        path.move(to: points[0])
+        for point in points.dropFirst() {
+            path.addLine(to: point)
+        }
+        path.closeSubpath()
+        let stencilVertices = GLRendererGeometry.stencilVertices(for: path)
+
+        #expect(GLRendererGeometry.convexPolygonVertices(for: path) == nil)
+        #expect(stencilVertices.count == 54)
+    }
+
     /// Verifies pixel coordinates map to the expected column-major clip matrix.
     @Test
     func buildsPixelSpaceOrthographicProjection() throws {

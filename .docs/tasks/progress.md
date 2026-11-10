@@ -358,3 +358,11 @@
 - **Learnings for future iterations:**
   - O current path não pertence ao graphics state; salve apenas os parâmetros de desenho e valide a restauração observando um comando de stroke.
 ---
+
+## 2026-11-10 - US-038
+- `GLRenderer` acumula polígonos triangulados no stencil com `INCR_WRAP`/`DECR_WRAP` para winding e `INVERT` para evenOdd, cobrindo a tela apenas nas regiões preenchidas.
+- O contexto GLFW solicita 8 bits de stencil; retângulos e quadriláteros convexos mantêm o caminho rápido, enquanto caminhos complexos e maiores que 16 vértices usam stencil sem limite fixo.
+- O Sample ganhou `--test-rendering`, com estrelas lado a lado para comparar winding (centro preenchido) e evenOdd (centro vazio); `swift test` passou (96 testes em 21 suítes).
+- **Learnings for future iterations:**
+  - Triângulos orientados em fan preservam o contorno como uma cadeia assinada; o stencil cancela sobreposições externas e trata buracos sem tesselação limitada por número de vértices.
+---

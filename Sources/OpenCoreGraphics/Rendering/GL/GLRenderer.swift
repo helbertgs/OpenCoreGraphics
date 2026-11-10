@@ -1,6 +1,6 @@
 @preconcurrency import OpenGLAD
 
-/// Converts rectangle paths and destination dimensions into OpenGL geometry.
+/// Converts paths and destination dimensions into OpenGL geometry.
 enum GLRendererGeometry {
     /// Triangulates each rectangular subpath into two triangles.
     /// - Parameter path: A path containing only rectangular subpaths.
@@ -49,6 +49,65 @@ enum GLRendererGeometry {
         return geometryVertices
     }
 
+    /// Triangulates one convex path subpath as a triangle fan.
+    /// - Parameter path: A path containing one convex polygon.
+    /// - Returns: The polygon's triangle vertices, or nil when the path is not a single convex polygon.
+    static func convexPolygonVertices(for path: CGPath) -> [GLBatchVertex]? {
+        convexPolygonVertices(for: PathFlattener.flatten(path))
+    }
+
+    /// Triangulates one convex flattened subpath as a triangle fan.
+    /// - Parameter polylines: The flattened path subpaths.
+    /// - Returns: The polygon's triangle vertices, or nil when the path is not one convex polygon.
+    static func convexPolygonVertices(for polylines: [Polyline]) -> [GLBatchVertex]? {
+        guard polylines.count == 1,
+              let points = normalizedPolygonPoints(polylines[0].points),
+              points.count <= 4,
+              isConvex(points) else {
+            return nil
+        }
+
+        return triangleFanVertices(for: points)
+    }
+
+    /// Triangulates every flattened subpath as an oriented triangle fan for stencil accumulation.
+    /// - Parameter path: The path whose fill contours will be flattened.
+    /// - Returns: Triangle vertices preserving each contour's point order.
+    static func stencilVertices(for path: CGPath) -> [GLBatchVertex] {
+        stencilVertices(for: PathFlattener.flatten(path))
+    }
+
+    /// Triangulates every flattened subpath as an oriented triangle fan for stencil accumulation.
+    /// - Parameter polylines: The flattened path subpaths.
+    /// - Returns: Triangle vertices preserving each contour's point order.
+    static func stencilVertices(for polylines: [Polyline]) -> [GLBatchVertex] {
+        polylines.reduce(into: [GLBatchVertex]()) { vertices, polyline in
+            guard let points = normalizedPolygonPoints(polyline.points) else { return }
+            vertices.append(contentsOf: triangleFanVertices(for: points))
+        }
+    }
+
+    /// Creates two triangles that cover the destination.
+    /// - Parameter size: The destination dimensions in pixels.
+    /// - Returns: Six vertices covering the destination bounds.
+    static func coverVertices(for size: CGSize) -> [GLBatchVertex] {
+        let points = [
+            CGPoint.zero,
+            CGPoint(x: size.width, y: 0),
+            CGPoint(x: size.width, y: size.height),
+            CGPoint(x: 0, y: size.height)
+        ]
+        return [0, 1, 2, 0, 2, 3].map { index in
+            let point = points[index]
+            return GLBatchVertex(
+                positionX: Float(point.x),
+                positionY: Float(point.y),
+                textureX: 0,
+                textureY: 0
+            )
+        }
+    }
+
     /// Triangulates four points that form an affine-transformed rectangle.
     /// - Parameter points: The rectangle corners in path order.
     /// - Returns: Six vertices, or nil when the points do not form a parallelogram.
@@ -72,6 +131,65 @@ enum GLRendererGeometry {
                 textureY: 0
             )
         }
+    }
+
+    /// Removes redundant closing points and consecutive duplicate points.
+    private static func normalizedPolygonPoints(_ points: [CGPoint]) -> [CGPoint]? {
+        var normalized: [CGPoint] = []
+        for point in points where normalized.last != point {
+            normalized.append(point)
+        }
+        if normalized.count > 1, normalized.first == normalized.last {
+            normalized.removeLast()
+        }
+        return normalized.count >= 3 ? normalized : nil
+    }
+
+    /// Checks that every polygon edge has all other vertices on the same side.
+    private static func isConvex(_ points: [CGPoint]) -> Bool {
+        guard points.count >= 3 else { return false }
+        let scale = max(1, points.reduce(0) { max($0, max(abs($1.x), abs($1.y))) })
+        let epsilon = scale * scale * 1e-12
+        var orientation = 0.0
+
+        for index in points.indices {
+            let start = points[index]
+            let end = points[(index + 1) % points.count]
+            for otherIndex in points.indices where otherIndex != index && otherIndex != (index + 1) % points.count {
+                let point = points[otherIndex]
+                let cross = (end.x - start.x) * (point.y - start.y)
+                    - (end.y - start.y) * (point.x - start.x)
+                guard abs(cross) > epsilon else { continue }
+                if orientation == 0 {
+                    orientation = cross > 0 ? 1 : -1
+                } else if cross * orientation < -epsilon {
+                    return false
+                }
+            }
+        }
+
+        return orientation != 0
+    }
+
+    /// Converts an ordered polygon into triangles without changing its orientation.
+    private static func triangleFanVertices(for points: [CGPoint]) -> [GLBatchVertex] {
+        guard points.count >= 3 else { return [] }
+        var vertices: [GLBatchVertex] = []
+        vertices.reserveCapacity((points.count - 2) * 3)
+
+        for index in 1..<(points.count - 1) {
+            for point in [points[0], points[index], points[index + 1]] {
+                vertices.append(
+                    GLBatchVertex(
+                        positionX: Float(point.x),
+                        positionY: Float(point.y),
+                        textureX: 0,
+                        textureY: 0
+                    )
+                )
+            }
+        }
+        return vertices
     }
 
     /// Builds a pixel-to-clip-space orthographic projection matrix.
@@ -157,7 +275,7 @@ final class GLRenderer: CGRenderBackend {
         executeOnMainActor(commands, size: size)
     }
 
-    /// Renders opaque rectangle fills and batches adjacent commands with matching state.
+    /// Renders path fills and batches adjacent commands with matching state.
     /// - Parameters:
     ///   - commands: The backend-independent draw commands to render.
     ///   - size: The destination dimensions in pixels.
@@ -169,10 +287,26 @@ final class GLRenderer: CGRenderBackend {
         var currentColor: [Float]?
 
         for command in commands {
-            guard case let .fillPath(path, _, color, blendMode) = command,
-                  let vertices = GLRendererGeometry.rectangleVertices(for: path),
+            guard case let .fillPath(path, rule, color, blendMode) = command,
                   let rgba = GLRendererGeometry.rgbaComponents(for: color) else {
                 continue
+            }
+
+            let vertices: [GLBatchVertex]
+            if let rectangleVertices = GLRendererGeometry.rectangleVertices(for: path) {
+                vertices = rectangleVertices
+            } else {
+                let polylines = PathFlattener.flatten(path)
+                if let convexVertices = GLRendererGeometry.convexPolygonVertices(for: polylines) {
+                    vertices = convexVertices
+                } else {
+                    batchBuffer.flush()
+                    let stencilVertices = GLRendererGeometry.stencilVertices(for: polylines)
+                    if renderStencilFill(stencilVertices, rule: rule, rgba: rgba, blendMode: blendMode, size: size) {
+                        currentColor = rgba
+                    }
+                    continue
+                }
             }
 
             if currentColor != rgba {
@@ -192,6 +326,58 @@ final class GLRenderer: CGRenderBackend {
             }
         }
 
+        batchBuffer.flush()
+    }
+
+    /// Fills an arbitrary path by accumulating its contour winding in the stencil buffer.
+    private func renderStencilFill(
+        _ vertices: [GLBatchVertex],
+        rule: CGPath.CGPathFillRule,
+        rgba: [Float],
+        blendMode: CGBlendMode,
+        size: CGSize
+    ) -> Bool {
+        guard vertices.isEmpty == false else { return false }
+
+        glad_glEnable(GLenum(GL_STENCIL_TEST))
+        glad_glStencilMask(GLuint(0xFF))
+        glad_glClearStencil(0)
+        glad_glClear(GLbitfield(GL_STENCIL_BUFFER_BIT))
+        glad_glColorMask(GLboolean(GL_FALSE), GLboolean(GL_FALSE), GLboolean(GL_FALSE), GLboolean(GL_FALSE))
+        glad_glStencilFunc(GLenum(GL_ALWAYS), 0, GLuint(0xFF))
+
+        switch rule {
+        case .winding:
+            glad_glStencilOpSeparate(GLenum(GL_FRONT), GLenum(GL_KEEP), GLenum(GL_KEEP), GLenum(GL_INCR_WRAP))
+            glad_glStencilOpSeparate(GLenum(GL_BACK), GLenum(GL_KEEP), GLenum(GL_KEEP), GLenum(GL_DECR_WRAP))
+        case .evenOdd:
+            glad_glStencilOp(GLenum(GL_KEEP), GLenum(GL_KEEP), GLenum(GL_INVERT))
+        }
+
+        appendAndFlush(vertices, blendMode: blendMode)
+
+        glad_glColorMask(GLboolean(GL_TRUE), GLboolean(GL_TRUE), GLboolean(GL_TRUE), GLboolean(GL_TRUE))
+        glad_glStencilFunc(GLenum(GL_NOTEQUAL), 0, GLuint(0xFF))
+        glad_glStencilOp(GLenum(GL_KEEP), GLenum(GL_KEEP), GLenum(GL_KEEP))
+        setColor(rgba)
+        appendAndFlush(GLRendererGeometry.coverVertices(for: size), blendMode: blendMode)
+
+        glad_glStencilMask(GLuint(0xFF))
+        glad_glDisable(GLenum(GL_STENCIL_TEST))
+        return true
+    }
+
+    /// Appends geometry for the solid-color program and immediately draws it.
+    private func appendAndFlush(_ vertices: [GLBatchVertex], blendMode: CGBlendMode) {
+        let vertexData = vertices.flatMap { [$0.positionX, $0.positionY, $0.textureX, $0.textureY] }
+        do {
+            try batchBuffer.append(
+                vertices: vertexData,
+                state: GLBatchState(program: program.identifier, texture: nil, blendMode: blendMode)
+            )
+        } catch {
+            preconditionFailure("Path triangulation produced incomplete vertex data: \(error)")
+        }
         batchBuffer.flush()
     }
 
