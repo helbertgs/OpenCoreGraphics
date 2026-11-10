@@ -29,7 +29,7 @@ struct StrokeStyle: Equatable, Sendable {
     /// The shape used to draw connected line segments.
     let join: CGLineJoin
 
-    /// The maximum ratio between a miter length and the line width.
+    /// The maximum ratio between a miter length and half the line width.
     let miterLimit: Double
 
     /// The alternating painted and unpainted lengths of a dashed line.
@@ -48,7 +48,7 @@ struct StrokeStyle: Equatable, Sendable {
     ///   - width: The line width in device-space pixels.
     ///   - cap: The shape used to draw open line endpoints.
     ///   - join: The shape used to draw connected line segments.
-    ///   - miterLimit: The maximum ratio between a miter length and the line width.
+    ///   - miterLimit: The maximum ratio between a miter length and half the line width.
     ///   - dashPhase: The offset into the dash pattern at the beginning of each subpath.
     ///   - dashLengths: The alternating painted and unpainted lengths.
     init(
@@ -72,7 +72,7 @@ struct StrokeStyle: Equatable, Sendable {
     ///   - width: The line width in device-space pixels.
     ///   - cap: The shape used to draw open line endpoints.
     ///   - join: The shape used to draw connected line segments.
-    ///   - miterLimit: The maximum ratio between a miter length and the line width.
+    ///   - miterLimit: The maximum ratio between a miter length and half the line width.
     ///   - dash: The alternating painted and unpainted lengths.
     init(width: Double, cap: CGLineCap, join: CGLineJoin, miterLimit: Double, dash: [Double]) {
         self.init(width: width, cap: cap, join: join, miterLimit: miterLimit, dashLengths: dash)

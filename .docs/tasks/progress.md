@@ -350,3 +350,11 @@
   - O phase é um deslocamento dentro do padrão no começo de cada subpath; segmentos pintados contínuos devem atravessar vértices sem reiniciar caps.
   - Padrões com número ímpar de comprimentos devem ser repetidos para manter alternância contínua entre pintado e vazio.
 ---
+
+## 2026-11-10 - US-037
+- Adicionados `setLineCap`, `setLineJoin`, `setMiterLimit` e `setLineDash(phase:lengths:)`.
+- `CGGraphicsState` salva/restaura `lineDashPhase` junto com o padrão; `currentStrokeStyle` grava fase e comprimentos completos no `DrawCommand`.
+- Teste com `RecordingRenderTarget` confirma os valores de cada setter antes/depois de `saveGState`/`restoreGState`; `swift test` passou (93 testes em 21 suítes).
+- **Learnings for future iterations:**
+  - O current path não pertence ao graphics state; salve apenas os parâmetros de desenho e valide a restauração observando um comando de stroke.
+---

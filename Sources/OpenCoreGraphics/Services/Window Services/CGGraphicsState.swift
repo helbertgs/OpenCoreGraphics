@@ -26,11 +26,14 @@ struct CGGraphicsState: Sendable {
     /// The style used to draw the junctions between stroked line segments.
     var lineJoin: CGLineJoin = .miter
 
-    /// The limit on the length of a miter join, relative to the line width.
+    /// The limit on the length of a miter join, relative to half the line width.
     var miterLimit: Double = 10
 
     /// The repeating lengths of painted and unpainted portions of stroked lines.
     var lineDash: [Double] = []
+
+    /// The offset into the line dash pattern at the beginning of a subpath.
+    var lineDashPhase: Double = 0
 
     /// The compositing operation used when drawing.
     var blendMode: CGBlendMode = .normal

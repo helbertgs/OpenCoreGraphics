@@ -189,6 +189,9 @@ open class CGContext {
     /// The current line dash pattern captured by graphics-state snapshots.
     private var lineDash: [Double] = []
 
+    /// The offset into the current line dash pattern captured by graphics-state snapshots.
+    private var lineDashPhase: Double = 0
+
     /// Creates a new empty path in a graphics context.
     /// 
     /// A graphics context can have only a single path in use at any time. 
@@ -449,7 +452,14 @@ open class CGContext {
 
     /// Captures the current line parameters for a stroke command.
     private var currentStrokeStyle: StrokeStyle {
-        StrokeStyle(width: lineWidth, cap: lineCap, join: lineJoin, miterLimit: miterLimit, dashLengths: lineDash)
+        StrokeStyle(
+            width: lineWidth,
+            cap: lineCap,
+            join: lineJoin,
+            miterLimit: miterLimit,
+            dashPhase: lineDashPhase,
+            dashLengths: lineDash
+        )
     }
 
     // MARK: - Drawing Shapes
@@ -796,6 +806,36 @@ open class CGContext {
         self.lineWidth = width
     }
 
+    /// Sets the shape used to draw open line endpoints.
+    /// - Parameter cap: The endpoint shape for stroked paths.
+    public func setLineCap(_ cap: CGLineCap) {
+        lineCap = cap
+    }
+
+    /// Sets the shape used to draw joins between connected line segments.
+    /// - Parameter join: The join shape for stroked paths.
+    public func setLineJoin(_ join: CGLineJoin) {
+        lineJoin = join
+    }
+
+    /// Sets the maximum ratio between a miter length and half the line width.
+    /// - Parameter limit: The maximum allowed miter ratio.
+    public func setMiterLimit(_ limit: Double) {
+        miterLimit = limit
+    }
+
+    /// Sets the repeating painted and unpainted lengths used to dash stroked paths.
+    /// - Parameters:
+    ///   - phase: The offset into the pattern at the beginning of each subpath.
+    ///   - lengths: The alternating painted and unpainted lengths. An empty array draws a continuous line.
+    /// - Precondition: `phase` is finite and each length is finite and greater than zero.
+    public func setLineDash(phase: Double, lengths: [Double]) {
+        precondition(phase.isFinite, "Dash phase must be finite.")
+        precondition(lengths.allSatisfy { $0.isFinite && $0 > 0 }, "Dash lengths must be finite and greater than zero.")
+        lineDashPhase = phase
+        lineDash = lengths
+    }
+
     // MARK: - Saving and Restoring Graphics State
 
     /// Pushes a copy of the current graphics state onto the graphics state stack for the context.
@@ -836,6 +876,7 @@ open class CGContext {
         state.lineJoin = lineJoin
         state.miterLimit = miterLimit
         state.lineDash = lineDash
+        state.lineDashPhase = lineDashPhase
         state.blendMode = blendMode
         state.interpolationQuality = interpolationQuality
         state.renderingIntent = renderingIntent
@@ -860,6 +901,7 @@ open class CGContext {
         lineJoin = state.lineJoin
         miterLimit = state.miterLimit
         lineDash = state.lineDash
+        lineDashPhase = state.lineDashPhase
         blendMode = state.blendMode
         interpolationQuality = state.interpolationQuality
         renderingIntent = state.renderingIntent

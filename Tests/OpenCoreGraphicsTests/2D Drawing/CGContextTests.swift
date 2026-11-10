@@ -191,6 +191,7 @@ struct CGContextTests {
         #expect(state.lineJoin == .miter)
         #expect(state.miterLimit == 10)
         #expect(state.lineDash.isEmpty)
+        #expect(state.lineDashPhase == 0)
         #expect(state.blendMode == .normal)
         #expect(state.interpolationQuality == .default)
         #expect(state.renderingIntent == .defaultIntent)

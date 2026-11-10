@@ -554,8 +554,8 @@
         "Build e testes passam"
       ],
       "priority": 37,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Adicionados setLineCap, setLineJoin, setMiterLimit e setLineDash; lineDashPhase entrou no CGGraphicsState e é copiado/restaurado junto ao padrão. strokePath registra cap, join, miter e fase/comprimentos do tracejado completos. Testes com RecordingRenderTarget cobrem os setters e save/restore. swift test passou (93 testes em 21 suítes)."
     },
     {
       "id": "US-038",

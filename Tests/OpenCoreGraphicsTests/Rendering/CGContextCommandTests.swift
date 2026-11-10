@@ -31,13 +31,64 @@ struct CGContextCommandTests {
         context.move(to: CGPoint(x: 1, y: 2))
         context.addLine(to: CGPoint(x: 5, y: 6))
         let path = try #require(context.path)
-        let style = StrokeStyle(width: 3, cap: .butt, join: .miter, miterLimit: 10, dash: [])
+        let style = StrokeStyle(width: 3, cap: .butt, join: .miter, miterLimit: 10, dashLengths: [])
 
         context.strokePath()
         context.flush()
 
         #expect(context.path == nil)
         #expect(target.commands == [.strokePath(path: path, color: .white, style: style, blendMode: .normal)])
+    }
+
+    /// Verifies line setters are captured in stroke commands and restored with graphics state.
+    @Test
+    func lineStyleSettersCaptureAndRestore() throws {
+        let (context, target) = makeRecordingContext()
+        context.setStrokeColor(.black)
+        context.setLineCap(.round)
+        context.setLineJoin(.bevel)
+        context.setMiterLimit(5)
+        context.setLineDash(phase: 3, lengths: [8, 4])
+        context.saveGState()
+
+        context.setLineCap(.square)
+        context.setLineJoin(.miter)
+        context.setMiterLimit(1)
+        context.setLineDash(phase: 2, lengths: [4, 6])
+        context.beginPath()
+        context.move(to: CGPoint(x: 0, y: 0))
+        context.addLine(to: CGPoint(x: 10, y: 0))
+        let changedPath = try #require(context.path)
+        context.strokePath()
+
+        context.restoreGState()
+        context.beginPath()
+        context.move(to: CGPoint(x: 0, y: 0))
+        context.addLine(to: CGPoint(x: 10, y: 0))
+        let restoredPath = try #require(context.path)
+        context.strokePath()
+        context.flush()
+
+        let changedStyle = StrokeStyle(
+            width: 1,
+            cap: .square,
+            join: .miter,
+            miterLimit: 1,
+            dashPhase: 2,
+            dashLengths: [4, 6]
+        )
+        let restoredStyle = StrokeStyle(
+            width: 1,
+            cap: .round,
+            join: .bevel,
+            miterLimit: 5,
+            dashPhase: 3,
+            dashLengths: [8, 4]
+        )
+        #expect(target.commands == [
+            .strokePath(path: changedPath, color: .black, style: changedStyle, blendMode: .normal),
+            .strokePath(path: restoredPath, color: .black, style: restoredStyle, blendMode: .normal)
+        ])
     }
 
     /// Verifies that combined drawing records fill before stroke.
@@ -49,7 +100,7 @@ struct CGContextCommandTests {
         context.beginPath()
         context.addRect(CGRect(x: 2, y: 3, width: 4, height: 5))
         let path = try #require(context.path)
-        let style = StrokeStyle(width: 1, cap: .butt, join: .miter, miterLimit: 10, dash: [])
+        let style = StrokeStyle(width: 1, cap: .butt, join: .miter, miterLimit: 10, dashLengths: [])
 
         context.drawPath(using: .fillStroke)
         context.flush()
