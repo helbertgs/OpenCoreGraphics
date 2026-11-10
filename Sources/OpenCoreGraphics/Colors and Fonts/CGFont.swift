@@ -1,5 +1,5 @@
 import Foundation
-import OpenSTB
+import OpenCoreGraphicsSTB
 
 /// A set of character glyphs and layout information for drawing text.
 /// 
@@ -8,6 +8,15 @@ import OpenSTB
 /// 
 /// Core Graphics provides a limited, low-level interface for drawing text.
 public class CGFont {
+
+    /// The stable byte buffer referenced by the parsed TrueType font tables.
+    private var fontBuffer: UnsafeMutablePointer<UInt8>?
+
+    /// The font metadata cached by `stb_truetype`.
+    private var fontInfo: OpaquePointer?
+
+    /// The number of font units per em square.
+    public private(set) var unitsPerEm = 0
 
     // MARK: - Creating Font Objects
 
@@ -18,9 +27,62 @@ public class CGFont {
     public init?(_ name: String) {
         self.fullName = name
 
-        guard (try? Data(contentsOf: .init(fileURLWithPath: name))) != nil else {
+        guard let data = try? Data(contentsOf: URL(fileURLWithPath: name)),
+              data.count >= 20,
+              data.count <= Int(Int32.max) else {
             return nil
         }
+
+        let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: data.count)
+        data.copyBytes(to: buffer, count: data.count)
+        guard let parsedFontInfo = ocg_stb_font_create(buffer, Int32(data.count)) else {
+            buffer.deallocate()
+            return nil
+        }
+
+        fontBuffer = buffer
+        fontInfo = parsedFontInfo
+        unitsPerEm = Int(ocg_stb_font_units_per_em(parsedFontInfo))
+        numberOfGlyphs = Int(ocg_stb_font_glyph_count(parsedFontInfo))
+
+        var fontAscent: Int32 = 0
+        var fontDescent: Int32 = 0
+        var fontLineGap: Int32 = 0
+        ocg_stb_font_get_vertical_metrics(
+            parsedFontInfo,
+            &fontAscent,
+            &fontDescent,
+            &fontLineGap
+        )
+        ascent = Int(fontAscent)
+        descent = Int(fontDescent)
+        leading = Int(fontLineGap)
+
+        var minX: Int32 = 0
+        var minY: Int32 = 0
+        var maxX: Int32 = 0
+        var maxY: Int32 = 0
+        ocg_stb_font_get_bounding_box(
+            parsedFontInfo,
+            &minX,
+            &minY,
+            &maxX,
+            &maxY
+        )
+        fontBBox = CGRect(
+            x: Double(minX),
+            y: Double(minY),
+            width: Double(maxX - minX),
+            height: Double(maxY - minY)
+        )
+    }
+
+    /// Releases the stable byte buffer referenced by the parsed font.
+    deinit {
+        if let fontInfo {
+            ocg_stb_font_destroy(fontInfo)
+        }
+        fontBuffer?.deallocate()
     }
 
     // MARK: - Examining Font Metadata
@@ -97,6 +159,38 @@ public class CGFont {
 
     /// Returns the number of glyphs in a font.
     public var numberOfGlyphs: Int = 96
+
+    /// Finds the glyph associated with a single-scalar character.
+    /// - Parameter character: The character whose glyph index is requested.
+    /// - Returns: The glyph index, or nil when the character is unsupported by this font.
+    public func glyph(for character: Character) -> CGGlyph? {
+        guard character.unicodeScalars.count == 1,
+              let scalar = character.unicodeScalars.first,
+              fontInfo != nil,
+              scalar.value <= UInt32(Int32.max) else {
+            return nil
+        }
+        guard let fontInfo else { return nil }
+        let glyphIndex = ocg_stb_font_find_glyph_index(fontInfo, Int32(scalar.value))
+        guard glyphIndex > 0, glyphIndex <= Int32(UInt16.max) else { return nil }
+        return CGGlyph(glyphIndex)
+    }
+
+    /// Returns the horizontal advance of a glyph in font units.
+    /// - Parameter glyph: The glyph whose advance width is requested.
+    /// - Returns: The advance width, or nil when the glyph index is outside the font.
+    public func advance(for glyph: CGGlyph) -> Double? {
+        guard Int(glyph) < numberOfGlyphs, let fontInfo else { return nil }
+        var advanceWidth: Int32 = 0
+        var leftSideBearing: Int32 = 0
+        ocg_stb_font_get_glyph_horizontal_metrics(
+            fontInfo,
+            Int32(glyph),
+            &advanceWidth,
+            &leftSideBearing
+        )
+        return Double(advanceWidth)
+    }
 
     /// Returns the glyph name of the specified glyph in the specified font.
     /// - Parameter glyph: The glyph whose name is desired.

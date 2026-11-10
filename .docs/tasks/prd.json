@@ -906,8 +906,8 @@
         "Build e testes passam"
       ],
       "priority": 60,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "CGFont carrega dados de arquivo com buffer de vida estável e expõe mapeamento de glifos, avanço, unidades por em e métricas verticais. Um target C local encapsula stb_truetype com seu header privado porque o import modular de OpenSTB não compila a implementação C. Dois testes cobrem fonte válida, métricas e entradas inválidas."
     },
     {
       "id": "US-061",

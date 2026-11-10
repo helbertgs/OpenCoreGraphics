@@ -25,11 +25,16 @@ let package = Package(
             dependencies: [
                 .product(name: "OpenGLAD", package: "OpenGLAD"),
                 .product(name: "OpenGLFW", package: "OpenGLFW"),
-                .product(name: "OpenSTB", package: "OpenSTB")
+                .product(name: "OpenSTB", package: "OpenSTB"),
+                "OpenCoreGraphicsSTB"
             ],
             resources: [
                 .copy("Resources")
             ]
+        ),
+        .target(
+            name: "OpenCoreGraphicsSTB",
+            publicHeadersPath: "include"
         ),
         .executableTarget(
             name: "OpenCoreGraphicsSample",

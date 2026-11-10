@@ -1,6 +1,7 @@
 # Progress Log — Reestruturação do OpenCoreGraphics
 
 ## Codebase Patterns
+- A implementação C de `stb_truetype` usa `OpenCoreGraphicsSTB` e seu header privado textual; importar o header de `OpenSTB` como módulo não emite a implementação definida por `STB_TRUETYPE_IMPLEMENTATION`. Adicione wrappers C nessa ponte para expor operações do stb às próximas etapas.
 - Para ver só os erros de build: `swift build 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -E "error:|Build complete"`. O Swift para no primeiro arquivo com erro, então **depois de corrigir um erro, rode o build de novo**: outros erros podem estar escondidos.
 - O build usa o sistema do Xcode (`.build/out/...`); o aviso "found 2 file(s) which are unhandled" é o `Resources/default/*.glsl` ainda não declarado em `Package.swift` (resolvido na US-005).
 - `CGColor.components` é `[Double]`; qualquer chamada `glad_*` que recebe `GLfloat` precisa de `Float(...)`.
@@ -583,4 +584,14 @@
 - Files changed: `.docs/tasks/coverage.md`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
 - **Learnings for future iterations:**
   - O JSON de cobertura do SwiftPM inclui dependências e fontes de teste; filtre pelos caminhos de `Sources/OpenCoreGraphics/` e aplique apenas as exclusões especificadas antes de somar `summary.lines`.
+---
+
+## 2026-11-10 - US-060
+- `CGFont` carrega uma fonte TrueType de arquivo, mantém os bytes enquanto o parser C precisa deles e expõe unidades por em, métricas, glifos e avanço horizontal.
+- `OpenCoreGraphicsSTB` encapsula as chamadas necessárias em uma ponte C; o header `stb_truetype.h` está incluído privadamente para que a implementação não seja suprimida pelo import modular de `OpenSTB`.
+- A fixture sintética `tiny-test.ttf` valida o mapeamento de `A`/`I`, os avanços, métricas, glifos não suportados e rejeição de arquivos inexistentes/inválidos.
+- `swift test` passou (161 testes em 30 suítes), `swift build --target OpenCoreGraphicsSample` e `git diff --check` passaram.
+- Files changed: `Package.swift`, `Sources/OpenCoreGraphicsSTB/`, `Sources/OpenCoreGraphics/Colors and Fonts/CGFont.swift`, `Tests/OpenCoreGraphicsTests/Colors and Fonts/CGFontTests.swift`, `Tests/OpenCoreGraphicsTests/Resources/tiny-test.ttf`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
+- **Learnings for future iterations:**
+  - Para ampliar o uso de `stb_truetype`, exponha wrappers C em `OpenCoreGraphicsSTB`; não importe o header privado diretamente do Swift.
 ---
