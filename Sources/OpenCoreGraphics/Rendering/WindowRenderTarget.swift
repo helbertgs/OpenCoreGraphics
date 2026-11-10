@@ -4,7 +4,7 @@ import Foundation
 @MainActor
 final class WindowRenderTarget: CGRenderTarget {
     /// The pixel dimensions of the window render destination.
-    let size: CGSize
+    var size: CGSize
 
     /// The renderer owned by the window, which may be released during teardown.
     private weak var renderer: (any CGRenderBackend)?

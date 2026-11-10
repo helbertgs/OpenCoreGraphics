@@ -241,3 +241,13 @@
   - Como as APIs síncronas de `CGContext` não são isoladas, `flush()` usa `MainActor.assumeIsolated`; chamar um contexto ligado ao target de janela exige estar no actor principal.
   - O renderer achata os vértices tipados antes de chamar `GLBatchBuffer.append`, preservando a validação de tuplas já existente na US-023.
 ---
+
+## 2026-11-10 - US-025
+- O callback de framebuffer delega a um único método do `CGWindow`, que atualiza `glViewport`, o tamanho em pixels e o target de renderização; contextos já criados também recebem `width` e `height` novos.
+- O renderer calcula a projeção a partir do tamanho corrente do target em cada flush, sem estado de projeção duplicado.
+- A criação da janela usa o mesmo método para definir viewport e dimensões iniciais do framebuffer; o callback de tamanho da janela mantém apenas a atualização do `frame` lógico.
+- Teste do `WindowRenderTarget` confirma que um target redimensionado envia o tamanho novo ao renderer.
+- `swift test` passou (71 testes em 19 suítes).
+- **Learnings for future iterations:**
+  - Use as dimensões do framebuffer (pixels) para viewport e projeção; `frame.size` representa o tamanho lógico da janela e pode divergir em telas HiDPI.
+---

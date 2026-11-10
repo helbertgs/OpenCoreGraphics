@@ -375,8 +375,8 @@
         "Build e testes passam"
       ],
       "priority": 25,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Um único método em CGWindow atualiza viewport, tamanho do framebuffer, CGContext existente e tamanho do target; a projeção é recalculada a cada flush com as novas dimensões. O comportamento foi testado sem GPU via atualização do tamanho do target."
     },
     {
       "id": "US-026",

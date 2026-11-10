@@ -20,7 +20,7 @@ open class CGWindow {
         do {
             let renderer = try GLRenderer()
             self.renderer = renderer
-            windowRenderTarget = WindowRenderTarget(size: frame.size, renderer: renderer)
+            windowRenderTarget = WindowRenderTarget(size: framebufferSize, renderer: renderer)
         } catch {
             destroy()
             throw error
@@ -52,10 +52,17 @@ open class CGWindow {
     /// The render target shared with the window's drawing context.
     private var windowRenderTarget: WindowRenderTarget?
 
+    /// The current framebuffer dimensions in pixels.
+    private var framebufferSize: CGSize = .zero
+
+    /// Tracks whether the lazily created context needs framebuffer-size updates.
+    private var hasCreatedCGContext = false
+
     /// The OpenGL context associated with the window.
     public lazy var cgContext: CGContext = {
-        let context = CGContext(width: Int(frame.size.width), height: Int(frame.size.height))
+        let context = CGContext(width: Int(framebufferSize.width), height: Int(framebufferSize.height))
         context.renderTarget = windowRenderTarget
+        hasCreatedCGContext = true
         return context
     }()
 
@@ -200,7 +207,7 @@ extension CGWindow {
         var framebufferWidth: Int32 = 0
         var framebufferHeight: Int32 = 0
         glfwGetFramebufferSize(windowRef, &framebufferWidth, &framebufferHeight)
-        glad_glViewport(0, 0, framebufferWidth, framebufferHeight)
+        updateFramebufferSize(width: framebufferWidth, height: framebufferHeight)
 
         setupCallbacks()
     }
@@ -271,8 +278,20 @@ extension CGWindow {
     private func setFramebufferSizeCallback() {
         guard let windowRef = self.windowRef else { return }
         glfwSetFramebufferSizeCallback(windowRef) { pointer, width, height in
-            glad_glViewport(0, 0, width, height)
+            let window: CGWindow = Unmanaged<CGWindow>.fromOpaque(glfwGetWindowUserPointer(pointer)).takeUnretainedValue()
+            window.updateFramebufferSize(width: width, height: height)
         }
+    }
+
+    private func updateFramebufferSize(width: Int32, height: Int32) {
+        let size = CGSize(width: width, height: height)
+        framebufferSize = size
+        glad_glViewport(0, 0, width, height)
+        windowRenderTarget?.size = size
+
+        guard hasCreatedCGContext else { return }
+        cgContext.width = Int(width)
+        cgContext.height = Int(height)
     }
 
     private func setKeyboardCallback() {
