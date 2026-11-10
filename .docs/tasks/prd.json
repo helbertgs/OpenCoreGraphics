@@ -344,8 +344,8 @@
         "Build e testes passam"
       ],
       "priority": 23,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "GLBatchBuffer aloca VAO/VBO uma vez, acumula vértices de 4 floats por vértice, descarrega ao mudar program/texture/blend e no flush do frame, e libera buffers em isolated deinit. Teste com driver falso: 5 entradas em 2 estados geram 2 lotes; valida também dados inválidos e deleção. swift test passou com 66 testes em 17 suítes."
     },
     {
       "id": "US-024",

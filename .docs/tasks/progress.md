@@ -218,4 +218,12 @@
 - `OpenGLProgramDriver` usa chamadas `glad_*`, confere estados de compilação/link e lança erros tipados contendo o log do OpenGL. `GLProgram` remove o programa em `isolated deinit`.
 - Driver falso testa compilação única após três solicitações, programas por kind, propagação de erros, cache de uniforms e liberação, sem contexto GL.
 - `swift test` passou (63 testes em 16 suítes).
+
+---
+
+## 2026-11-10 - US-023
+- Criado `GLBatchBuffer`, que cria um VAO/VBO dinâmico uma única vez, acumula valores de posição/UV e envia o lote quando o estado de programa/textura/blend muda ou quando `flush()` é chamado.
+- `OpenGLBatchBufferDriver` usa OpenGLAD para upload dinâmico, configuração de atributos, desenho e liberação; `isolated deinit` remove ambos os buffers.
+- Driver falso verifica que cinco entradas em dois estados resultam em dois lotes, que os buffers são criados uma vez e liberados, e que dados incompletos falham explicitamente.
+- `swift test` passou (66 testes em 17 suítes).
 ---
