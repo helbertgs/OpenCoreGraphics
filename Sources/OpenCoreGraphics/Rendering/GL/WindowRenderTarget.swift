@@ -18,6 +18,21 @@ enum WindowRenderTargetError: Error, Equatable {
     case contextSelectionFailed
 }
 
+/// A resize barrier positioned between commands submitted before and after a framebuffer event.
+private struct PendingFramebufferResize {
+    /// The number of queued commands that precede this resize.
+    var precedingCommandCount: Int
+
+    /// The new framebuffer dimensions.
+    let size: CGSize
+
+    /// The clip active at the instant the framebuffer changed.
+    let clipRegions: [CGClipRegion]
+
+    /// Updates the viewport after selecting the owning context.
+    let updateViewport: @MainActor () -> Void
+}
+
 /// Queues window drawing commands for the main-actor OpenGL renderer.
 @MainActor
 final class WindowRenderTarget: CGRenderTarget {
@@ -35,6 +50,9 @@ final class WindowRenderTarget: CGRenderTarget {
 
     /// Commands accumulated until the context flushes its current frame.
     private var pendingCommands: [DrawCommand] = []
+
+    /// Resize barriers awaiting execution in their original command order.
+    private var pendingResizes: [PendingFramebufferResize] = []
 
     /// The ordered device-space regions that define the current window clip.
     private var clipRegions: [CGClipRegion] = []
@@ -63,6 +81,31 @@ final class WindowRenderTarget: CGRenderTarget {
         if clipRegions.isEmpty == false {
             enqueueClipRegions()
             _ = flushPendingCommands()
+        }
+    }
+
+    /// Drains commands at the current size and reports whether resizing can proceed.
+    var flushBeforeResize: @MainActor () -> Bool {
+        { self.flushPendingCommands() }
+    }
+
+    /// Retries pending framebuffer changes without flushing ordinary queued work.
+    var retryFramebufferResize: @MainActor () -> Bool {
+        { self.pendingResizes.isEmpty || self.flushPendingCommands() }
+    }
+
+    /// Records a resize barrier and attempts it without discarding it on failure.
+    var enqueueFramebufferResize: @MainActor (CGSize, @escaping @MainActor () -> Void) -> Void {
+        { size, updateViewport in
+            self.pendingResizes.append(
+                PendingFramebufferResize(
+                    precedingCommandCount: self.pendingCommands.count,
+                    size: size,
+                    clipRegions: self.clipRegions,
+                    updateViewport: updateViewport
+                )
+            )
+            _ = self.flushPendingCommands()
         }
     }
 
@@ -96,6 +139,7 @@ final class WindowRenderTarget: CGRenderTarget {
     /// - Returns: Bottom-up RGBA bytes, or nil when the renderer is unavailable.
     nonisolated func readPixels() -> Data? {
         MainActor.assumeIsolated {
+            if pendingResizes.isEmpty == false, flushPendingCommands() == false { return nil }
             do {
                 try ensureWindowIsOpen()
                 try selectWindowContext()
@@ -161,11 +205,28 @@ final class WindowRenderTarget: CGRenderTarget {
     private func flushPendingCommands() -> Bool {
         guard (try? ensureWindowIsOpen()) != nil else {
             pendingCommands.removeAll(keepingCapacity: true)
+            pendingResizes.removeAll(keepingCapacity: true)
             return false
         }
         guard let renderer else {
-            pendingCommands.removeAll(keepingCapacity: true)
             return false
+        }
+        while let resize = pendingResizes.first {
+            guard (try? selectWindowContext()) != nil else { return false }
+            let count = resize.precedingCommandCount
+            if count > 0 {
+                renderer.execute(Array(pendingCommands.prefix(count)), size: windowSize)
+                pendingCommands.removeFirst(count)
+            }
+            resize.updateViewport()
+            windowSize = resize.size
+            if resize.clipRegions.isEmpty == false {
+                renderer.execute([.resetClip] + resize.clipRegions.map(\.drawCommand), size: windowSize)
+            }
+            pendingResizes.removeFirst()
+            for index in pendingResizes.indices {
+                pendingResizes[index].precedingCommandCount -= count
+            }
         }
         guard pendingCommands.isEmpty == false else { return true }
         guard (try? selectWindowContext()) != nil else { return false }

@@ -52,6 +52,81 @@ struct CGContextCommandTests {
         #expect(usesPathClip)
     }
 
+    /// Rebuilds clip coverage for resized and restored graphics states.
+    @Test
+    func resizingRebuildsCurrentAndSavedClipCoverage() throws {
+        let (context, target) = makeRecordingContext()
+        let first = CGRect(x: 2, y: 2, width: 10, height: 10)
+        let second = CGRect(x: 6, y: 6, width: 10, height: 10)
+        context.clip(to: first)
+        context.saveGState()
+        context.clip(to: second)
+        context.resizeWindowContext(20, 18)
+        let firstMask = try #require(CoverageMask(path: CGPath(rect: first), rule: .winding, width: 20, height: 18))
+        let secondMask = try #require(CoverageMask(path: CGPath(rect: second), rule: .winding, width: 20, height: 18))
+        let combined = try #require(firstMask.intersecting(secondMask))
+        #expect(Mirror(reflecting: context).descendant("clipMask") as? CoverageMask == combined)
+        #expect(context.boundingBoxOfClipPath == CGRect(x: 6, y: 6, width: 6, height: 6))
+
+        context.restoreGState()
+
+        #expect(Mirror(reflecting: context).descendant("clipMask") as? CoverageMask == firstMask)
+        #expect(target.clipRegions == [.rectangle(first)])
+        #expect(context.boundingBoxOfClipPath == first)
+    }
+
+    /// Reports invalid clip reconstruction and excludes pixels until coverage can be rebuilt.
+    @Test
+    func invalidResizeFailsClosedAndRecoversClipCoverage() throws {
+        let (context, target) = makeRecordingContext()
+        let clip = CGRect(x: 2, y: 2, width: 10, height: 10)
+        context.clip(to: clip)
+        context.saveGState()
+
+        context.resizeWindowContext(0, 20)
+        #expect(context.clipCoverageError == .rasterizationFailed)
+        #expect(Mirror(reflecting: context).descendant("clipMask") as? CoverageMask == .empty)
+        #expect(target.clipRegions == [.rectangle(clip)])
+
+        context.resizeWindowContext(20, 20)
+        let expected = try #require(CoverageMask(path: CGPath(rect: clip), rule: .winding, width: 20, height: 20))
+        #expect(context.clipCoverageError == nil)
+        #expect(Mirror(reflecting: context).descendant("clipMask") as? CoverageMask == expected)
+        context.restoreGState()
+        #expect(context.clipCoverageError == nil)
+        #expect(Mirror(reflecting: context).descendant("clipMask") as? CoverageMask == expected)
+    }
+
+    /// Confirms a failed coverage rebuild cannot paint outside the previous clip on a bitmap.
+    @Test
+    func failedCoverageRebuildDoesNotPaintUnclippedPixels() throws {
+        let context = try #require(CGContext(
+            data: nil,
+            width: 8,
+            height: 8,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: .sRGB,
+            bitmapInfo: 0
+        ))
+        context.data = Data(repeating: 0, count: 8 * 8 * 4)
+        context.clip(to: CGRect(x: 2, y: 2, width: 3, height: 3))
+        context.resizeWindowContext(0, 8)
+        context.setFillColor(.white)
+        context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        context.flush()
+        #expect(context.clipCoverageError == .rasterizationFailed)
+        #expect(context.data == Data(repeating: 0, count: 8 * 8 * 4))
+
+        context.resizeWindowContext(8, 8)
+        context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        context.flush()
+        let pixels = [UInt8](context.data)
+        let inside = (3 * 8 + 3) * 4
+        #expect(Array(pixels[inside..<(inside + 4)]) == [255, 255, 255, 255])
+        #expect(Array(pixels.prefix(4)) == [0, 0, 0, 0])
+    }
+
     /// Verifies that stroking captures the current line state and clears the path.
     @Test
     func strokePathRecordsStyleAndClearsPath() throws {

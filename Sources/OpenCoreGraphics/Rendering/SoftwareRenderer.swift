@@ -1383,6 +1383,9 @@ fileprivate enum ScanlineRasterizer {
 
 /// Stores per-pixel coverage for the current clipping region.
 struct CoverageMask: Equatable, Sendable {
+    /// A fail-closed mask that gives zero coverage at every coordinate.
+    static let empty = CoverageMask(width: 0, height: 0, values: [])
+
     /// The width of the covered bitmap in pixels.
     let width: Int
 

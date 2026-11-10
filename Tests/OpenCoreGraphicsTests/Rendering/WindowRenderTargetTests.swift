@@ -76,6 +76,229 @@ struct WindowRenderTargetTests {
         #expect(renderer.size == CGSize(width: 64, height: 48))
     }
 
+    /// Drains old-size work before resizing A even when B is the current context.
+    @Test
+    func resizesOwningContextAfterPendingCommands() throws {
+        let contextA = try #require(OpaquePointer(bitPattern: 0xA))
+        let contextB = try #require(OpaquePointer(bitPattern: 0xB))
+        let state = RecordingContextDriverState(contextA: contextA, contextB: contextB)
+        let selectorA = GLFWContextSelector.make(contextA, state.makeDriver())
+        let selectorB = GLFWContextSelector.make(contextB, state.makeDriver())
+        let renderer = RecordingContextRenderBackend(name: "A", contextState: state, pixels: [])
+        let target = WindowRenderTarget(size: CGSize(width: 8, height: 8), renderer: renderer)
+        target.contextSelector = selectorA
+        let context = CGContext(width: 8, height: 8)
+        context.renderTarget = target
+        let clip = CGRect(x: 1, y: 1, width: 5, height: 5)
+        context.clip(to: clip)
+        context.fill(CGRect(x: 2, y: 2, width: 2, height: 2))
+        #expect(selectorB.select() == nil)
+
+        let success = GLFWFramebufferResize.apply(
+            selectorA,
+            12,
+            10,
+            {
+                context.flush()
+                return target.flushBeforeResize()
+            },
+            { width, height in state.record("viewport(\(width)x\(height))", owner: "A") },
+            { width, height in
+                target.updateSize(CGSize(width: width, height: height))
+                context.resizeWindowContext(Int(width), Int(height))
+            }
+        )
+
+        #expect(success)
+        #expect(state.events == [
+            "select:A", "execute:A@A", "select:B", "select:A",
+            "select:A", "execute:A@A", "viewport(12x10):A@A", "select:A", "execute:A@A"
+        ])
+        #expect(renderer.executionSizes == [
+            CGSize(width: 8, height: 8),
+            CGSize(width: 8, height: 8),
+            CGSize(width: 12, height: 10)
+        ])
+        #expect(renderer.commands.count == 5)
+        #expect(Array(renderer.commands.suffix(2)) == [.resetClip, .clipRect(clip)])
+        #expect(context.width == 12)
+        #expect(context.height == 10)
+        #expect(context.boundingBoxOfClipPath == clip)
+    }
+
+    /// Leaves the viewport, dimensions, and queued commands untouched on selection failure.
+    @Test
+    func doesNotResizeWhenContextSelectionFails() throws {
+        let contextA = try #require(OpaquePointer(bitPattern: 0xA))
+        let contextB = try #require(OpaquePointer(bitPattern: 0xB))
+        let state = RecordingContextDriverState(contextA: contextA, contextB: contextB)
+        let selectorA = GLFWContextSelector.make(contextA, state.makeDriver())
+        let selectorB = GLFWContextSelector.make(contextB, state.makeDriver())
+        let renderer = RecordingContextRenderBackend(name: "A", contextState: state, pixels: [])
+        let target = WindowRenderTarget(size: CGSize(width: 8, height: 8), renderer: renderer)
+        target.contextSelector = selectorA
+        target.submit(.resetClip)
+        #expect(selectorB.select() == nil)
+        state.rejectsSelection = true
+        var viewportChanged = false
+        var stateChanged = false
+
+        let success = GLFWFramebufferResize.apply(
+            selectorA,
+            12,
+            10,
+            { target.flushBeforeResize() },
+            { _, _ in viewportChanged = true },
+            { _, _ in stateChanged = true }
+        )
+
+        #expect(success == false)
+        #expect(viewportChanged == false)
+        #expect(stateChanged == false)
+        #expect(target.size == CGSize(width: 8, height: 8))
+        #expect(renderer.commands.isEmpty)
+        state.rejectsSelection = false
+        target.flush()
+        #expect(renderer.commands == [.resetClip])
+    }
+
+    /// Keeps queued work at its old size if selection fails while draining the resize.
+    @Test
+    func doesNotResizeWhenDrainingPendingCommandsFails() throws {
+        let contextA = try #require(OpaquePointer(bitPattern: 0xA))
+        let contextB = try #require(OpaquePointer(bitPattern: 0xB))
+        let state = RecordingContextDriverState(contextA: contextA, contextB: contextB)
+        let selectorA = GLFWContextSelector.make(contextA, state.makeDriver())
+        let selectorB = GLFWContextSelector.make(contextB, state.makeDriver())
+        let renderer = RecordingContextRenderBackend(name: "A", contextState: state, pixels: [])
+        let target = WindowRenderTarget(size: CGSize(width: 8, height: 8), renderer: renderer)
+        target.contextSelector = selectorA
+        let context = CGContext(width: 8, height: 8)
+        context.renderTarget = target
+        context.fill(CGRect(x: 1, y: 1, width: 2, height: 2))
+        var viewportChanged = false
+        var stateChanged = false
+
+        let success = GLFWFramebufferResize.apply(
+            selectorA,
+            12,
+            10,
+            {
+                #expect(selectorB.select() == nil)
+                state.rejectsSelection = true
+                context.flush()
+                return target.flushBeforeResize()
+            },
+            { _, _ in viewportChanged = true },
+            { _, _ in stateChanged = true }
+        )
+
+        #expect(success == false)
+        #expect(viewportChanged == false)
+        #expect(stateChanged == false)
+        #expect(renderer.commands.isEmpty)
+        #expect(context.width == 8)
+        #expect(target.contextError == .selectionFailed)
+        state.rejectsSelection = false
+        target.flush()
+        #expect(renderer.commands.count == 1)
+        #expect(renderer.executionSizes == [CGSize(width: 8, height: 8)])
+    }
+
+    /// Retries one failed resize on readback without another callback and preserves command order.
+    @Test
+    func retriesFailedResizeOnReadbackWithoutAnotherCallback() throws {
+        let contextA = try #require(OpaquePointer(bitPattern: 0xA))
+        let contextB = try #require(OpaquePointer(bitPattern: 0xB))
+        let state = RecordingContextDriverState(contextA: contextA, contextB: contextB)
+        let selectorA = GLFWContextSelector.make(contextA, state.makeDriver())
+        let selectorB = GLFWContextSelector.make(contextB, state.makeDriver())
+        let renderer = RecordingContextRenderBackend(name: "A", contextState: state, pixels: [1, 2, 3, 4])
+        let target = WindowRenderTarget(size: CGSize(width: 8, height: 8), renderer: renderer)
+        target.contextSelector = selectorA
+        let context = CGContext(width: 8, height: 8)
+        context.renderTarget = target
+        let clip = CGRect(x: 1, y: 1, width: 5, height: 5)
+        context.clip(to: clip)
+        context.fill(CGRect(x: 1, y: 1, width: 1, height: 1))
+        #expect(selectorB.select() == nil)
+        state.rejectsSelection = true
+        context.flush()
+        context.resizeWindowContext(12, 10)
+        target.enqueueFramebufferResize(CGSize(width: 12, height: 10)) {
+            state.record("viewport(12x10)", owner: "A")
+        }
+        #expect(target.contextError == .selectionFailed)
+        #expect(target.size == CGSize(width: 8, height: 8))
+        let laterClip = CGRect(x: 2, y: 2, width: 2, height: 2)
+        context.clip(to: laterClip)
+        context.fill(CGRect(x: 2, y: 2, width: 1, height: 1))
+        context.flush()
+        #expect(renderer.commands.count == 2)
+        #expect(target.readPixels() == nil)
+        #expect(state.events.contains("viewport(12x10):A@A") == false)
+
+        state.rejectsSelection = false
+        #expect(target.readPixels() == Data([1, 2, 3, 4]))
+
+        #expect(target.contextError == nil)
+        #expect(target.size == CGSize(width: 12, height: 10))
+        #expect(context.width == 12)
+        #expect(context.height == 10)
+        #expect(renderer.executionSizes == [
+            CGSize(width: 8, height: 8), CGSize(width: 8, height: 8),
+            CGSize(width: 12, height: 10), CGSize(width: 12, height: 10)
+        ])
+        #expect(renderer.commands.count == 9)
+        #expect(Array(renderer.commands[3..<5]) == [.resetClip, .clipRect(clip)])
+        #expect(Array(renderer.commands[5..<8]) == [.resetClip, .clipRect(clip), .clipRect(laterClip)])
+        let viewportIndex = try #require(state.events.firstIndex(of: "viewport(12x10):A@A"))
+        #expect(state.events[viewportIndex - 1] == "execute:A@A")
+        #expect(state.events[viewportIndex + 1] == "execute:A@A")
+        #expect(state.events.last == "read:A@A")
+    }
+
+    /// Applies multiple failed events in order and ends at the newest physical dimensions.
+    @Test
+    func retriesMultipleResizeBarriersInCommandOrder() throws {
+        let contextA = try #require(OpaquePointer(bitPattern: 0xA))
+        let contextB = try #require(OpaquePointer(bitPattern: 0xB))
+        let state = RecordingContextDriverState(contextA: contextA, contextB: contextB)
+        let selector = GLFWContextSelector.make(contextA, state.makeDriver())
+        let renderer = RecordingContextRenderBackend(name: "A", contextState: state, pixels: [])
+        let target = WindowRenderTarget(size: CGSize(width: 8, height: 8), renderer: renderer)
+        target.contextSelector = selector
+        #expect(GLFWContextSelector.make(contextB, state.makeDriver()).select() == nil)
+        state.rejectsSelection = true
+        target.submit(.clipRect(CGRect(x: 1, y: 1, width: 1, height: 1)))
+        target.enqueueFramebufferResize(CGSize(width: 12, height: 10)) {
+            state.record("viewport1", owner: "A")
+        }
+        target.submit(.clipRect(CGRect(x: 2, y: 2, width: 2, height: 2)))
+        target.enqueueFramebufferResize(CGSize(width: 16, height: 14)) {
+            state.record("viewport2", owner: "A")
+        }
+        target.submit(.resetClip)
+
+        state.rejectsSelection = false
+        target.flush()
+
+        #expect(target.size == CGSize(width: 16, height: 14))
+        #expect(renderer.executionSizes == [
+            CGSize(width: 8, height: 8),
+            CGSize(width: 12, height: 10),
+            CGSize(width: 16, height: 14)
+        ])
+        #expect(renderer.commands == [
+            .clipRect(CGRect(x: 1, y: 1, width: 1, height: 1)),
+            .clipRect(CGRect(x: 2, y: 2, width: 2, height: 2)),
+            .resetClip
+        ])
+        let first = try #require(state.events.firstIndex(of: "viewport1:A@A"))
+        let second = try #require(state.events.firstIndex(of: "viewport2:A@A"))
+        #expect(first < second)
+    }
+
     /// Verifies a surface is presented after queued commands with stable texture identity and updated pixels.
     @Test
     func presentsSoftwareSurfaceAfterPendingCommands() throws {
@@ -484,6 +707,9 @@ private final class RecordingContextRenderBackend: CGRenderBackend, CGPixelSurfa
     /// The ordered commands executed by this renderer.
     private(set) var commands: [DrawCommand] = []
 
+    /// The framebuffer dimensions used for each executed command batch.
+    private(set) var executionSizes: [OpenCoreGraphics.CGSize] = []
+
     /// The number of software surfaces presented by this renderer.
     private(set) var presentationCount = 0
 
@@ -504,6 +730,7 @@ private final class RecordingContextRenderBackend: CGRenderBackend, CGPixelSurfa
     ///   - size: The render destination dimensions.
     func execute(_ commands: [DrawCommand], size: OpenCoreGraphics.CGSize) {
         self.commands.append(contentsOf: commands)
+        executionSizes.append(size)
         let contextState = self.contextState
         let name = self.name
         MainActor.assumeIsolated {

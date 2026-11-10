@@ -232,6 +232,19 @@ open class CGContext {
     /// The ordered device-space regions that define the current clip.
     private var clipRegions: [CGClipRegion] = []
 
+    /// The last clip reconstruction failure, cleared after successful reconstruction.
+    private(set) var clipCoverageError: CGClipCoverageError?
+
+    /// Updates window dimensions and rebuilds coverage for the existing device-space clip.
+    var resizeWindowContext: (Int, Int) -> Void {
+        { width, height in
+            self.width = width
+            self.height = height
+            self.clipMask = self.coverageForCurrentClip()
+            self.renderTarget?.setClipMask(self.clipMask)
+        }
+    }
+
     /// The current line cap style captured by graphics-state snapshots.
     private var lineCap: CGLineCap = .butt
 
@@ -669,6 +682,7 @@ open class CGContext {
     open func resetClip() {
         flush()
         clipMask = nil
+        clipCoverageError = nil
         clipRegions.removeAll(keepingCapacity: true)
         renderTarget?.setClipMask(nil)
         renderTarget?.setClipRegions(clipRegions)
@@ -682,12 +696,52 @@ open class CGContext {
         flush()
         if let clipMask, let intersection = clipMask.intersecting(mask) {
             self.clipMask = intersection
+            clipRegions.append(region)
+        } else if clipMask != nil {
+            clipRegions.append(region)
+            self.clipMask = coverageForCurrentClip()
         } else {
             clipMask = mask
+            clipRegions.append(region)
         }
-        clipRegions.append(region)
         renderTarget?.setClipMask(clipMask)
         renderTarget?.setClipRegions(clipRegions)
+    }
+
+    /// Rasterizes the current device-space clip for the context's current dimensions.
+    /// - Returns: The intersected mask, nil for no clip, or a fail-closed mask on failure.
+    private func coverageForCurrentClip() -> CoverageMask? {
+        clipCoverageError = nil
+        var result: CoverageMask?
+        for region in clipRegions {
+            let path: CGPath
+            let rule: CGPath.CGPathFillRule
+            switch region {
+            case let .rectangle(rect):
+                path = CGPath(rect: rect)
+                rule = .winding
+            case let .path(clipPath, fillRule):
+                path = clipPath
+                rule = fillRule
+            }
+            guard let next = CoverageMask(path: path, rule: rule, width: width, height: height) else {
+                return failedClipCoverage()
+            }
+            if let current = result {
+                guard let intersection = current.intersecting(next) else { return failedClipCoverage() }
+                result = intersection
+            } else {
+                result = next
+            }
+        }
+        return result
+    }
+
+    /// Records a clip reconstruction error and returns a mask that excludes all pixels.
+    private func failedClipCoverage() -> CoverageMask {
+        clipCoverageError = .rasterizationFailed
+        NSLog("OpenCoreGraphics clip coverage reconstruction failed for %ld x %ld pixels", width, height)
+        return .empty
     }
 
     /// Checks whether a transformed rectangular path can be represented by an axis-aligned scissor.
@@ -1308,6 +1362,11 @@ open class CGContext {
         renderingIntent = state.renderingIntent
         clipMask = state.clip
         clipRegions = state.clipRegions
+        if let clipMask, clipMask.width != width || clipMask.height != height {
+            self.clipMask = coverageForCurrentClip()
+        } else if clipMask == nil && clipRegions.isEmpty == false {
+            clipMask = coverageForCurrentClip()
+        }
         renderTarget?.setClipMask(clipMask)
         if clipRegionsChanged {
             renderTarget?.setClipRegions(clipRegions)

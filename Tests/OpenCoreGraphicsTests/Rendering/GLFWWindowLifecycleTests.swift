@@ -133,6 +133,90 @@ struct GLFWWindowLifecycleTests {
         #expect(pixelsBAgain == pixelsB)
     }
 
+    /// Resizes A with B current without disturbing B's viewport, clip, or framebuffer.
+    @Test
+    func resizingOneWindowPreservesTheOtherWindowAndItsOwnClip() throws {
+        let windowA = try CGWindow(frame: CGRect(x: 0, y: 0, width: 16, height: 16), title: "Resize A")
+        let windowB = try CGWindow(frame: CGRect(x: 0, y: 0, width: 16, height: 16), title: "Resize B")
+        defer {
+            windowA.destroy()
+            windowB.destroy()
+        }
+        let referenceA = try #require(windowA.windowRef)
+        let referenceB = try #require(windowB.windowRef)
+        let contextA = windowA.cgContext
+        let contextB = windowB.cgContext
+        let targetA = try #require(contextA.renderTarget)
+        let targetB = try #require(contextB.renderTarget)
+        let clipA = CGRect(x: 2, y: 2, width: 10, height: 10)
+        let clipB = CGRect(x: 1, y: 1, width: 8, height: 8)
+        windowA.backgroundColor = .black
+        windowB.backgroundColor = .black
+        windowA.clear()
+        windowB.clear()
+        contextA.clip(to: clipA)
+        contextA.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        contextA.fill(CGRect(x: 0, y: 0, width: 16, height: 16))
+        contextB.clip(to: clipB)
+        contextB.setFillColor(CGColor(red: 0, green: 1, blue: 0, alpha: 1))
+        contextB.fill(CGRect(x: 0, y: 0, width: 16, height: 16))
+        contextB.flush()
+        let pixelsBefore = try #require(targetB.readPixels())
+        let bInside = (3 * contextB.width + 3) * 4
+        let bOutside = (12 * contextB.width + 12) * 4
+        #expect(Array(pixelsBefore[bInside..<(bInside + 4)]) == [0, 255, 0, 255])
+        #expect(Array(pixelsBefore[bOutside..<(bOutside + 4)]) == [0, 0, 0, 255])
+        var viewportBefore = [GLint](repeating: 0, count: 4)
+        var scissorBefore = [GLint](repeating: 0, count: 4)
+        viewportBefore.withUnsafeMutableBufferPointer { glad_glGetIntegerv(GLenum(GL_VIEWPORT), $0.baseAddress) }
+        scissorBefore.withUnsafeMutableBufferPointer { glad_glGetIntegerv(GLenum(GL_SCISSOR_BOX), $0.baseAddress) }
+        #expect(glad_glIsEnabled(GLenum(GL_SCISSOR_TEST)) == GL_TRUE)
+
+        let callback = try #require(glfwSetFramebufferSizeCallback(referenceA, nil))
+        glfwSetFramebufferSizeCallback(referenceA, callback)
+        glfwSetWindowSize(referenceA, 24, 20)
+        glfwPollEvents()
+        var width: Int32 = 0
+        var height: Int32 = 0
+        glfwGetFramebufferSize(referenceA, &width, &height)
+        try #require(width > 0 && height > 0)
+        try #require(width != Int32(viewportBefore[2]) || height != Int32(viewportBefore[3]))
+        glfwMakeContextCurrent(referenceB)
+        callback(referenceA, width, height)
+        #expect(glfwGetCurrentContext() == referenceA)
+        #expect(contextA.width == Int(width))
+        #expect(contextA.height == Int(height))
+        #expect(targetA.size == CGSize(width: width, height: height))
+        #expect(contextA.boundingBoxOfClipPath == clipA)
+
+        glfwMakeContextCurrent(referenceB)
+        var viewportAfter = [GLint](repeating: 0, count: 4)
+        var scissorAfter = [GLint](repeating: 0, count: 4)
+        viewportAfter.withUnsafeMutableBufferPointer { glad_glGetIntegerv(GLenum(GL_VIEWPORT), $0.baseAddress) }
+        scissorAfter.withUnsafeMutableBufferPointer { glad_glGetIntegerv(GLenum(GL_SCISSOR_BOX), $0.baseAddress) }
+        #expect(viewportAfter == viewportBefore)
+        #expect(scissorAfter == scissorBefore)
+        #expect(glad_glIsEnabled(GLenum(GL_SCISSOR_TEST)) == GL_TRUE)
+        #expect(try #require(targetB.readPixels()) == pixelsBefore)
+
+        contextA.setFillColor(CGColor(red: 0, green: 0, blue: 1, alpha: 1))
+        contextA.fill(CGRect(x: 0, y: 0, width: Double(width), height: Double(height)))
+        contextA.flush()
+        let pixelsA = try #require(targetA.readPixels())
+        let inside = (3 * Int(width) + 3) * 4
+        let outside = (15 * Int(width) + 15) * 4
+        #expect(Array(pixelsA[inside..<(inside + 4)]) == [0, 0, 255, 255])
+        #expect(Array(pixelsA[outside..<(outside + 4)]) != [0, 0, 255, 255])
+        #expect(try #require(targetB.readPixels()) == pixelsBefore)
+
+        contextB.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        contextB.fill(CGRect(x: 0, y: 0, width: Double(contextB.width), height: Double(contextB.height)))
+        contextB.flush()
+        let pixelsBAfterDrawing = try #require(targetB.readPixels())
+        #expect(Array(pixelsBAfterDrawing[bInside..<(bInside + 4)]) == [255, 0, 0, 255])
+        #expect(Array(pixelsBAfterDrawing[bOutside..<(bOutside + 4)]) == [0, 0, 0, 255])
+    }
+
     /// Observes the private window renderer without retaining it during teardown.
     /// - Parameter window: The window owning the renderer.
     /// - Returns: A weak reference to its renderer, if one exists.

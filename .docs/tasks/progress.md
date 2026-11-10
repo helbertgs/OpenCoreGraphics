@@ -78,3 +78,13 @@
 - **Learnings for future iterations:**
   - Quando a seleção falha, alterações de clip precisam permanecer ordenadas junto aos desenhos pendentes; aplicar apenas o último clip reordena operações.
 ---
+
+## 2026-11-10 - US-006
+- Resize usa o contexto da janela proprietária, mantém barreiras ordenadas para comandos anteriores e posteriores e tenta novamente operações pendentes após falha de seleção.
+- Dimensões e cobertura do clip do CGContext são reconstruídas, inclusive ao restaurar estados salvos; falhas detectáveis de cobertura são registradas e impedem desenho fora do clip.
+- Driver falso verifica ordem, contexto e recuperação; GL real valida resize de A com B atual, viewport, clip e pixels de B preservados.
+- Validação: 207 testes na suíte padrão com concorrência estrita; 3 testes de ciclo de vida GL reais; build estrito; executor GL com duas suítes concluídas e sete cenas aprovadas; `git diff --check` passou. A suíte padrão ignora casos gráficos opt-in.
+- Files changed: `Sources/OpenCoreGraphics/2D Drawing/CGContext.swift`, `Sources/OpenCoreGraphics/Rendering/GL/WindowRenderTarget.swift`, `Sources/OpenCoreGraphics/Rendering/SoftwareRenderer.swift`, `CGClipCoverageError.swift`, `Sources/OpenCoreGraphics/Services/Window Services/CGWindow.swift`, `GLFWFramebufferResize.swift`, testes correspondentes e arquivos de progresso.
+- **Learnings for future iterations:**
+  - Após um resize físico, guardar dimensões e barreiras pendentes permite retomar no próximo desenho ou readback sem esperar outro callback.
+---
