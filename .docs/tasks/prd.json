@@ -727,8 +727,8 @@
         "Build e testes passam"
       ],
       "priority": 48,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "`SoftwareRenderer` rasteriza strokes via `Stroker` e `ScanlineRasterizer`; `CoverageMask` usa 8 bits por pixel e intersecta clips sucessivos. `CGContext.clip(using:)` salva/restaura a máscara em `CGGraphicsState` e descarrega comandos pendentes antes de alterações no clip para manter a ordem. Testes validam traço de largura 4, interseção de regiões e restauração do clip; `swift test` passou (128 testes em 25 suítes), sem warnings."
     },
     {
       "id": "US-049",

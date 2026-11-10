@@ -1,9 +1,12 @@
 import Foundation
 
-/// Renders filled paths into a bitmap surface without GPU dependencies.
+/// Renders paths into a bitmap surface without GPU dependencies.
 final class SoftwareRenderer: CGRenderBackend {
     /// The bitmap that receives rendered pixels.
     private let surface: PixelSurface
+
+    /// The optional coverage mask applied to subsequent drawing.
+    private var clipMask: CoverageMask?
 
     /// Creates a renderer for the supplied pixel storage.
     /// - Parameter surface: The bitmap that receives rendered output.
@@ -11,19 +14,24 @@ final class SoftwareRenderer: CGRenderBackend {
         self.surface = surface
     }
 
-    /// Executes fill commands in submission order.
+    /// Executes fill and stroke commands in submission order.
     /// - Parameters:
     ///   - commands: The operations to render.
     ///   - size: The bitmap dimensions in pixels.
     func execute(_ commands: [DrawCommand], size: CGSize) {
         for command in commands {
-            guard case let .fillPath(path, rule, color, blendMode) = command else {
+            switch command {
+            case let .fillPath(path, rule, color, blendMode):
+                if let rectangle = alignedRectangle(in: path) {
+                    fill(rectangle, color: color, blendMode: blendMode)
+                } else {
+                    fill(PathFlattener.flatten(path), rule: rule, color: color, blendMode: blendMode)
+                }
+            case let .strokePath(path, color, style, blendMode):
+                let outlines = Stroker.outline(PathFlattener.flatten(path), style: style)
+                fill(outlines, rule: .winding, color: color, blendMode: blendMode)
+            case .drawImage, .clip, .glyphs:
                 continue
-            }
-            if let rectangle = alignedRectangle(in: path) {
-                fill(rectangle, color: color, blendMode: blendMode)
-            } else {
-                fill(path, rule: rule, color: color, blendMode: blendMode)
             }
         }
     }
@@ -32,6 +40,12 @@ final class SoftwareRenderer: CGRenderBackend {
     /// - Returns: A copy of all pixel rows, including row padding.
     func readPixels() -> Data {
         Data(bytes: surface.dataPointer, count: surface.byteCount)
+    }
+
+    /// Replaces the coverage mask applied to subsequent drawing.
+    /// - Parameter mask: The current clip coverage, or nil to remove clipping.
+    func setClipMask(_ mask: CoverageMask?) {
+        clipMask = mask
     }
 
     /// Fills an aligned rectangle using clear or premultiplied source-over composition.
@@ -51,10 +65,11 @@ final class SoftwareRenderer: CGRenderBackend {
 
         guard firstX < lastX, firstY < lastY else { return }
         if blendMode == .clear {
-            let clearPixel = PixelSurface.Pixel(red: 0, green: 0, blue: 0, alpha: 0)
             for y in firstY..<lastY {
                 for x in firstX..<lastX {
-                    surface.setPixel(clearPixel, x: x, y: y)
+                    let coverage = Double(clippingCoverage(atX: x, y: y)) / 255
+                    guard coverage > 0 else { continue }
+                    clear(x: x, y: y, coverage: coverage)
                 }
             }
             return
@@ -66,7 +81,9 @@ final class SoftwareRenderer: CGRenderBackend {
 
         for y in firstY..<lastY {
             for x in firstX..<lastX {
-                composite(source, coverage: 1, x: x, y: y)
+                let coverage = Double(clippingCoverage(atX: x, y: y)) / 255
+                guard coverage > 0 else { continue }
+                composite(source, coverage: coverage, x: x, y: y)
             }
         }
     }
@@ -77,9 +94,9 @@ final class SoftwareRenderer: CGRenderBackend {
     ///   - rule: The fill rule used to determine interior regions.
     ///   - color: The source color.
     ///   - blendMode: The compositing operation.
-    private func fill(_ path: CGPath, rule: CGPath.CGPathFillRule, color: CGColor, blendMode: CGBlendMode) {
+    private func fill(_ polylines: [Polyline], rule: CGPath.CGPathFillRule, color: CGColor, blendMode: CGBlendMode) {
         guard let coverage = ScanlineRasterizer.coverage(
-            for: PathFlattener.flatten(path),
+            for: polylines,
             rule: rule,
             width: surface.width,
             height: surface.height
@@ -91,8 +108,10 @@ final class SoftwareRenderer: CGRenderBackend {
             for y in 0..<surface.height {
                 for x in 0..<surface.width {
                     let value = coverage[y * surface.width + x]
-                    guard value > 0 else { continue }
-                    clear(x: x, y: y, coverage: Double(value) / 255)
+                    let clipCoverage = clippingCoverage(atX: x, y: y)
+                    let combinedCoverage = (Int(value) * Int(clipCoverage) + 127) / 255
+                    guard combinedCoverage > 0 else { continue }
+                    clear(x: x, y: y, coverage: Double(combinedCoverage) / 255)
                 }
             }
             return
@@ -105,10 +124,22 @@ final class SoftwareRenderer: CGRenderBackend {
         for y in 0..<surface.height {
             for x in 0..<surface.width {
                 let value = coverage[y * surface.width + x]
-                guard value > 0 else { continue }
-                composite(source, coverage: Double(value) / 255, x: x, y: y)
+                let clipCoverage = clippingCoverage(atX: x, y: y)
+                let combinedCoverage = (Int(value) * Int(clipCoverage) + 127) / 255
+                guard combinedCoverage > 0 else { continue }
+                composite(source, coverage: Double(combinedCoverage) / 255, x: x, y: y)
             }
         }
+    }
+
+    /// Returns full coverage without a clip and zero outside an active mask.
+    /// - Parameters:
+    ///   - x: The destination pixel column.
+    ///   - y: The destination pixel row.
+    /// - Returns: The coverage byte that limits this destination pixel.
+    private func clippingCoverage(atX x: Int, y: Int) -> UInt8 {
+        guard let clipMask else { return 255 }
+        return clipMask.coverage(atX: x, y: y) ?? 0
     }
 
     /// Applies source-over composition using a premultiplied color and coverage.
@@ -272,6 +303,7 @@ fileprivate enum ScanlineRasterizer {
                             sampleCoverage[pixelY * width + pixelX] += 1
                         }
                     }
+
                 }
             }
         }
@@ -311,5 +343,70 @@ fileprivate enum ScanlineRasterizer {
 
         crossings.sort { $0.x < $1.x }
         return crossings
+    }
+}
+
+/// Stores per-pixel coverage for the current clipping region.
+struct CoverageMask: Equatable, Sendable {
+    /// The width of the covered bitmap in pixels.
+    let width: Int
+
+    /// The height of the covered bitmap in pixels.
+    let height: Int
+
+    /// Row-major coverage values with one byte per pixel.
+    private let values: [UInt8]
+
+    /// Creates a coverage mask by rasterizing a path with the selected fill rule.
+    /// - Parameters:
+    ///   - path: The path defining the clipping region.
+    ///   - rule: The fill rule used to determine interior regions.
+    ///   - width: The clipping surface width in pixels.
+    ///   - height: The clipping surface height in pixels.
+    /// - Returns: A mask when its dimensions are valid.
+    init?(path: CGPath, rule: CGPath.CGPathFillRule, width: Int, height: Int) {
+        guard let values = ScanlineRasterizer.coverage(
+            for: PathFlattener.flatten(path),
+            rule: rule,
+            width: width,
+            height: height
+        ) else {
+            return nil
+        }
+        self.width = width
+        self.height = height
+        self.values = values
+    }
+
+    /// Intersects this mask with another mask of matching dimensions.
+    /// - Parameter other: The additional clipping coverage to intersect.
+    /// - Returns: The combined mask, or nil if the dimensions differ.
+    func intersecting(_ other: CoverageMask) -> CoverageMask? {
+        guard width == other.width, height == other.height else { return nil }
+        let combinedValues = zip(values, other.values).map {
+            UInt8((Int($0) * Int($1) + 127) / 255)
+        }
+        return CoverageMask(width: width, height: height, values: combinedValues)
+    }
+
+    /// Returns coverage at a pixel coordinate.
+    /// - Parameters:
+    ///   - x: The pixel column.
+    ///   - y: The pixel row.
+    /// - Returns: The coverage byte, or nil when the coordinate is outside the mask.
+    fileprivate func coverage(atX x: Int, y: Int) -> UInt8? {
+        guard x >= 0, x < width, y >= 0, y < height else { return nil }
+        return values[y * width + x]
+    }
+
+    /// Creates a mask from already-combined coverage bytes.
+    /// - Parameters:
+    ///   - width: The clipping surface width in pixels.
+    ///   - height: The clipping surface height in pixels.
+    ///   - values: Row-major per-pixel coverage values.
+    private init(width: Int, height: Int, values: [UInt8]) {
+        self.width = width
+        self.height = height
+        self.values = values
     }
 }

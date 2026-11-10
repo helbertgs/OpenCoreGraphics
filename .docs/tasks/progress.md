@@ -7,6 +7,7 @@
 - As conversões entre espaço de usuário e pixels usam `ctm`; `CGAffineTransform.inverse` não reverte corretamente translações 2D, então o contexto calcula a inversa 2D localmente.
 - `CGRenderTarget` e `CGRenderBackend` não são isolados por ator, para permitir renderização síncrona em bitmap. O target de janela mantém seu estado no `MainActor` e usa `MainActor.assumeIsolated` nos requisitos síncronos; o backend OpenGL aplica a mesma fronteira ao acessar o contexto GL.
 - O renderer de bitmap mantém o fast path para retângulos alinhados e rasteriza outras formas pelo `PathFlattener` e amostragem scanline 4×4; cobertura parcial é aplicada como alpha antes do source-over.
+- Mudanças no clip do bitmap descarregam os comandos pendentes antes de substituir a máscara; isso mantém a ordem de desenho quando estados são salvos e restaurados.
 - O working tree tem trabalho em andamento do usuário (arquivos novos/movidos ainda não commitados). Os commits das stories incluem **apenas** os arquivos tocados pela story, mais `.docs/tasks/prd.json` e `progress.md`.
 - Valores `struct` que controlam memória alocada usam um proprietário por referência com `deinit`; cópias do valor compartilham a alocação sem duplicar nem liberar o ponteiro prematuramente.
 
@@ -448,4 +449,14 @@
 - **Learnings for future iterations:**
   - Preencha cada subpath fechado implicitamente, inclusive os que `PathFlattener` reporta como abertos, conforme o comportamento do preenchimento de caminhos.
   - Os samples 4×4 são deslocados para o interior de cada subpixel; a regra half-open nas interseções evita contar vértices duas vezes no scanline.
+---
+
+## 2026-11-10 - US-048
+- O `SoftwareRenderer` rasteriza strokes usando `Stroker` e `ScanlineRasterizer`, depois aplica o source-over com a cobertura resultante.
+- Criada `CoverageMask` com um byte por pixel; clips sucessivos são intersectados e a máscara é salva/restaurada junto com `CGGraphicsState`.
+- `CGContext.clip(using:)` descarrega comandos pendentes ao alterar o clip, preservando a ordem de desenho. Testes cobrem traço horizontal com quatro linhas de pixels, interseção de clip 4×4 e restauração do clip anterior; `swift test` passou (128 testes em 25 suítes), sem warnings.
+- Files changed: `Sources/OpenCoreGraphics/Rendering/SoftwareRenderer.swift`, `Sources/OpenCoreGraphics/Rendering/CGRenderTarget.swift`, `Sources/OpenCoreGraphics/Rendering/BitmapRenderTarget.swift`, `Sources/OpenCoreGraphics/2D Drawing/CGContext.swift`, `Sources/OpenCoreGraphics/Services/Window Services/CGGraphicsState.swift`, `Tests/OpenCoreGraphicsTests/Rendering/SoftwareRendererTests.swift`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
+- **Learnings for future iterations:**
+  - O clip bitmap é aplicado diretamente ao `BitmapRenderTarget`; a integração do mesmo estado com OpenGL e a API pública fica para US-053.
+  - Descarregue o alvo antes de alterar uma máscara compartilhada pelo renderer; comandos anteriores devem manter o estado de clip capturado quando foram submetidos.
 ---

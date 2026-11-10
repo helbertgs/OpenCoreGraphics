@@ -44,8 +44,8 @@ struct CGGraphicsState: Sendable {
     /// The method used to map colors to the destination color space.
     var renderingIntent: CGColorRenderingIntent = .defaultIntent
 
-    /// The clipping path, or nil when no path has been applied.
-    var clip: CGPath?
+    /// The clipping coverage mask, or nil when no clipping has been applied.
+    var clip: CoverageMask?
 
     /// The selected font's name, or nil when no font has been selected.
     var font: String?

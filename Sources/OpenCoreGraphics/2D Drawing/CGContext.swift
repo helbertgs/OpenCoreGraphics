@@ -226,8 +226,8 @@ open class CGContext {
     /// The stack of saved graphics-state snapshots.
     private var graphicsStateStack: [CGGraphicsState] = []
 
-    /// The current clipping path captured by graphics-state snapshots.
-    private var clip: CGPath?
+    /// The current clipping coverage captured by graphics-state snapshots.
+    private var clipMask: CoverageMask?
 
     /// The current line cap style captured by graphics-state snapshots.
     private var lineCap: CGLineCap = .butt
@@ -490,6 +490,22 @@ open class CGContext {
         guard let path = self.path else { return }
         pendingDrawCommands.append(.fillPath(path: path, rule: rule, color: fillColor, blendMode: blendMode))
         self.path = nil
+    }
+
+    /// Intersects the current clipping region with the current path.
+    /// - Parameter rule: The fill rule used to determine the path's interior.
+    func clip(using rule: CGPath.CGPathFillRule = .winding) {
+        guard let path else { return }
+        self.path = nil
+        guard let newMask = CoverageMask(path: path, rule: rule, width: width, height: height) else { return }
+
+        flush()
+        if let clipMask, let intersection = clipMask.intersecting(newMask) {
+            self.clipMask = intersection
+        } else {
+            clipMask = newMask
+        }
+        renderTarget?.setClipMask(clipMask)
     }
 
     /// Paints a line along the current path.
@@ -928,6 +944,9 @@ open class CGContext {
             return
         }
 
+        if state.clip != clipMask {
+            flush()
+        }
         restoreGraphicsState(state)
     }
 
@@ -948,7 +967,7 @@ open class CGContext {
         state.blendMode = blendMode
         state.interpolationQuality = interpolationQuality
         state.renderingIntent = renderingIntent
-        state.clip = clip
+        state.clip = clipMask
         state.font = font?.fullName
         state.fontSize = fontSize
         state.characterSpacing = characterSpacing
@@ -973,7 +992,8 @@ open class CGContext {
         blendMode = state.blendMode
         interpolationQuality = state.interpolationQuality
         renderingIntent = state.renderingIntent
-        clip = state.clip
+        clipMask = state.clip
+        renderTarget?.setClipMask(clipMask)
         font = state.font.flatMap(CGFont.init)
         fontSize = state.fontSize
         characterSpacing = state.characterSpacing

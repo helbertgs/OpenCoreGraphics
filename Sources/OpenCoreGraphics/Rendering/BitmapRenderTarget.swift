@@ -32,6 +32,12 @@ final class BitmapRenderTarget: CGRenderTarget {
         renderer.readPixels()
     }
 
+    /// Updates the mask used by subsequent bitmap rendering.
+    /// - Parameter mask: The current clip coverage, or nil to remove clipping.
+    func setClipMask(_ mask: CoverageMask?) {
+        renderer.setClipMask(mask)
+    }
+
     /// Renders and removes the commands accumulated for this bitmap.
     func flush() {
         renderer.execute(pendingCommands, size: size)

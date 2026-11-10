@@ -76,6 +76,72 @@ struct SoftwareRendererTests {
         #expect(pixel(at: 9, y: 9, in: Array(context.data), width: 20)[3] == expectedAlpha)
     }
 
+    /// Verifies a horizontal stroke of width four covers exactly four rows.
+    @Test
+    func rasterizesFourPixelWideHorizontalStroke() throws {
+        let context = try #require(makeContext())
+        context.setStrokeColor(.black)
+        context.setLineWidth(4)
+        context.beginPath()
+        context.move(to: CGPoint(x: 0, y: 4))
+        context.addLine(to: CGPoint(x: 8, y: 4))
+        context.strokePath()
+        context.flush()
+
+        let pixels = Array(context.data)
+        for y in 2..<6 {
+            #expect(pixel(at: 4, y: y, in: pixels)[3] == 255)
+        }
+        #expect(pixel(at: 4, y: 1, in: pixels)[3] == 0)
+        #expect(pixel(at: 4, y: 6, in: pixels)[3] == 0)
+    }
+
+    /// Verifies clip masks intersect and only render into their shared region.
+    @Test
+    func clipsFillToTheIntersectionOfClipPaths() throws {
+        let context = try #require(makeContext())
+        context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        context.beginPath()
+        context.addRect(CGRect(x: 0, y: 0, width: 6, height: 6))
+        context.clip()
+        context.beginPath()
+        context.addRect(CGRect(x: 0, y: 0, width: 4, height: 4))
+        context.clip()
+        context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        context.flush()
+
+        let pixels = Array(context.data)
+        #expect(pixel(at: 3, y: 3, in: pixels)[3] == 255)
+        #expect(pixel(at: 4, y: 3, in: pixels)[3] == 0)
+        #expect(pixel(at: 3, y: 4, in: pixels)[3] == 0)
+        #expect(pixel(at: 7, y: 7, in: pixels)[3] == 0)
+    }
+
+    /// Verifies restoring graphics state restores the previous clipping mask.
+    @Test
+    func restoreGStateRestoresPreviousClipMask() throws {
+        let context = try #require(makeContext())
+        context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        context.beginPath()
+        context.addRect(CGRect(x: 0, y: 0, width: 6, height: 6))
+        context.clip()
+
+        context.saveGState()
+        context.beginPath()
+        context.addRect(CGRect(x: 0, y: 0, width: 4, height: 4))
+        context.clip()
+        context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        context.restoreGState()
+
+        context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        context.flush()
+
+        let pixels = Array(context.data)
+        #expect(pixel(at: 5, y: 5, in: pixels)[3] == 255)
+        #expect(pixel(at: 6, y: 5, in: pixels)[3] == 0)
+        #expect(pixel(at: 7, y: 7, in: pixels)[3] == 0)
+    }
+
     /// Creates an 8×8 in-memory bitmap context.
     /// - Returns: The allocated bitmap context, or nil when creation fails.
     private func makeContext() -> CGContext? {

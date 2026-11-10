@@ -13,11 +13,19 @@ protocol CGRenderTarget {
     /// - Returns: Pixel bytes, or nil when the target does not produce pixel data.
     func readPixels() -> Data?
 
+    /// Replaces the coverage mask used to clip subsequent rendering.
+    /// - Parameter mask: The current clip coverage, or nil to remove clipping.
+    func setClipMask(_ mask: CoverageMask?)
+
     /// Completes rendering for the commands submitted since the previous flush.
     func flush()
 }
 
 extension CGRenderTarget {
+    /// Does nothing for targets that do not support coverage clipping.
+    /// - Parameter mask: The current clip coverage, or nil to remove clipping.
+    func setClipMask(_ mask: CoverageMask?) { }
+
     /// Does nothing for targets that render each submitted command immediately.
     func flush() { }
 }
