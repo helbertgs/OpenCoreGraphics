@@ -202,4 +202,12 @@
 - Falhas em `glfwInit`, `glfwCreateWindow` e `gladLoaderLoadGL` são diferenciadas; falhas após a retenção liberam a janela e a referência GLFW.
 - O Sample usa `try CGWindow(...)` e `CGWindow.swift` não contém `fatalError`.
 - Testes verificam que os três erros de criação são valores distintos; `swift test` passou (56 testes em 14 suítes).
+
+---
+
+## 2026-11-10 - US-021
+- Preenchidos os shaders vazios `Resources/default/vertex.glsl` e `fragment.glsl`; adicionados os shaders de imagem com posição, coordenada de textura e sampler.
+- Criado `CGShaderSource` para carregar GLSL por `Bundle.module`; arquivo ausente lança `CGShaderSourceError.resourceNotFound`.
+- Testes carregam os quatro recursos empacotados, verificam conteúdo e `#version 330 core`, e cobrem recurso ausente.
+- `swift test` passou (58 testes em 15 suítes).
 ---

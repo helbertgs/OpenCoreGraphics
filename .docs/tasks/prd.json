@@ -313,8 +313,8 @@
         "Build e testes passam"
       ],
       "priority": 21,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Adicionados os shaders default/image com GLSL 330, projeção, cor uniforme e textura conforme o tipo. CGShaderSource lê os arquivos empacotados por Bundle.module e reporta CGShaderSourceError.resourceNotFound. Testes validam os quatro arquivos e erro de recurso ausente. swift test passou com 58 testes em 15 suítes."
     },
     {
       "id": "US-022",
