@@ -34,8 +34,8 @@
         "Typecheck passes"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Relatórios por cena e buffers de divergência, com host AppKit de teste inicializado antes do async main. A comparação GL terminou com resumo conclusivo e cinco falhas visuais, ainda a diagnosticar na US-003; testes padrão e concorrência estrita passaram."
     },
     {
       "id": "US-003",

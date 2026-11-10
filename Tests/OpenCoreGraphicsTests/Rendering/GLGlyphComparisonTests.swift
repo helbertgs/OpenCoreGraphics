@@ -37,6 +37,15 @@ struct GLGlyphComparisonTests {
 
         let glPixels = try #require(glContext.renderTarget?.readPixels())
         let difference = try #require(meanChannelDifference(glPixels, softwareContext.data))
+        _ = try GLComparisonReport(
+            scene: "glyphs",
+            width: glContext.width,
+            height: glContext.height,
+            difference: difference,
+            tolerance: 4.0 / 255.0,
+            glPixels: glPixels,
+            softwarePixels: softwareContext.data
+        )
         #expect(difference <= 4.0 / 255.0, "Glyph rendering mean channel difference was \(difference)")
     }
 

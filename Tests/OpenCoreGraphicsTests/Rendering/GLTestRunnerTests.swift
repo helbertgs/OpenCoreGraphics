@@ -60,13 +60,27 @@ struct GLTestRunnerTests {
     @Test
     private func failureWithZeroExitIsRejected() throws {
         let report = """
-        ✘ Test comparesSharedScenesAcrossBackends() failed after 0.001 seconds.
+        ✘ Test comparesSharedScenesAcrossBackends() failed after 0.001 seconds with 1 issue.
         ✔ Test comparesGlyphRenderingAcrossBackends() passed after 0.001 seconds.
-        ✘ Test run with 2 tests in 2 suites failed after 0.001 seconds.
+        ✘ Test run with 2 tests in 2 suites failed after 0.001 seconds with 1 issue.
         """
         let result = try run("puts \(String(reflecting: report))")
         #expect(result.status == 1)
         #expect(result.output.contains("GL runner: FAILED"))
+    }
+
+    /// Recognizes the Swift Testing summary suffix used when assertions fail.
+    @Test
+    private func failureWithIssueCountIsComplete() throws {
+        let report = """
+        ✘ Test comparesSharedScenesAcrossBackends() failed after 0.001 seconds with 5 issues.
+        ✔ Test comparesGlyphRenderingAcrossBackends() passed after 0.001 seconds.
+        ✘ Test run with 2 tests in 2 suites failed after 0.001 seconds with 5 issues.
+        """
+        let result = try run("puts \(String(reflecting: report)); exit 1")
+        #expect(result.status == 1)
+        #expect(result.output.contains("GL runner: FAILED"))
+        #expect(result.output.contains("GL runner: INCOMPLETE") == false)
     }
 
     /// Rejects a successful exit when the final test report is missing.
@@ -90,9 +104,9 @@ struct GLTestRunnerTests {
     private func unavailableGraphicsIsReportedSeparately() throws {
         let report = """
         GL_RUNNER_GRAPHICS_UNAVAILABLE: glfwInitFailed
-        ✘ Test comparesSharedScenesAcrossBackends() failed after 0.001 seconds.
+        ✘ Test comparesSharedScenesAcrossBackends() failed after 0.001 seconds with 1 issue.
         ✔ Test comparesGlyphRenderingAcrossBackends() passed after 0.001 seconds.
-        ✘ Test run with 2 tests in 2 suites failed after 0.001 seconds.
+        ✘ Test run with 2 tests in 2 suites failed after 0.001 seconds with 1 issue.
         """
         let result = try run("puts \(String(reflecting: report)); exit 1")
         #expect(result.status == 2)
@@ -108,6 +122,7 @@ struct GLTestRunnerTests {
         """
         let result = try run("puts \(String(reflecting: report))")
         #expect(result.status == 1)
+        #expect(result.output.contains("GL runner: SKIPPED"))
     }
 
     /// Rejects termination by a signal rather than treating it as success.

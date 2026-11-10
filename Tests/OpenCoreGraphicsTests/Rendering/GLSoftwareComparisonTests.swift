@@ -41,6 +41,15 @@ struct GLSoftwareComparisonTests {
             let difference = try #require(meanChannelDifference(glPixels, softwarePixels))
             let tolerance = scene.hasCurvedEdges ? 4.0 / 255.0 : 2.0 / 255.0
 
+            _ = try GLComparisonReport(
+                scene: scene.rawValue,
+                width: glContext.width,
+                height: glContext.height,
+                difference: difference,
+                tolerance: tolerance,
+                glPixels: glPixels,
+                softwarePixels: softwarePixels
+            )
             #expect(
                 difference <= tolerance,
                 "\(scene.rawValue) mean channel difference \(difference), allowed \(tolerance)"

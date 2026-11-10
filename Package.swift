@@ -36,6 +36,12 @@ let package = Package(
             name: "OpenCoreGraphicsSTB",
             publicHeadersPath: "include"
         ),
+        .target(
+            name: "OpenCoreGraphicsGLTestBootstrap",
+            path: "Tests/OpenCoreGraphicsGLTestBootstrap",
+            publicHeadersPath: "include",
+            linkerSettings: [.linkedFramework("AppKit", .when(platforms: [.macOS]))]
+        ),
         .executableTarget(
             name: "OpenCoreGraphicsSample",
             dependencies: [
@@ -47,7 +53,10 @@ let package = Package(
         ),
         .testTarget(
             name: "OpenCoreGraphicsTests",
-            dependencies: ["OpenCoreGraphics"],
+            dependencies: [
+                "OpenCoreGraphics",
+                .target(name: "OpenCoreGraphicsGLTestBootstrap", condition: .when(platforms: [.macOS]))
+            ],
             resources: [
                 .copy("Resources")
             ]

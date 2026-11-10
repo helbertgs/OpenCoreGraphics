@@ -20,7 +20,13 @@ rescue OptionParser::ParseError => error
 end
 
 command = ARGV.empty? ? ["swift", "test", "--filter", "GLSoftwareComparisonTests|GLGlyphComparisonTests"] : ARGV
-environment = { "OPENCOREGRAPHICS_RUN_GL_COMPARISON" => "1" }
+artifacts_root = ENV["OPENCOREGRAPHICS_GL_ARTIFACTS"] || File.expand_path("../.build/gl-comparison", __dir__)
+artifacts = File.join(File.expand_path(artifacts_root), "run-#{Time.now.utc.strftime('%Y%m%dT%H%M%S')}-#{Process.pid}")
+environment = {
+  "OPENCOREGRAPHICS_RUN_GL_COMPARISON" => "1",
+  "OPENCOREGRAPHICS_GL_ARTIFACTS" => artifacts
+}
+puts "GL runner: artifacts directory: #{artifacts}"
 reader, writer = IO.pipe
 
 begin
@@ -83,18 +89,22 @@ unless status.exited?
   exit 1
 end
 
-complete = output.match?(/^.*Test run with 2 tests in 2 suites (?:passed|failed) after .+ seconds\.\s*$/)
+complete = output.match?(/^.*Test run with 2 tests in 2 suites (?:passed|failed) after .+ seconds(?: with \d+ issues?)?\.\s*$/)
 if !complete
   warn "GL runner: INCOMPLETE: missing final Swift Testing result for both GL suites."
   exit 1
 end
 
 unavailable = output.scan(/^GL_RUNNER_GRAPHICS_UNAVAILABLE: (.+)$/).flatten
-failed_tests = output.scan(/^.*Test (?:comparesSharedScenesAcrossBackends|comparesGlyphRenderingAcrossBackends)\(\) failed after .+ seconds\.\s*$/)
+failed_tests = output.scan(/^.*Test (?:comparesSharedScenesAcrossBackends|comparesGlyphRenderingAcrossBackends)\(\) failed after .+ seconds(?: with \d+ issues?)?\.\s*$/)
 if !unavailable.empty? && unavailable.length == failed_tests.length &&
    !output.match?(/^.*(?:Expectation failed|Issue recorded|skipped)\b/i)
   warn "GL runner: GRAPHICS_UNAVAILABLE: #{unavailable.uniq.join(', ')}"
   exit 2
+end
+
+if output.match?(/^.*(?:Suite|Test) .* skipped\.\s*$/)
+  warn "GL runner: SKIPPED: one or more GL tests did not run."
 end
 
 passed = [
