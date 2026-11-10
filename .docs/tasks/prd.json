@@ -743,8 +743,8 @@
         "Build e testes passam"
       ],
       "priority": 49,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "SoftwareRenderer amostra imagens pelo quad afim inverso, usa nearest-neighbor para .none, bilinear pré-multiplicado nas demais qualidades e repete pixels quando byTiling é true. Os 24 modos separáveis foram implementados; hue, saturation, color e luminosity estão documentados como fallback para normal. Testes cobrem os 28 modos com tolerância de ±1, imagem 2×2 ampliada, shear, tiling e interpolação com alpha. `swift test` passou (134 testes em 25 suítes), `swift build --target OpenCoreGraphicsSample` e `git diff --check` passaram."
     },
     {
       "id": "US-050",

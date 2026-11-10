@@ -30,7 +30,15 @@ final class SoftwareRenderer: CGRenderBackend {
             case let .strokePath(path, color, style, blendMode):
                 let outlines = Stroker.outline(PathFlattener.flatten(path), style: style)
                 fill(outlines, rule: .winding, color: color, blendMode: blendMode)
-            case .drawImage, .clip, .glyphs:
+            case let .drawImage(image, destination, interpolationQuality, byTiling, blendMode):
+                drawImage(
+                    image,
+                    destination: destination,
+                    interpolationQuality: interpolationQuality,
+                    byTiling: byTiling,
+                    blendMode: blendMode
+                )
+            case .clip, .glyphs:
                 continue
             }
         }
@@ -48,7 +56,7 @@ final class SoftwareRenderer: CGRenderBackend {
         clipMask = mask
     }
 
-    /// Fills an aligned rectangle using clear or premultiplied source-over composition.
+    /// Fills an aligned rectangle using the selected compositing operation.
     /// - Parameters:
     ///   - rectangle: The pixel-aligned rectangle to fill.
     ///   - color: The source color.
@@ -64,26 +72,19 @@ final class SoftwareRenderer: CGRenderBackend {
         let lastY = Int(maximumY)
 
         guard firstX < lastX, firstY < lastY else { return }
+        let source: [Double]
         if blendMode == .clear {
-            for y in firstY..<lastY {
-                for x in firstX..<lastX {
-                    let coverage = Double(clippingCoverage(atX: x, y: y)) / 255
-                    guard coverage > 0 else { continue }
-                    clear(x: x, y: y, coverage: coverage)
-                }
-            }
-            return
-        }
-        guard blendMode == .normal,
-              let source = rgbaComponents(for: color) else {
-            return
+            source = [0, 0, 0, 0]
+        } else {
+            guard let components = rgbaComponents(for: color) else { return }
+            source = components
         }
 
         for y in firstY..<lastY {
             for x in firstX..<lastX {
                 let coverage = Double(clippingCoverage(atX: x, y: y)) / 255
                 guard coverage > 0 else { continue }
-                composite(source, coverage: coverage, x: x, y: y)
+                composite(source, coverage: coverage, blendMode: blendMode, x: x, y: y)
             }
         }
     }
@@ -104,21 +105,12 @@ final class SoftwareRenderer: CGRenderBackend {
             return
         }
 
+        let source: [Double]
         if blendMode == .clear {
-            for y in 0..<surface.height {
-                for x in 0..<surface.width {
-                    let value = coverage[y * surface.width + x]
-                    let clipCoverage = clippingCoverage(atX: x, y: y)
-                    let combinedCoverage = (Int(value) * Int(clipCoverage) + 127) / 255
-                    guard combinedCoverage > 0 else { continue }
-                    clear(x: x, y: y, coverage: Double(combinedCoverage) / 255)
-                }
-            }
-            return
-        }
-        guard blendMode == .normal,
-              let source = rgbaComponents(for: color) else {
-            return
+            source = [0, 0, 0, 0]
+        } else {
+            guard let components = rgbaComponents(for: color) else { return }
+            source = components
         }
 
         for y in 0..<surface.height {
@@ -127,7 +119,13 @@ final class SoftwareRenderer: CGRenderBackend {
                 let clipCoverage = clippingCoverage(atX: x, y: y)
                 let combinedCoverage = (Int(value) * Int(clipCoverage) + 127) / 255
                 guard combinedCoverage > 0 else { continue }
-                composite(source, coverage: Double(combinedCoverage) / 255, x: x, y: y)
+                composite(
+                    source,
+                    coverage: Double(combinedCoverage) / 255,
+                    blendMode: blendMode,
+                    x: x,
+                    y: y
+                )
             }
         }
     }
@@ -142,44 +140,463 @@ final class SoftwareRenderer: CGRenderBackend {
         return clipMask.coverage(atX: x, y: y) ?? 0
     }
 
-    /// Applies source-over composition using a premultiplied color and coverage.
+    /// Draws an image into an affine destination quad using inverse-coordinate sampling.
+    /// - Parameters:
+    ///   - image: The immutable source bitmap.
+    ///   - destination: The transformed corners in top-left, top-right, bottom-right, bottom-left order.
+    ///   - interpolationQuality: The sampling mode used to scale the image.
+    ///   - byTiling: Whether source pixels repeat along the destination axes.
+    ///   - blendMode: The compositing operation applied to sampled pixels.
+    private func drawImage(
+        _ image: CGImageSnapshot,
+        destination: [CGPoint],
+        interpolationQuality: CGInterpolationQuality,
+        byTiling: Bool,
+        blendMode: CGBlendMode
+    ) {
+        guard image.width > 0,
+              image.height > 0,
+              image.bitsPerComponent == 8,
+              image.bitsPerPixel > 0,
+              image.bitsPerPixel.isMultiple(of: 8),
+              image.bytesPerRow > 0,
+              [.byteOrderDefault, .byteOrder32Big, .byteOrder32Little].contains(image.bitmapInfo),
+              destination.count == 4,
+              let data = image.data,
+              let colorSpaceModel = image.colorSpace?.model else {
+            return
+        }
+
+        let bytesPerPixel = image.bitsPerPixel / 8
+        let (minimumBytesPerRow, rowOverflow) = image.width.multipliedReportingOverflow(by: bytesPerPixel)
+        let (requiredByteCount, dataOverflow) = image.bytesPerRow.multipliedReportingOverflow(by: image.height)
+        guard rowOverflow == false,
+              dataOverflow == false,
+              image.bytesPerRow >= minimumBytesPerRow,
+              data.count >= requiredByteCount,
+              colorSpaceModel == .rgb || colorSpaceModel == .gray || colorSpaceModel == .cmyk else {
+            return
+        }
+
+        let points = destination
+        guard points.allSatisfy({ $0.x.isFinite && $0.y.isFinite }) else { return }
+        let origin = points[0]
+        let horizontal = CGPoint(x: points[1].x - origin.x, y: points[1].y - origin.y)
+        let vertical = CGPoint(x: points[3].x - origin.x, y: points[3].y - origin.y)
+        let determinant = horizontal.x * vertical.y - horizontal.y * vertical.x
+        guard determinant.isFinite, abs(determinant) > Double.ulpOfOne else { return }
+
+        let minimumX = max(0, min(Double(surface.width), points.map(\.x).min() ?? 0))
+        let minimumY = max(0, min(Double(surface.height), points.map(\.y).min() ?? 0))
+        let maximumX = max(0, min(Double(surface.width), points.map(\.x).max() ?? 0))
+        let maximumY = max(0, min(Double(surface.height), points.map(\.y).max() ?? 0))
+        let firstX = Int(floor(minimumX))
+        let firstY = Int(floor(minimumY))
+        let lastX = Int(ceil(maximumX))
+        let lastY = Int(ceil(maximumY))
+        guard firstX < lastX, firstY < lastY else { return }
+
+        let horizontalLength = hypot(horizontal.x, horizontal.y)
+        let verticalLength = hypot(vertical.x, vertical.y)
+        guard horizontalLength.isFinite,
+              verticalLength.isFinite,
+              horizontalLength > 0,
+              verticalLength > 0 else {
+            return
+        }
+
+        for y in firstY..<lastY {
+            for x in firstX..<lastX {
+                let clipCoverage = clippingCoverage(atX: x, y: y)
+                guard clipCoverage > 0 else { continue }
+                let deltaX = Double(x) + 0.5 - origin.x
+                let deltaY = Double(y) + 0.5 - origin.y
+                let u = (deltaX * vertical.y - deltaY * vertical.x) / determinant
+                let v = (horizontal.x * deltaY - horizontal.y * deltaX) / determinant
+                guard u >= 0, u < 1, v >= 0, v < 1 else { continue }
+
+                let sourceX = byTiling ? u * horizontalLength : u * Double(image.width)
+                let sourceY = byTiling ? v * verticalLength : v * Double(image.height)
+                guard let source = sampleImage(
+                    image,
+                    x: sourceX,
+                    y: sourceY,
+                    bytesPerPixel: bytesPerPixel,
+                    nearest: interpolationQuality == .none,
+                    tiling: byTiling
+                ) else {
+                    continue
+                }
+
+                composite(
+                    source,
+                    coverage: Double(clipCoverage) / 255,
+                    blendMode: blendMode,
+                    x: x,
+                    y: y
+                )
+            }
+        }
+    }
+
+    /// Samples one source coordinate using nearest-neighbor or bilinear interpolation.
+    /// - Parameters:
+    ///   - image: The source bitmap.
+    ///   - x: The horizontal source coordinate measured from the first pixel edge.
+    ///   - y: The vertical source coordinate measured from the first pixel edge.
+    ///   - bytesPerPixel: The number of bytes occupied by one source pixel.
+    ///   - nearest: Whether to choose the nearest source pixel instead of interpolating.
+    ///   - tiling: Whether sample coordinates wrap around the image edges.
+    /// - Returns: A normalized, unpremultiplied RGBA sample, or nil for unsupported data.
+    private func sampleImage(
+        _ image: CGImageSnapshot,
+        x: Double,
+        y: Double,
+        bytesPerPixel: Int,
+        nearest: Bool,
+        tiling: Bool
+    ) -> [Double]? {
+        guard let data = image.data else { return nil }
+        let imageWidth = Double(image.width)
+        let imageHeight = Double(image.height)
+        let sampleX = tiling ? positiveRemainder(x, modulus: imageWidth) : min(imageWidth, max(0, x))
+        let sampleY = tiling ? positiveRemainder(y, modulus: imageHeight) : min(imageHeight, max(0, y))
+
+        if nearest {
+            let pixelX = min(image.width - 1, Int(floor(sampleX)))
+            let pixelY = min(image.height - 1, Int(floor(sampleY)))
+            return imagePixel(image, data: data, x: pixelX, y: pixelY, bytesPerPixel: bytesPerPixel)
+        }
+
+        let centeredX = sampleX - 0.5
+        let centeredY = sampleY - 0.5
+        let floorX = Int(floor(centeredX))
+        let floorY = Int(floor(centeredY))
+        let fractionX = centeredX - Double(floorX)
+        let fractionY = centeredY - Double(floorY)
+        let x0 = imageIndex(floorX, length: image.width, tiling: tiling)
+        let x1 = imageIndex(floorX + 1, length: image.width, tiling: tiling)
+        let y0 = imageIndex(floorY, length: image.height, tiling: tiling)
+        let y1 = imageIndex(floorY + 1, length: image.height, tiling: tiling)
+
+        guard let topLeft = imagePixel(image, data: data, x: x0, y: y0, bytesPerPixel: bytesPerPixel),
+              let topRight = imagePixel(image, data: data, x: x1, y: y0, bytesPerPixel: bytesPerPixel),
+              let bottomLeft = imagePixel(image, data: data, x: x0, y: y1, bytesPerPixel: bytesPerPixel),
+              let bottomRight = imagePixel(image, data: data, x: x1, y: y1, bytesPerPixel: bytesPerPixel) else {
+            return nil
+        }
+
+        let sampledPixels: [[Double]] = [topLeft, topRight, bottomLeft, bottomRight]
+        let premultipliedPixels: [[Double]] = sampledPixels.map { pixel in
+            let alpha = pixel[3]
+            return [pixel[0] * alpha, pixel[1] * alpha, pixel[2] * alpha, alpha]
+        }
+        let leftWeight = 1 - fractionX
+        let interpolated = (0..<4).map { component in
+            let top = premultipliedPixels[0][component] * leftWeight
+                + premultipliedPixels[1][component] * fractionX
+            let bottom = premultipliedPixels[2][component] * leftWeight
+                + premultipliedPixels[3][component] * fractionX
+            return top * (1 - fractionY) + bottom * fractionY
+        }
+        guard interpolated[3] > 0 else { return [0, 0, 0, 0] }
+        return [
+            min(1, interpolated[0] / interpolated[3]),
+            min(1, interpolated[1] / interpolated[3]),
+            min(1, interpolated[2] / interpolated[3]),
+            interpolated[3]
+        ]
+    }
+
+    /// Decodes one supported 8-bit RGB, grayscale, or CMYK source pixel.
+    /// - Parameters:
+    ///   - image: The source image metadata.
+    ///   - data: The validated image bytes.
+    ///   - x: The zero-based source column.
+    ///   - y: The zero-based source row.
+    ///   - bytesPerPixel: The number of bytes occupied by one source pixel.
+    /// - Returns: Four normalized, unpremultiplied RGBA components.
+    private func imagePixel(
+        _ image: CGImageSnapshot,
+        data: Data,
+        x: Int,
+        y: Int,
+        bytesPerPixel: Int
+    ) -> [Double]? {
+        let offset = y * image.bytesPerRow + x * bytesPerPixel
+        guard offset >= 0, offset + bytesPerPixel <= data.count else { return nil }
+        let bytes = (0..<bytesPerPixel).map { Double(data[offset + $0]) / 255 }
+        let isLittleEndian = image.bitmapInfo == .byteOrder32Little
+        let rgba: [Double]
+
+        switch image.colorSpace?.model {
+        case .rgb:
+            guard let indices = rgbComponentIndices(
+                alphaInfo: image.alphaInfo,
+                byteCount: bytesPerPixel,
+                littleEndian: isLittleEndian
+            ) else {
+                return nil
+            }
+            rgba = [
+                bytes[indices.red],
+                bytes[indices.green],
+                bytes[indices.blue],
+                indices.alpha.map { bytes[$0] } ?? 1
+            ]
+        case .gray:
+            guard bytes.first != nil else { return nil }
+            let alphaIndex: Int?
+            switch image.alphaInfo {
+            case .first, .premultipliedFirst:
+                alphaIndex = 0
+            case .last, .premultipliedLast:
+                alphaIndex = bytesPerPixel - 1
+            default:
+                alphaIndex = nil
+            }
+            guard let grayIndex = alphaIndex == 0 ? bytes.dropFirst().first : bytes.first else { return nil }
+            rgba = [grayIndex, grayIndex, grayIndex, alphaIndex.map { bytes[$0] } ?? 1]
+        case .cmyk:
+            let componentOffset = image.alphaInfo == .first || image.alphaInfo == .premultipliedFirst ? 1 : 0
+            guard bytes.count >= componentOffset + 4 else { return nil }
+            let cyan = bytes[componentOffset]
+            let magenta = bytes[componentOffset + 1]
+            let yellow = bytes[componentOffset + 2]
+            let black = bytes[componentOffset + 3]
+            let alphaIndex: Int?
+            switch image.alphaInfo {
+            case .first, .premultipliedFirst:
+                alphaIndex = 0
+            case .last, .premultipliedLast:
+                alphaIndex = componentOffset + 4
+            default:
+                alphaIndex = nil
+            }
+            if let alphaIndex, !bytes.indices.contains(alphaIndex) {
+                return nil
+            }
+            rgba = [
+                (1 - cyan) * (1 - black),
+                (1 - magenta) * (1 - black),
+                (1 - yellow) * (1 - black),
+                alphaIndex.map { bytes[$0] } ?? 1
+            ]
+        case .deviceN, .lab, .none:
+            return nil
+        }
+
+        guard rgba.allSatisfy(\.isFinite) else { return nil }
+        var result = rgba.map { min(1, max(0, $0)) }
+        if image.alphaInfo == .premultipliedFirst || image.alphaInfo == .premultipliedLast {
+            let alpha = result[3]
+            if alpha > 0 {
+                result[0] = min(1, result[0] / alpha)
+                result[1] = min(1, result[1] / alpha)
+                result[2] = min(1, result[2] / alpha)
+            }
+        }
+        return result
+    }
+
+    /// Resolves RGB and optional alpha byte positions for a bitmap layout.
+    /// - Parameters:
+    ///   - alphaInfo: The source alpha placement.
+    ///   - byteCount: The number of bytes in a pixel.
+    ///   - littleEndian: Whether 32-bit components use little-endian byte order.
+    /// - Returns: The RGB byte indices and optional alpha index when supported.
+    private func rgbComponentIndices(
+        alphaInfo: CGImageAlphaInfo,
+        byteCount: Int,
+        littleEndian: Bool
+    ) -> (red: Int, green: Int, blue: Int, alpha: Int?)? {
+        switch alphaInfo {
+        case .first, .premultipliedFirst:
+            guard byteCount >= 4 else { return nil }
+            return littleEndian ? (2, 1, 0, 3) : (1, 2, 3, 0)
+        case .last, .premultipliedLast:
+            guard byteCount >= 4 else { return nil }
+            return littleEndian ? (3, 2, 1, 0) : (0, 1, 2, 3)
+        case .noneSkipFirst:
+            guard byteCount >= 4 else { return nil }
+            return littleEndian ? (2, 1, 0, nil) : (1, 2, 3, nil)
+        case .noneSkipLast:
+            guard byteCount >= 4 else { return nil }
+            return littleEndian ? (3, 2, 1, nil) : (0, 1, 2, nil)
+        case .none:
+            guard byteCount >= 3 else { return nil }
+            if byteCount == 3 {
+                return (0, 1, 2, nil)
+            }
+            return littleEndian ? (2, 1, 0, nil) : (0, 1, 2, nil)
+        case .alphaOnly:
+            return nil
+        }
+    }
+
+    /// Wraps or clamps a pixel index to the valid image range.
+    /// - Parameters:
+    ///   - index: The source pixel index.
+    ///   - length: The image dimension for this axis.
+    ///   - tiling: Whether to wrap beyond the image edges.
+    /// - Returns: A valid pixel index.
+    private func imageIndex(_ index: Int, length: Int, tiling: Bool) -> Int {
+        guard tiling else { return min(length - 1, max(0, index)) }
+        let remainder = index % length
+        return remainder >= 0 ? remainder : remainder + length
+    }
+
+    /// Returns a nonnegative remainder for a floating-point source coordinate.
+    /// - Parameters:
+    ///   - value: The source coordinate.
+    ///   - modulus: The positive image dimension.
+    /// - Returns: A value from zero up to, but not including, the modulus.
+    private func positiveRemainder(_ value: Double, modulus: Double) -> Double {
+        let remainder = value.truncatingRemainder(dividingBy: modulus)
+        return remainder >= 0 ? remainder : remainder + modulus
+    }
+
+    /// Applies a blend or Porter-Duff operation using premultiplied pixel storage.
     /// - Parameters:
     ///   - source: The normalized, unpremultiplied RGBA source components.
-    ///   - coverage: The fraction of the destination pixel covered by the path.
+    ///   - coverage: The fraction of the destination pixel covered by the operation.
+    ///   - blendMode: The requested compositing operation.
     ///   - x: The destination pixel column.
     ///   - y: The destination pixel row.
-    private func composite(_ source: [Double], coverage: Double, x: Int, y: Int) {
+    private func composite(
+        _ source: [Double],
+        coverage: Double,
+        blendMode: CGBlendMode,
+        x: Int,
+        y: Int
+    ) {
         guard let destination = surface.pixel(x: x, y: y) else { return }
-        let sourceAlpha = source[3] * coverage
-        let remainingAlpha = 1 - sourceAlpha
+        let sourceAlpha = source[3]
         let destinationAlpha = Double(destination.alpha) / 255
+        let sourcePremultiplied = [source[0], source[1], source[2]].map { $0 * sourceAlpha }
+        let destinationPremultiplied = [
+            Double(destination.red) / 255,
+            Double(destination.green) / 255,
+            Double(destination.blue) / 255
+        ]
+        let result: [Double]
+        let resultAlpha: Double
+
+        switch blendMode {
+        case .clear:
+            result = [0, 0, 0]
+            resultAlpha = 0
+        case .copy:
+            result = sourcePremultiplied
+            resultAlpha = sourceAlpha
+        case .sourceIn:
+            result = sourcePremultiplied.map { $0 * destinationAlpha }
+            resultAlpha = sourceAlpha * destinationAlpha
+        case .sourceOut:
+            result = sourcePremultiplied.map { $0 * (1 - destinationAlpha) }
+            resultAlpha = sourceAlpha * (1 - destinationAlpha)
+        case .sourceAtop:
+            result = zip(sourcePremultiplied, destinationPremultiplied).map {
+                $0 * destinationAlpha + $1 * (1 - sourceAlpha)
+            }
+            resultAlpha = destinationAlpha
+        case .destinationOver:
+            result = zip(sourcePremultiplied, destinationPremultiplied).map {
+                $1 + $0 * (1 - destinationAlpha)
+            }
+            resultAlpha = destinationAlpha + sourceAlpha * (1 - destinationAlpha)
+        case .destinationIn:
+            result = destinationPremultiplied.map { $0 * sourceAlpha }
+            resultAlpha = destinationAlpha * sourceAlpha
+        case .destinationOut:
+            result = destinationPremultiplied.map { $0 * (1 - sourceAlpha) }
+            resultAlpha = destinationAlpha * (1 - sourceAlpha)
+        case .destinationAtop:
+            result = zip(sourcePremultiplied, destinationPremultiplied).map {
+                $1 * sourceAlpha + $0 * (1 - destinationAlpha)
+            }
+            resultAlpha = sourceAlpha
+        case .xor:
+            result = zip(sourcePremultiplied, destinationPremultiplied).map {
+                $0 * (1 - destinationAlpha) + $1 * (1 - sourceAlpha)
+            }
+            resultAlpha = sourceAlpha * (1 - destinationAlpha) + destinationAlpha * (1 - sourceAlpha)
+        default:
+            let backdrop = destinationAlpha == 0
+                ? [0, 0, 0]
+                : destinationPremultiplied.map { $0 / destinationAlpha }
+            let blended = zip(backdrop, source.prefix(3)).map {
+                blendChannel(blendMode, backdrop: $0, source: $1)
+            }
+            result = (0..<3).map { index in
+                (1 - sourceAlpha) * destinationPremultiplied[index]
+                    + (1 - destinationAlpha) * sourcePremultiplied[index]
+                    + sourceAlpha * destinationAlpha * blended[index]
+            }
+            resultAlpha = sourceAlpha + destinationAlpha - sourceAlpha * destinationAlpha
+        }
+
+        let remainingCoverage = 1 - coverage
         let output = PixelSurface.Pixel(
-            red: channel(source[0] * sourceAlpha + Double(destination.red) / 255 * remainingAlpha),
-            green: channel(source[1] * sourceAlpha + Double(destination.green) / 255 * remainingAlpha),
-            blue: channel(source[2] * sourceAlpha + Double(destination.blue) / 255 * remainingAlpha),
-            alpha: channel(sourceAlpha + destinationAlpha * remainingAlpha)
+            red: channel(result[0] * coverage + destinationPremultiplied[0] * remainingCoverage),
+            green: channel(result[1] * coverage + destinationPremultiplied[1] * remainingCoverage),
+            blue: channel(result[2] * coverage + destinationPremultiplied[2] * remainingCoverage),
+            alpha: channel(resultAlpha * coverage + destinationAlpha * remainingCoverage)
         )
         surface.setPixel(output, x: x, y: y)
     }
 
-    /// Clears a covered portion of a destination pixel.
+    /// Computes one separable blend channel; nonseparable modes use normal blending.
     /// - Parameters:
-    ///   - x: The destination pixel column.
-    ///   - y: The destination pixel row.
-    ///   - coverage: The fraction of the destination pixel cleared.
-    private func clear(x: Int, y: Int, coverage: Double) {
-        guard let destination = surface.pixel(x: x, y: y) else { return }
-        let remaining = 1 - coverage
-        surface.setPixel(
-            PixelSurface.Pixel(
-                red: channel(Double(destination.red) / 255 * remaining),
-                green: channel(Double(destination.green) / 255 * remaining),
-                blue: channel(Double(destination.blue) / 255 * remaining),
-                alpha: channel(Double(destination.alpha) / 255 * remaining)
-            ),
-            x: x,
-            y: y
-        )
+    ///   - mode: The requested blend mode.
+    ///   - backdrop: The unpremultiplied destination channel.
+    ///   - source: The unpremultiplied source channel.
+    /// - Returns: The blended channel value in the unit range.
+    private func blendChannel(_ mode: CGBlendMode, backdrop: Double, source: Double) -> Double {
+        switch mode {
+        case .normal, .hue, .saturation, .color, .luminosity:
+            return source
+        case .multiply:
+            return backdrop * source
+        case .screen:
+            return backdrop + source - backdrop * source
+        case .overlay:
+            return backdrop <= 0.5
+                ? 2 * backdrop * source
+                : 1 - 2 * (1 - backdrop) * (1 - source)
+        case .darken:
+            return min(backdrop, source)
+        case .lighten:
+            return max(backdrop, source)
+        case .colorDodge:
+            return source >= 1 ? 1 : min(1, backdrop / (1 - source))
+        case .colorBurn:
+            return source <= 0 ? 0 : 1 - min(1, (1 - backdrop) / source)
+        case .softLight:
+            if source <= 0.5 {
+                return backdrop - (1 - 2 * source) * backdrop * (1 - backdrop)
+            } else {
+                let curve = backdrop <= 0.25
+                    ? ((16 * backdrop - 12) * backdrop + 4) * backdrop
+                    : backdrop.squareRoot()
+                return backdrop + (2 * source - 1) * (curve - backdrop)
+            }
+        case .hardLight:
+            return source <= 0.5
+                ? 2 * backdrop * source
+                : 1 - 2 * (1 - backdrop) * (1 - source)
+        case .difference:
+            return abs(backdrop - source)
+        case .exclusion:
+            return backdrop + source - 2 * backdrop * source
+        case .plusDarker:
+            return max(0, backdrop + source - 1)
+        case .plusLighter:
+            return min(1, backdrop + source)
+        case .clear, .copy, .sourceIn, .sourceOut, .sourceAtop,
+             .destinationOver, .destinationIn, .destinationOut, .destinationAtop, .xor:
+            return source
+        }
     }
 
     /// Finds a single closed axis-aligned rectangle whose vertices lie on pixel boundaries.

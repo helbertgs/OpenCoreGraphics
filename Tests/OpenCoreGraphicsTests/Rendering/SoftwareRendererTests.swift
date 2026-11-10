@@ -46,6 +46,132 @@ struct SoftwareRendererTests {
         #expect(pixel(at: 2, y: 2, in: pixels) == [255, 255, 255, 255])
     }
 
+    /// Verifies every blend mode produces the expected result for a reference color pair.
+    @Test(arguments: CGBlendMode.allCases)
+    func compositesReferenceColorsUsingBlendMode(_ blendMode: CGBlendMode) throws {
+        let context = try #require(makeContext(width: 1, height: 1))
+        context.data = Data([153, 102, 51, 255])
+        context.setFillColor(CGColor(red: 0.2, green: 0.5, blue: 0.8, alpha: 1))
+        context.setBlendMode(blendMode)
+        context.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
+        context.flush()
+
+        let actual = pixel(at: 0, y: 0, in: Array(context.data), width: 1)
+        let expected = expectedPixel(for: blendMode)
+        #expect(zip(actual, expected).allSatisfy { abs(Int($0.0) - Int($0.1)) <= 1 })
+    }
+
+    /// Verifies nearest-neighbor sampling preserves source pixels when an image is enlarged.
+    @Test
+    func scalesImageWithNearestNeighborSampling() throws {
+        let context = try #require(makeContext(width: 4, height: 4))
+        let image = makeImage(
+            width: 2,
+            height: 2,
+            bytes: [
+                255, 0, 0, 255, 0, 255, 0, 255,
+                0, 0, 255, 255, 255, 255, 255, 255
+            ]
+        )
+        context.data = Data(repeating: 0, count: 4 * 4 * 4)
+        context.interpolationQuality = .none
+        context.draw(image, in: CGRect(x: 0, y: 0, width: 4, height: 4))
+        context.flush()
+
+        let pixels = Array(context.data)
+        #expect(pixel(at: 0, y: 0, in: pixels, width: 4) == [255, 0, 0, 255])
+        #expect(pixel(at: 3, y: 1, in: pixels, width: 4) == [0, 255, 0, 255])
+        #expect(pixel(at: 1, y: 2, in: pixels, width: 4) == [0, 0, 255, 255])
+        #expect(pixel(at: 3, y: 3, in: pixels, width: 4) == [255, 255, 255, 255])
+    }
+
+    /// Verifies image samples follow the inverse of a sheared current transform.
+    @Test
+    func samplesImageThroughInverseAffineTransform() throws {
+        let context = try #require(makeContext(width: 4, height: 3))
+        let image = makeImage(
+            width: 2,
+            height: 2,
+            bytes: [
+                255, 0, 0, 255, 0, 255, 0, 255,
+                0, 0, 255, 255, 255, 255, 255, 255
+            ]
+        )
+        context.data = Data(repeating: 0, count: 4 * 3 * 4)
+        context.interpolationQuality = .none
+        context.ctm = CGAffineTransform(a: 1, b: 0, c: 0.5, d: 1, tx: 0, ty: 0)
+        context.draw(image, in: CGRect(x: 0, y: 0, width: 2, height: 2))
+        context.flush()
+
+        let pixels = Array(context.data)
+        #expect(pixel(at: 0, y: 1, in: pixels, width: 4) == [0, 0, 0, 0])
+        #expect(pixel(at: 1, y: 1, in: pixels, width: 4) == [0, 0, 255, 255])
+        #expect(pixel(at: 2, y: 1, in: pixels, width: 4) == [255, 255, 255, 255])
+    }
+
+    /// Verifies bilinear sampling combines neighboring pixels during enlargement.
+    @Test
+    func scalesImageWithBilinearSampling() throws {
+        let context = try #require(makeContext(width: 4, height: 4))
+        let image = makeImage(
+            width: 2,
+            height: 2,
+            bytes: [
+                255, 0, 0, 255, 0, 255, 0, 255,
+                0, 0, 255, 255, 255, 255, 255, 255
+            ]
+        )
+        context.data = Data(repeating: 0, count: 4 * 4 * 4)
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: 4, height: 4))
+        context.flush()
+
+        #expect(pixel(at: 1, y: 1, in: Array(context.data), width: 4) == [159, 64, 64, 255])
+    }
+
+    /// Verifies bilinear interpolation avoids color fringes from transparent source pixels.
+    @Test
+    func interpolatesImageColorsInPremultipliedSpace() throws {
+        let context = try #require(makeContext(width: 4, height: 1))
+        let image = makeImage(
+            width: 2,
+            height: 1,
+            bytes: [255, 0, 0, 0, 0, 0, 255, 255]
+        )
+        context.data = Data(repeating: 0, count: 4 * 4)
+        context.interpolationQuality = .high
+        context.draw(image, in: CGRect(x: 0, y: 0, width: 4, height: 1))
+        context.flush()
+
+        #expect(pixel(at: 1, y: 0, in: Array(context.data), width: 4) == [0, 0, 64, 64])
+    }
+
+    /// Verifies tiled drawing repeats source pixels across the destination quad.
+    @Test
+    func repeatsImagePixelsWhenTiling() throws {
+        let context = try #require(makeContext(width: 4, height: 4))
+        let image = makeImage(
+            width: 2,
+            height: 2,
+            bytes: [
+                255, 0, 0, 255, 0, 255, 0, 255,
+                0, 0, 255, 255, 255, 255, 255, 255
+            ]
+        )
+        context.data = Data(repeating: 0, count: 4 * 4 * 4)
+        context.interpolationQuality = .none
+        context.draw(image, in: CGRect(x: 0, y: 0, width: 4, height: 4), byTiling: true)
+        context.flush()
+
+        let pixels = Array(context.data)
+        #expect(pixel(at: 0, y: 0, in: pixels, width: 4) == [255, 0, 0, 255])
+        #expect(pixel(at: 2, y: 0, in: pixels, width: 4) == [255, 0, 0, 255])
+        #expect(pixel(at: 3, y: 0, in: pixels, width: 4) == [0, 255, 0, 255])
+        #expect(pixel(at: 0, y: 1, in: pixels, width: 4) == [0, 0, 255, 255])
+        #expect(pixel(at: 0, y: 2, in: pixels, width: 4) == [255, 0, 0, 255])
+        #expect(pixel(at: 1, y: 3, in: pixels, width: 4) == [255, 255, 255, 255])
+    }
+
     /// Verifies a curved outline produces full and fractional sample coverage.
     @Test
     func rasterizesCircleWithAntialiasedCoverage() throws {
@@ -163,6 +289,69 @@ struct SoftwareRendererTests {
             space: .sRGB,
             bitmapInfo: 0
         )
+    }
+
+    /// Creates an 8-bit-per-component sRGB image with straight RGBA pixel data.
+    /// - Parameters:
+    ///   - width: The image width in pixels.
+    ///   - height: The image height in pixels.
+    ///   - bytes: The tightly packed RGBA image data.
+    /// - Returns: The image backed by the supplied bytes.
+    private func makeImage(width: Int, height: Int, bytes: [UInt8]) -> CGImage {
+        CGImage(
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: width * 4,
+            space: .sRGB,
+            bitmapInfo: .byteOrderDefault,
+            provider: CGDataProvider(data: Data(bytes)),
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent,
+            alphaInfo: .last
+        )
+    }
+
+    /// Returns the reference RGBA output for one blend mode and the fixture colors.
+    /// - Parameter blendMode: The blend mode under test.
+    /// - Returns: The expected premultiplied pixel bytes.
+    private func expectedPixel(for blendMode: CGBlendMode) -> [UInt8] {
+        switch blendMode {
+        case .normal, .copy, .sourceIn, .sourceAtop, .hue, .saturation, .color, .luminosity:
+            [51, 128, 204, 255]
+        case .multiply:
+            [31, 51, 41, 255]
+        case .screen:
+            [173, 178, 214, 255]
+        case .overlay:
+            [92, 102, 82, 255]
+        case .darken:
+            [51, 102, 51, 255]
+        case .lighten:
+            [153, 128, 204, 255]
+        case .colorDodge:
+            [191, 204, 255, 255]
+        case .colorBurn:
+            [0, 0, 0, 255]
+        case .softLight:
+            [116, 102, 89, 255]
+        case .hardLight:
+            [61, 102, 173, 255]
+        case .difference:
+            [102, 26, 153, 255]
+        case .exclusion:
+            [143, 128, 173, 255]
+        case .clear, .sourceOut, .destinationOut, .xor:
+            [0, 0, 0, 0]
+        case .destinationOver, .destinationIn, .destinationAtop:
+            [153, 102, 51, 255]
+        case .plusDarker:
+            [0, 0, 0, 255]
+        case .plusLighter:
+            [204, 230, 255, 255]
+        }
     }
 
     /// Creates a regular five-point star by connecting every second outer vertex.

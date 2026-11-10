@@ -24,9 +24,13 @@ public enum CGBlendMode : String, CaseIterable, Codable, Equatable, Hashable, Se
     case hardLight
     case difference
     case exclusion
+    /// Software rendering currently uses normal blending for this nonseparable mode.
     case hue
+    /// Software rendering currently uses normal blending for this nonseparable mode.
     case saturation
+    /// Software rendering currently uses normal blending for this nonseparable mode.
     case color
+    /// Software rendering currently uses normal blending for this nonseparable mode.
     case luminosity
     case clear
     case copy

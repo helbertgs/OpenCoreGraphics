@@ -214,6 +214,12 @@ struct CGImageSnapshot: Equatable, Sendable {
     /// The alpha channel layout of the image.
     let alphaInfo: CGImageAlphaInfo
 
+    /// The color space used to interpret image components.
+    let colorSpace: CGColorSpace?
+
+    /// The byte order used to interpret image pixels.
+    let bitmapInfo: CGBitmapInfo
+
     /// Creates an immutable snapshot of an image and its pixel data.
     /// - Parameter image: The image whose state will be captured.
     init(image: CGImage) {
@@ -225,5 +231,7 @@ struct CGImageSnapshot: Equatable, Sendable {
         bitsPerPixel = image.bitsPerPixel
         bytesPerRow = image.bytesPerRow
         alphaInfo = image.alphaInfo
+        colorSpace = image.colorSpace
+        bitmapInfo = image.bitmapInfo
     }
 }

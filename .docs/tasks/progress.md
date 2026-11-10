@@ -8,6 +8,7 @@
 - `CGRenderTarget` e `CGRenderBackend` não são isolados por ator, para permitir renderização síncrona em bitmap. O target de janela mantém seu estado no `MainActor` e usa `MainActor.assumeIsolated` nos requisitos síncronos; o backend OpenGL aplica a mesma fronteira ao acessar o contexto GL.
 - O renderer de bitmap mantém o fast path para retângulos alinhados e rasteriza outras formas pelo `PathFlattener` e amostragem scanline 4×4; cobertura parcial é aplicada como alpha antes do source-over.
 - Mudanças no clip do bitmap descarregam os comandos pendentes antes de substituir a máscara; isso mantém a ordem de desenho quando estados são salvos e restaurados.
+- O `SoftwareRenderer` interpreta imagens usando metadados do snapshot, amostra o quad pela transformação afim inversa e interpola canais de cor em espaço pré-multiplicado.
 - O working tree tem trabalho em andamento do usuário (arquivos novos/movidos ainda não commitados). Os commits das stories incluem **apenas** os arquivos tocados pela story, mais `.docs/tasks/prd.json` e `progress.md`.
 - Valores `struct` que controlam memória alocada usam um proprietário por referência com `deinit`; cópias do valor compartilham a alocação sem duplicar nem liberar o ponteiro prematuramente.
 
@@ -459,4 +460,14 @@
 - **Learnings for future iterations:**
   - O clip bitmap é aplicado diretamente ao `BitmapRenderTarget`; a integração do mesmo estado com OpenGL e a API pública fica para US-053.
   - Descarregue o alvo antes de alterar uma máscara compartilhada pelo renderer; comandos anteriores devem manter o estado de clip capturado quando foram submetidos.
+---
+
+## 2026-11-10 - US-049
+- O `CGImageSnapshot` agora captura espaço de cor e ordem dos bytes; `SoftwareRenderer` decodifica pixels RGB, grayscale ou CMYK de 8 bits e respeita os layouts de alpha e byte order suportados.
+- Imagens são amostradas pela inversa do quad afim: `.none` usa nearest-neighbor, demais qualidades usam bilinear com interpolação pré-multiplicada e `byTiling` repete os pixels ao longo dos eixos transformados.
+- Implementados os 24 modos separáveis da história; `hue`, `saturation`, `color` e `luminosity` estão documentados como fallback para normal. Testes cobrem as 28 opções do enum com tolerância de ±1, imagem 2×2 ampliada, shear, tiling e interpolação com alpha; `swift test` passou (134 testes em 25 suítes), o build de `OpenCoreGraphicsSample` e `git diff --check` também passaram.
+- Files changed: `Sources/OpenCoreGraphics/2D Drawing/CGBlendMode.swift`, `Sources/OpenCoreGraphics/2D Drawing/CGImage.swift`, `Sources/OpenCoreGraphics/Rendering/SoftwareRenderer.swift`, `Tests/OpenCoreGraphicsTests/Rendering/SoftwareRendererTests.swift`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
+- **Learnings for future iterations:**
+  - Interpole pixels de imagem em RGBA pré-multiplicado e converta para alpha reto só antes da composição; isso evita halos de cor em bordas transparentes.
+  - `CGImageSnapshot` deve capturar os metadados usados no rendering junto dos bytes, para que mudanças posteriores na imagem não alterem comandos já enviados.
 ---
