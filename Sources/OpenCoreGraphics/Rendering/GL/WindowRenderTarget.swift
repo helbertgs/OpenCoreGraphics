@@ -13,6 +13,9 @@ enum WindowRenderTargetError: Error, Equatable {
 
     /// A valid surface failed to produce one of its in-bounds pixels.
     case invalidSurfacePixel
+
+    /// The window's OpenGL context could not be selected for the requested operation.
+    case contextSelectionFailed
 }
 
 /// Queues window drawing commands for the main-actor OpenGL renderer.
@@ -58,7 +61,8 @@ final class WindowRenderTarget: CGRenderTarget {
     func updateSize(_ size: CGSize) {
         windowSize = size
         if clipRegions.isEmpty == false {
-            applyClipRegions()
+            enqueueClipRegions()
+            _ = flushPendingCommands()
         }
     }
 
@@ -72,8 +76,11 @@ final class WindowRenderTarget: CGRenderTarget {
             throw WindowRenderTargetError.unsupportedRenderer
         }
 
-        flush()
+        guard flushPendingCommands() else {
+            throw contextOperationError
+        }
         let image = try snapshot(from: surface)
+        try selectWindowContext()
         surfaceRenderer.renderSoftwareSurface(image, size: windowSize)
     }
 
@@ -89,7 +96,12 @@ final class WindowRenderTarget: CGRenderTarget {
     /// - Returns: Bottom-up RGBA bytes, or nil when the renderer is unavailable.
     nonisolated func readPixels() -> Data? {
         MainActor.assumeIsolated {
-            guard (try? ensureWindowIsOpen()) != nil else { return nil }
+            do {
+                try ensureWindowIsOpen()
+                try selectWindowContext()
+            } catch {
+                return nil
+            }
             guard let renderer = renderer as? any CGPixelReadbackRenderer else { return nil }
             guard let pixels = renderer.readPixels(size: windowSize) else { return nil }
             return Data(pixels)
@@ -99,17 +111,7 @@ final class WindowRenderTarget: CGRenderTarget {
     /// Renders all commands queued for the current frame.
     nonisolated func flush() {
         MainActor.assumeIsolated {
-            guard (try? ensureWindowIsOpen()) != nil else {
-                pendingCommands.removeAll(keepingCapacity: true)
-                return
-            }
-            guard let renderer else {
-                pendingCommands.removeAll(keepingCapacity: true)
-                return
-            }
-
-            renderer.execute(pendingCommands, size: windowSize)
-            pendingCommands.removeAll(keepingCapacity: true)
+            _ = flushPendingCommands()
         }
     }
 
@@ -118,16 +120,15 @@ final class WindowRenderTarget: CGRenderTarget {
     nonisolated func setClipRegions(_ regions: [CGClipRegion]) {
         MainActor.assumeIsolated {
             clipRegions = regions
-            applyClipRegions()
+            enqueueClipRegions()
+            _ = flushPendingCommands()
         }
     }
 
-    /// Resets the renderer's clip state and reapplies the current ordered regions.
-    private func applyClipRegions() {
-        guard (try? ensureWindowIsOpen()) != nil else { return }
-        guard let renderer else { return }
-        let commands = [DrawCommand.resetClip] + clipRegions.map(\.drawCommand)
-        renderer.execute(commands, size: windowSize)
+    /// Appends a complete clip-state replacement after all previously queued operations.
+    private func enqueueClipRegions() {
+        pendingCommands.append(.resetClip)
+        pendingCommands.append(contentsOf: clipRegions.map(\.drawCommand))
     }
 
     /// Rejects target operations after their owning window closes and records the typed failure.
@@ -136,7 +137,54 @@ final class WindowRenderTarget: CGRenderTarget {
             contextError = error
             throw WindowRenderTargetError.windowClosed
         }
-        contextError = nil
+    }
+
+    /// Selects the owning window's context before issuing an operation to its renderer.
+    private func selectWindowContext() throws {
+        guard let contextSelector else {
+            contextError = nil
+            return
+        }
+        guard let error = contextSelector.select() else {
+            contextError = nil
+            return
+        }
+        contextError = error
+        if error == .windowClosed {
+            throw WindowRenderTargetError.windowClosed
+        }
+        throw WindowRenderTargetError.contextSelectionFailed
+    }
+
+    /// Executes pending clip and drawing work, preserving it if context selection fails.
+    /// - Returns: Whether all currently pending work was executed or already complete.
+    private func flushPendingCommands() -> Bool {
+        guard (try? ensureWindowIsOpen()) != nil else {
+            pendingCommands.removeAll(keepingCapacity: true)
+            return false
+        }
+        guard let renderer else {
+            pendingCommands.removeAll(keepingCapacity: true)
+            return false
+        }
+        guard pendingCommands.isEmpty == false else { return true }
+        guard (try? selectWindowContext()) != nil else { return false }
+
+        renderer.execute(pendingCommands, size: windowSize)
+        pendingCommands.removeAll(keepingCapacity: true)
+        return true
+    }
+
+    /// Returns the typed target error corresponding to the last failed context selection.
+    private var contextOperationError: WindowRenderTargetError {
+        switch contextError {
+        case .windowClosed:
+            .windowClosed
+        case .selectionFailed:
+            .contextSelectionFailed
+        case nil:
+            .rendererUnavailable
+        }
     }
 
     /// Copies logical RGBA pixels into top-down rows for the textured-image shader.

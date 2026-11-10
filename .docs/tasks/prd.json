@@ -85,8 +85,8 @@
         "Typecheck passes"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Contexto selecionado para desenho, apresentação, readback e clear; teste GL real confirma isolamento entre duas janelas, incluindo desenho de A após criar B."
     },
     {
       "id": "US-006",

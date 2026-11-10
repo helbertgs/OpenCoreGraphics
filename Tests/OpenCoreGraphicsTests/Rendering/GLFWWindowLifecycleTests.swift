@@ -92,6 +92,47 @@ struct GLFWWindowLifecycleTests {
         #expect(windowAReference != windowBReference)
     }
 
+    /// Reads distinct framebuffer colors after alternating draws and readbacks across two windows.
+    @Test
+    func selectsEachWindowContextForClearAndAlternatingReadback() throws {
+        let windowA = try CGWindow(frame: CGRect(x: 0, y: 0, width: 8, height: 8), title: "Context A")
+        let windowB = try CGWindow(frame: CGRect(x: 0, y: 0, width: 8, height: 8), title: "Context B")
+        defer {
+            windowA.destroy()
+            windowB.destroy()
+        }
+
+        windowA.backgroundColor = CGColor(red: 0, green: 0, blue: 1, alpha: 1)
+        windowB.backgroundColor = CGColor(red: 1, green: 1, blue: 0, alpha: 1)
+        let contextA = windowA.cgContext
+        let contextB = windowB.cgContext
+        let targetA = try #require(contextA.renderTarget)
+        let targetB = try #require(contextB.renderTarget)
+
+        windowA.clear()
+        windowB.clear()
+        contextA.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        contextA.fill(CGRect(x: 2, y: 2, width: 4, height: 4))
+        contextB.setFillColor(CGColor(red: 0, green: 1, blue: 0, alpha: 1))
+        contextB.fill(CGRect(x: 2, y: 2, width: 4, height: 4))
+        contextA.flush()
+        contextB.flush()
+
+        let pixelsA = try #require(targetA.readPixels())
+        let pixelsB = try #require(targetB.readPixels())
+        let pixelsAAgain = try #require(targetA.readPixels())
+        let pixelsBAgain = try #require(targetB.readPixels())
+        let centerPixelOffset = (4 * contextA.width + 4) * 4
+        let centerPixelRange = centerPixelOffset..<(centerPixelOffset + 4)
+
+        #expect(Array(pixelsA.prefix(4)) == [0, 0, 255, 255])
+        #expect(Array(pixelsB.prefix(4)) == [255, 255, 0, 255])
+        #expect(Array(pixelsA[centerPixelRange]) == [255, 0, 0, 255])
+        #expect(Array(pixelsB[centerPixelRange]) == [0, 255, 0, 255])
+        #expect(pixelsAAgain == pixelsA)
+        #expect(pixelsBAgain == pixelsB)
+    }
+
     /// Observes the private window renderer without retaining it during teardown.
     /// - Parameter window: The window owning the renderer.
     /// - Returns: A weak reference to its renderer, if one exists.

@@ -68,3 +68,13 @@
   - O teardown deve transferir todas as referências fortes ao renderer antes de liberar recursos; verificar a desalocação efetiva antes de destruir o contexto.
   - Teardowns adiados precisam remover callbacks e user pointer antes de desalocar a janela Swift e manter a plataforma retida até a liberação.
 ---
+
+## 2026-11-10 - US-005
+- Seleção verificada do contexto proprietário precede clear, desenho, apresentação de superfície, readback e troca de buffers; erros impedem a operação.
+- Fila preserva comandos e mudanças de clip na ordem após falhas temporárias de seleção; resize reaplica regiões ativas.
+- Testes com drivers falsos cobrem alternância, ordem e falhas; duas janelas reais conservam cores distintas ao desenhar e alternar readbacks.
+- Validação: 198 testes na suíte padrão com concorrência estrita; testes GL reais direcionados; build estrito; `ruby scripts/run-gl-tests.rb --timeout 90` com duas suítes concluídas e sete cenas aprovadas; `git diff --check` passou. Suítes GL são opt-in na execução padrão.
+- Files changed: `Sources/OpenCoreGraphics/Rendering/GL/WindowRenderTarget.swift`, `Sources/OpenCoreGraphics/Services/Window Services/CGWindow.swift`, `Tests/OpenCoreGraphicsTests/Rendering/WindowRenderTargetTests.swift`, `GLFWWindowLifecycleTests.swift`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`.
+- **Learnings for future iterations:**
+  - Quando a seleção falha, alterações de clip precisam permanecer ordenadas junto aos desenhos pendentes; aplicar apenas o último clip reordena operações.
+---

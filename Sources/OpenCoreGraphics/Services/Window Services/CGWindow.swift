@@ -290,6 +290,7 @@ extension CGWindow {
 
     func swapBuffers() {
         guard let windowRef = self.windowRef else { return }
+        guard canUseOpenContext() else { return }
         glfwSwapBuffers(windowRef)
     }
 
@@ -413,7 +414,7 @@ extension CGWindow {
             NSLog("OpenCoreGraphics GLFW context selection failed: %@", String(describing: GLFWContextSelectionError.windowClosed))
             return false
         }
-        return contextSelector.ensureOpen() == nil
+        return contextSelector.select() == nil
     }
 
     /// Transfers renderer ownership to a teardown before any attempt can destroy the window.

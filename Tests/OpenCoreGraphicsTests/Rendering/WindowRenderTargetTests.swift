@@ -57,6 +57,25 @@ struct WindowRenderTargetTests {
         ])
     }
 
+    /// Reapplies the active clip at the new size after it was already synchronized.
+    @Test
+    func reappliesClipRegionsAfterResize() {
+        let renderer = RecordingRenderBackend()
+        let target = WindowRenderTarget(size: CGSize(width: 32, height: 24), renderer: renderer)
+        let rectangle = CGRect(x: 2, y: 3, width: 10, height: 12)
+
+        target.setClipRegions([.rectangle(rectangle)])
+        target.updateSize(CGSize(width: 64, height: 48))
+
+        #expect(renderer.commands == [
+            .resetClip,
+            .clipRect(rectangle),
+            .resetClip,
+            .clipRect(rectangle)
+        ])
+        #expect(renderer.size == CGSize(width: 64, height: 48))
+    }
+
     /// Verifies a surface is presented after queued commands with stable texture identity and updated pixels.
     @Test
     func presentsSoftwareSurfaceAfterPendingCommands() throws {
@@ -98,6 +117,203 @@ struct WindowRenderTargetTests {
         #expect(firstSnapshot.identity == secondSnapshot.identity)
         #expect(firstSnapshot.data != secondSnapshot.data)
         #expect(renderer.surfaceSizes.count == 2)
+    }
+
+    /// Selects each owning context before rendering, presenting, or reading its pixels.
+    @Test
+    func selectsEachOwningContextForWindowOperations() throws {
+        let contextA = try #require(OpaquePointer(bitPattern: 0xA))
+        let contextB = try #require(OpaquePointer(bitPattern: 0xB))
+        let contextState = RecordingContextDriverState(contextA: contextA, contextB: contextB)
+        let driver = contextState.makeDriver()
+        let rendererA = RecordingContextRenderBackend(
+            name: "A",
+            contextState: contextState,
+            pixels: [255, 0, 0, 255]
+        )
+        let rendererB = RecordingContextRenderBackend(
+            name: "B",
+            contextState: contextState,
+            pixels: [0, 255, 0, 255]
+        )
+        let targetA = WindowRenderTarget(size: CGSize(width: 1, height: 1), renderer: rendererA)
+        let targetB = WindowRenderTarget(size: CGSize(width: 1, height: 1), renderer: rendererB)
+        targetA.contextSelector = GLFWContextSelector.make(contextA, driver)
+        targetB.contextSelector = GLFWContextSelector.make(contextB, driver)
+        let firstCommand = DrawCommand.resetClip
+        let secondCommand = DrawCommand.clipRect(CGRect(x: 1, y: 1, width: 2, height: 2))
+        let commandForB = DrawCommand.clipRect(CGRect(x: 4, y: 4, width: 3, height: 3))
+        targetA.submit(firstCommand)
+        targetA.submit(secondCommand)
+        targetB.submit(commandForB)
+
+        targetA.flush()
+        targetB.flush()
+        #expect(targetA.readPixels() == Data([255, 0, 0, 255]))
+        #expect(targetB.readPixels() == Data([0, 255, 0, 255]))
+
+        let surface = try #require(
+            PixelSurface(
+                data: nil,
+                width: 1,
+                height: 1,
+                bytesPerRow: 4,
+                colorSpace: .sRGB,
+                alphaInfo: .premultipliedLast,
+                bitmapInfo: .byteOrderDefault
+            )
+        )
+        try targetA.presentSoftwareSurface(surface)
+        try targetB.presentSoftwareSurface(surface)
+
+        #expect(rendererA.commands == [firstCommand, secondCommand])
+        #expect(rendererB.commands == [commandForB])
+        #expect(contextState.events == [
+            "select:A",
+            "execute:A@A",
+            "select:B",
+            "execute:B@B",
+            "select:A",
+            "read:A@A",
+            "select:B",
+            "read:B@B",
+            "select:A",
+            "present:A@A",
+            "select:B",
+            "present:B@B"
+        ])
+    }
+
+    /// Retains queued work and reports selection errors instead of invoking the wrong context.
+    @Test
+    func preservesCommandsAndReportsContextSelectionFailure() throws {
+        let context = try #require(OpaquePointer(bitPattern: 0xA))
+        let otherContext = try #require(OpaquePointer(bitPattern: 0xB))
+        let contextState = RecordingContextDriverState(contextA: context, contextB: otherContext)
+        contextState.rejectsSelection = true
+        let renderer = RecordingContextRenderBackend(
+            name: "A",
+            contextState: contextState,
+            pixels: [255, 0, 0, 255]
+        )
+        let target = WindowRenderTarget(size: CGSize(width: 1, height: 1), renderer: renderer)
+        target.contextSelector = GLFWContextSelector.make(context, contextState.makeDriver())
+        let command = DrawCommand.resetClip
+        target.submit(command)
+
+        target.flush()
+
+        #expect(renderer.commands.isEmpty)
+        #expect(target.contextError == .selectionFailed)
+        #expect(contextState.events == ["failure:selectionFailed"])
+
+        contextState.rejectsSelection = false
+        target.flush()
+
+        #expect(renderer.commands == [command])
+        #expect(target.contextError == nil)
+        #expect(contextState.events == [
+            "failure:selectionFailed",
+            "select:A",
+            "execute:A@A"
+        ])
+
+        let surface = try #require(
+            PixelSurface(
+                data: nil,
+                width: 1,
+                height: 1,
+                bytesPerRow: 4,
+                colorSpace: .sRGB,
+                alphaInfo: .premultipliedLast,
+                bitmapInfo: .byteOrderDefault
+            )
+        )
+        let otherSelector = GLFWContextSelector.make(otherContext, contextState.makeDriver())
+        #expect(otherSelector.select() == nil)
+        contextState.rejectsSelection = true
+
+        #expect(throws: WindowRenderTargetError.contextSelectionFailed) {
+            try target.presentSoftwareSurface(surface)
+        }
+        #expect(renderer.presentationCount == 0)
+        #expect(target.contextError == .selectionFailed)
+    }
+
+    /// Keeps drawing and clip operations in submission order across repeated selection failures.
+    @Test
+    func preservesCommandAndClipOrderAcrossSelectionFailures() throws {
+        let contextA = try #require(OpaquePointer(bitPattern: 0xA))
+        let contextB = try #require(OpaquePointer(bitPattern: 0xB))
+        let contextState = RecordingContextDriverState(contextA: contextA, contextB: contextB)
+        contextState.rejectsSelection = true
+        let renderer = RecordingContextRenderBackend(
+            name: "A",
+            contextState: contextState,
+            pixels: [0, 0, 0, 255]
+        )
+        let target = WindowRenderTarget(size: CGSize(width: 8, height: 8), renderer: renderer)
+        target.contextSelector = GLFWContextSelector.make(contextA, contextState.makeDriver())
+        let originalDraw = DrawCommand.clipRect(CGRect(x: 0, y: 0, width: 1, height: 1))
+        let firstClip = CGRect(x: 1, y: 1, width: 2, height: 2)
+        let laterDraw = DrawCommand.clipRect(CGRect(x: 2, y: 2, width: 3, height: 3))
+        let latestClip = CGRect(x: 3, y: 3, width: 4, height: 4)
+
+        target.submit(originalDraw)
+        target.flush()
+        target.setClipRegions([.rectangle(firstClip)])
+        target.submit(laterDraw)
+        target.setClipRegions([.rectangle(latestClip)])
+
+        #expect(renderer.commands.isEmpty)
+        #expect(contextState.events == [
+            "failure:selectionFailed",
+            "failure:selectionFailed",
+            "failure:selectionFailed"
+        ])
+
+        contextState.rejectsSelection = false
+        target.flush()
+
+        #expect(renderer.commands == [
+            originalDraw,
+            .resetClip,
+            .clipRect(firstClip),
+            laterDraw,
+            .resetClip,
+            .clipRect(latestClip)
+        ])
+        #expect(contextState.events == [
+            "failure:selectionFailed",
+            "failure:selectionFailed",
+            "failure:selectionFailed",
+            "select:A",
+            "execute:A@A"
+        ])
+    }
+
+    /// Reports an unavailable renderer directly when presenting after its weak owner releases it.
+    @Test
+    func reportsUnavailableRendererWhenPresentingSurface() throws {
+        var renderer: RecordingRenderBackend? = RecordingRenderBackend()
+        let target = WindowRenderTarget(size: CGSize(width: 1, height: 1), renderer: try #require(renderer))
+        renderer = nil
+        let surface = try #require(
+            PixelSurface(
+                data: nil,
+                width: 1,
+                height: 1,
+                bytesPerRow: 4,
+                colorSpace: .sRGB,
+                alphaInfo: .premultipliedLast,
+                bitmapInfo: .byteOrderDefault
+            )
+        )
+
+        #expect(throws: WindowRenderTargetError.rendererUnavailable) {
+            try target.presentSoftwareSurface(surface)
+        }
+        #expect(target.contextError == nil)
     }
 
     /// Verifies presenting a surface reports when its backend lacks texture support.
@@ -196,4 +412,127 @@ private final class RecordingRenderBackendWithoutSurfaceSupport: CGRenderBackend
     ///   - commands: The drawing operations submitted for rendering.
     ///   - size: The render destination dimensions.
     func execute(_ commands: [DrawCommand], size: OpenCoreGraphics.CGSize) { }
+}
+
+/// Stores selected contexts and the ordered operations performed by target tests.
+@MainActor
+private final class RecordingContextDriverState {
+    /// Maps each fake window context to its stable test label.
+    private let contextLabels: [OpaquePointer: String]
+
+    /// The fake context currently selected by the driver.
+    private var currentContext: OpaquePointer?
+
+    /// The ordered context-selection and renderer-operation log.
+    private(set) var events: [String] = []
+
+    /// When true, leaves the current context unchanged when selection is attempted.
+    var rejectsSelection = false
+
+    /// Creates a recording state for two fake window contexts.
+    /// - Parameters:
+    ///   - contextA: The fake context representing window A.
+    ///   - contextB: The fake context representing window B.
+    init(contextA: OpaquePointer, contextB: OpaquePointer) {
+        contextLabels = [contextA: "A", contextB: "B"]
+    }
+
+    /// Creates a fake context driver backed by this recording state.
+    /// - Returns: A driver that records context selection and failures.
+    func makeDriver() -> GLFWContextDriver {
+        GLFWContextDriver.injecting(
+            { self.currentContext },
+            { context in
+                guard self.rejectsSelection else {
+                    self.currentContext = context
+                    self.events.append("select:\(self.label(for: context))")
+                    return
+                }
+            },
+            { error in self.events.append("failure:\(error)") }
+        )
+    }
+
+    /// Appends a renderer operation and the context that was current for it.
+    /// - Parameters:
+    ///   - operation: The name of the renderer operation.
+    ///   - owner: The window expected to own the current context.
+    func record(_ operation: String, owner: String) {
+        events.append("\(operation):\(owner)@\(label(for: currentContext))")
+    }
+
+    /// Returns the stable label for a fake context.
+    /// - Parameter context: The context to label.
+    /// - Returns: Its test label, or `none`/`unknown` when it is not mapped.
+    private func label(for context: OpaquePointer?) -> String {
+        guard let context else { return "none" }
+        return contextLabels[context] ?? "unknown"
+    }
+}
+
+/// Records window-renderer calls together with the fake current context.
+private final class RecordingContextRenderBackend: CGRenderBackend, CGPixelSurfaceRenderer, CGPixelReadbackRenderer {
+    /// The fixed window label assigned to this fake renderer.
+    private let name: String
+
+    /// The state used to observe which fake context is current during operations.
+    private let contextState: RecordingContextDriverState
+
+    /// The bytes returned by a fake framebuffer read.
+    private let pixels: [UInt8]
+
+    /// The ordered commands executed by this renderer.
+    private(set) var commands: [DrawCommand] = []
+
+    /// The number of software surfaces presented by this renderer.
+    private(set) var presentationCount = 0
+
+    /// Creates a backend that records operations and returns deterministic pixels.
+    /// - Parameters:
+    ///   - name: The window label owning the renderer.
+    ///   - contextState: The driver state used to record the current context.
+    ///   - pixels: The RGBA bytes to return from readback.
+    init(name: String, contextState: RecordingContextDriverState, pixels: [UInt8]) {
+        self.name = name
+        self.contextState = contextState
+        self.pixels = pixels
+    }
+
+    /// Records a command batch without changing its order.
+    /// - Parameters:
+    ///   - commands: The drawing operations submitted for rendering.
+    ///   - size: The render destination dimensions.
+    func execute(_ commands: [DrawCommand], size: OpenCoreGraphics.CGSize) {
+        self.commands.append(contentsOf: commands)
+        let contextState = self.contextState
+        let name = self.name
+        MainActor.assumeIsolated {
+            contextState.record("execute", owner: name)
+        }
+    }
+
+    /// Records a software surface presentation.
+    /// - Parameters:
+    ///   - image: The surface's pixel snapshot.
+    ///   - size: The destination dimensions.
+    func renderSoftwareSurface(_ image: CGImageSnapshot, size: OpenCoreGraphics.CGSize) {
+        presentationCount += 1
+        let contextState = self.contextState
+        let name = self.name
+        MainActor.assumeIsolated {
+            contextState.record("present", owner: name)
+        }
+    }
+
+    /// Records a readback and returns this window's distinct pixel color.
+    /// - Parameter size: The framebuffer dimensions.
+    /// - Returns: The fake framebuffer's RGBA bytes.
+    func readPixels(size: OpenCoreGraphics.CGSize) -> [UInt8]? {
+        let contextState = self.contextState
+        let name = self.name
+        MainActor.assumeIsolated {
+            contextState.record("read", owner: name)
+        }
+        return pixels
+    }
 }
