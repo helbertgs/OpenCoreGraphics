@@ -142,3 +142,12 @@
   - O `flush()` público de CGContext já existia como método vazio; a fila de comandos usa esse ponto de integração, sem acrescentar API pública.
   - A conversão de imagem para comando copia os bytes do provider e deixa dimensões/blend capturados no valor, evitando reter a classe mutável `CGImage`.
 ---
+
+## 2026-11-09 - US-014
+- Adicionado `CGContext(width:height:)` para criar um contexto com dimensões em pixels.
+- `CGWindow.cgContext` agora é `CGContext`; a implementação única foi movida para `2D Drawing/CGContext.swift`.
+- Removido `CGWindowContext.swift`; mantido apenas o typealias público deprecated para compatibilidade.
+- `swift test` passou (33 testes).
+- **Learnings for future iterations:**
+  - O alias legado foi colocado ao lado da implementação canônica; não há mais dependências de `CGWindowContext` no código de produção.
+---

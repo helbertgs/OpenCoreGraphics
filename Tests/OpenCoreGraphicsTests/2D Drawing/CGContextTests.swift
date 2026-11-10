@@ -2,6 +2,17 @@ import Testing
 @testable import OpenCoreGraphics
 
 struct CGContextTests {
+    /// Verifies the size-based initializer used for window drawing contexts.
+    @Test
+    func sizeInitializerStoresPixelDimensions() {
+        let context = CGContext(width: 200, height: 100)
+
+        #expect(context.width == 200)
+        #expect(context.height == 100)
+        #expect(context.bitsPerComponent == 8)
+        #expect(context.bytesPerRow == 0)
+    }
+
     /// Verifies that restoring an empty graphics-state stack leaves state unchanged.
     @Test
     func restoreWithoutSaveLeavesGraphicsStateUnchanged() {

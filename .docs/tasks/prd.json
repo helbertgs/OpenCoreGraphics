@@ -210,8 +210,8 @@
         "Build e testes passam"
       ],
       "priority": 14,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "CGContext ganhou init(width:height:), foi movido para 2D Drawing, e CGWindow.cgContext usa diretamente CGContext. CGWindowContext.swift foi removido; o typealias deprecated de compatibilidade está junto a CGContext."
     },
     {
       "id": "US-015",

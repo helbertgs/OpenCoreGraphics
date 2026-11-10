@@ -28,8 +28,8 @@ open class CGWindow {
     var windowRef: OpaquePointer?
 
     /// The OpenGL context associated with the window.
-    public lazy var cgContext: CGWindowContext = {
-        CGWindowContext(width: Int(frame.size.width), height: Int(frame.size.height))
+    public lazy var cgContext: CGContext = {
+        CGContext(width: Int(frame.size.width), height: Int(frame.size.height))
     }()
 
     // MARK: - Configuring the Window’s Appearance

@@ -42,6 +42,26 @@ open class CGContext {
         self.bitsPerPixel = 0
     }
 
+    /// Compatibility name for contexts previously created by `CGWindow`.
+    @available(*, deprecated, message: "Use CGContext instead.")
+    public typealias CGWindowContext = CGContext
+
+    /// Creates a graphics context with the specified pixel dimensions.
+    /// - Parameters:
+    ///   - width: The width of the drawing destination in pixels.
+    ///   - height: The height of the drawing destination in pixels.
+    public convenience init(width: Int, height: Int) {
+        self.init(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: .genericRGBLinear,
+            bitmapInfo: 0
+        )
+    }
+
     /// Returns an affine transform that maps user space coordinates to device space coordinates.
     open var userSpaceToDeviceSpaceTransform: CGAffineTransform {
         ctm
