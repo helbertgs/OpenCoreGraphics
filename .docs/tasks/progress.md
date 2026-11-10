@@ -7,6 +7,7 @@
 - As conversões entre espaço de usuário e pixels usam `ctm`; `CGAffineTransform.inverse` não reverte corretamente translações 2D, então o contexto calcula a inversa 2D localmente.
 - Os protocolos internos de renderização OpenGL (`CGRenderTarget` e `CGRenderBackend`) são `@MainActor`, pois executam operações vinculadas ao contexto OpenGL atual; `CGContext.flush()` transfere os comandos locais via `MainActor.assumeIsolated`.
 - O working tree tem trabalho em andamento do usuário (arquivos novos/movidos ainda não commitados). Os commits das stories incluem **apenas** os arquivos tocados pela story, mais `.docs/tasks/prd.json` e `progress.md`.
+- Valores `struct` que controlam memória alocada usam um proprietário por referência com `deinit`; cópias do valor compartilham a alocação sem duplicar nem liberar o ponteiro prematuramente.
 
 ---
 
@@ -407,4 +408,13 @@
 - **Learnings for future iterations:**
   - Para enviar comandos de imagem entre atores, capture bytes imutáveis e uma identidade estável no comando; mantenha o objeto de imagem mutável fora de `Sendable`.
   - A primeira linha RGBA de `stb_image` é o topo da imagem; associe UV `v = 0` ao topo do quad para compensar o mapeamento de linhas do OpenGL.
+---
+
+## 2026-11-10 - US-044
+- Criado `PixelSurface` com armazenamento RGBA/BGRA de 8 bits, stride validado, alocação zeroed própria ou ponteiro emprestado e acesso coordenado a pixels.
+- Um objeto proprietário por referência libera a memória alocada no `deinit`; superfícies copiadas compartilham esse proprietário, enquanto superfícies emprestadas não liberam a memória externa.
+- Testes cobrem escrita no buffer emprestado 4×4 com padding, alocação inicializada, ordenação BGRA, RGBA/BGRA opacos e rejeição de CMYK/layout inválido; `swift test` passou (116 testes em 24 suítes), sem warnings.
+- **Learnings for future iterations:**
+  - O enum `CGBitmapInfo` representa cada byte order como um caso, e não permite combinar os casos como uma máscara; valide o par `alphaInfo`/`bitmapInfo` diretamente.
+  - A alocação de um tipo valor precisa ser mantida por um objeto proprietário de referência, já que `struct` não pode liberar recursos em `deinit`.
 ---

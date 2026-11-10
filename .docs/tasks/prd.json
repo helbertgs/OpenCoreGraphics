@@ -662,8 +662,8 @@
         "Build e testes passam"
       ],
       "priority": 44,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Criado PixelSurface com armazenamento RGBA/BGRA de 8 bits, memória alocada com liberação por proprietário de referência ou memória emprestada, validação de formato/espaço de cor e acesso a pixels respeitando bytesPerRow. Testes cobrem escrita visível no buffer emprestado 4x4, padding, armazenamento próprio, BGRA, variantes opacas e rejeição de CMYK/layout inválido. swift test passou (116 testes em 24 suítes), sem warnings."
     },
     {
       "id": "US-045",
