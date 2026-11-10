@@ -332,3 +332,12 @@
   - Para controlar o erro da curva, compare os pontos de controle com o segmento de corda e subdivida em t=0,5 até que todos estejam dentro da tolerância.
   - A polilinha guarda os pontos únicos e um indicador `isClosed`; o consumidor cria explicitamente a aresta final quando necessário.
 ---
+
+## 2026-11-10 - US-035
+- Criado `Stroker.outline(_:style:)` para gerar polígonos fechados com caps butt/square/round, joins miter/round/bevel e fallback para bevel quando o miter excede o limite.
+- Segmentos fechados geram contornos externo e interno com orientações opostas para preservar o vazio central sob preenchimento non-zero.
+- Testes validam bounds/pontos dos caps butt e square, joins miter/bevel/round e contornos fechados; `swift test` passou (89 testes em 21 suítes).
+- **Learnings for future iterations:**
+  - Para limitar miter, compare a extensão do canto com o semidiâmetro da linha; uma junção de 90° ultrapassa o limite 1 e precisa virar bevel.
+  - O contorno de um caminho fechado precisa de dois anéis com winding oposto para não preencher o interior.
+---

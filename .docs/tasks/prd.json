@@ -524,8 +524,8 @@
         "Build e testes passam"
       ],
       "priority": 35,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Stroker transforma polilinhas em contornos fechados; trata caps butt/square/round, joins miter/round/bevel, limite de miter e contornos internos/externos para caminhos fechados. Testes validam retângulos de linha horizontal, canto de 90 graus e miterLimit 1. swift test passou (89 testes em 21 suítes)."
     },
     {
       "id": "US-036",
