@@ -36,7 +36,9 @@ struct GLGlyphComparisonTests {
         softwareContext.flush()
 
         let glPixels = try #require(glContext.renderTarget?.readPixels())
-        let difference = try #require(meanChannelDifference(glPixels, softwareContext.data))
+        let normalizedGLPixels = try GLComparisonPixels(pixels: glPixels).data
+        let softwarePixels = try GLComparisonPixels(pixels: softwareContext.data, storedAsSRGB: true).data
+        let difference = try #require(meanChannelDifference(normalizedGLPixels, softwarePixels))
         _ = try GLComparisonReport(
             scene: "glyphs",
             width: glContext.width,
@@ -44,7 +46,7 @@ struct GLGlyphComparisonTests {
             difference: difference,
             tolerance: 4.0 / 255.0,
             glPixels: glPixels,
-            softwarePixels: softwareContext.data
+            softwarePixels: softwarePixels
         )
         #expect(difference <= 4.0 / 255.0, "Glyph rendering mean channel difference was \(difference)")
     }

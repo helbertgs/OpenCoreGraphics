@@ -51,8 +51,8 @@
         "Typecheck passes"
       ],
       "priority": 3,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Diagnóstico registrado em .docs/GLComparisonDiagnostics.md: o framebuffer era linear e o bitmap sRGB. Comparações normalizadas para sRGB passam nos limites originais, com contexto, readback sincronizado e cenas visíveis verificados em GL real."
     },
     {
       "id": "US-004",

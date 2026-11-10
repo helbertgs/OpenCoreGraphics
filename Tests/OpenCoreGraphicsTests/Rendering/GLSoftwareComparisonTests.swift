@@ -1,5 +1,7 @@
 import Foundation
 import Testing
+@preconcurrency import OpenGLAD
+import OpenGLFW
 @testable import OpenCoreGraphics
 
 /// Compares OpenGL and software output when explicitly enabled on a machine with a display.
@@ -31,14 +33,35 @@ struct GLSoftwareComparisonTests {
         let image = makeImage()
 
         for scene in ComparisonScene.allCases {
+            try #require(
+                glfwGetCurrentContext() == window.windowRef,
+                "The comparison window must own the current GL context"
+            )
             draw(scene, in: glContext, image: image)
             draw(scene, in: softwareContext, image: image)
             glContext.flush()
             softwareContext.flush()
 
+            try #require(
+                glfwGetCurrentContext() == window.windowRef,
+                "The comparison window must remain the current GL context during readback"
+            )
             let glPixels = try #require(glContext.renderTarget?.readPixels())
-            let softwarePixels = softwareContext.data
-            let difference = try #require(meanChannelDifference(glPixels, softwarePixels))
+            glad_glFinish()
+            let synchronizedPixels = try #require(glContext.renderTarget?.readPixels())
+            #expect(glPixels == synchronizedPixels, "Readback changed after glFinish for \(scene.rawValue)")
+            let softwarePixels = try GLComparisonPixels(pixels: softwareContext.data, storedAsSRGB: true).data
+            try #require(glPixels.count == softwarePixels.count)
+            let glBytes = [UInt8](glPixels)
+            let softwareBytes = [UInt8](softwarePixels)
+            #expect(stride(from: 0, to: glBytes.count, by: 4).contains {
+                glBytes[$0] != 0 || glBytes[$0 + 1] != 0 || glBytes[$0 + 2] != 0
+            }, "The GL scene \(scene.rawValue) must contain visible colored pixels")
+            #expect(stride(from: 0, to: softwareBytes.count, by: 4).contains {
+                softwareBytes[$0] != 0 || softwareBytes[$0 + 1] != 0 || softwareBytes[$0 + 2] != 0
+            }, "The software scene \(scene.rawValue) must contain visible colored pixels")
+            let normalizedGLPixels = try GLComparisonPixels(pixels: glPixels).data
+            let difference = try #require(meanChannelDifference(normalizedGLPixels, softwarePixels))
             let tolerance = scene.hasCurvedEdges ? 4.0 / 255.0 : 2.0 / 255.0
 
             _ = try GLComparisonReport(

@@ -71,40 +71,13 @@ struct GLComparisonReport {
             ?? ".build/gl-comparison", isDirectory: true)
         var sampleBuffers: GLint = 0
         var samples: GLint = 0
-        var encoding: GLint = 0
-        var readFramebuffer: GLint = 0
         var drawFramebuffer: GLint = 0
-        var readBuffer: GLint = 0
         var viewport: [GLint] = [0, 0, 0, 0]
+        let framebuffer = try GLComparisonFramebuffer()
         glad_glGetIntegerv(GLenum(GL_SAMPLE_BUFFERS), &sampleBuffers)
         glad_glGetIntegerv(GLenum(GL_SAMPLES), &samples)
-        glad_glGetIntegerv(GLenum(GL_READ_FRAMEBUFFER_BINDING), &readFramebuffer)
         glad_glGetIntegerv(GLenum(GL_DRAW_FRAMEBUFFER_BINDING), &drawFramebuffer)
-        glad_glGetIntegerv(GLenum(GL_READ_BUFFER), &readBuffer)
         glad_glGetIntegerv(GLenum(GL_VIEWPORT), &viewport)
-        let attachment: GLenum
-        if readFramebuffer == 0 {
-            switch GLenum(readBuffer) {
-            case GLenum(GL_BACK), GLenum(GL_BACK_LEFT):
-                attachment = GLenum(GL_BACK_LEFT)
-            case GLenum(GL_FRONT), GLenum(GL_FRONT_LEFT):
-                attachment = GLenum(GL_FRONT_LEFT)
-            default:
-                throw GLComparisonReportError.unknownFramebufferEncoding
-            }
-        } else {
-            guard readBuffer != GLint(GL_NONE) else { throw GLComparisonReportError.unknownFramebufferEncoding }
-            attachment = GLenum(readBuffer)
-        }
-        glad_glGetFramebufferAttachmentParameteriv(
-            GLenum(GL_READ_FRAMEBUFFER),
-            attachment,
-            GLenum(GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING),
-            &encoding
-        )
-        guard encoding == GLint(GL_LINEAR) || encoding == GLint(GL_SRGB) else {
-            throw GLComparisonReportError.unknownFramebufferEncoding
-        }
         guard let version = glad_glGetString(GLenum(GL_VERSION)),
               let renderer = glad_glGetString(GLenum(GL_RENDERER)),
               let vendor = glad_glGetString(GLenum(GL_VENDOR)) else {
@@ -119,14 +92,14 @@ struct GLComparisonReport {
             version: String(cString: version),
             renderer: String(cString: renderer),
             vendor: String(cString: vendor),
-            encoding: encoding == GLint(GL_SRGB) ? "sRGB" : "linear",
+            encoding: framebuffer.encoding == GLint(GL_SRGB) ? "sRGB" : "linear",
             sRGBEnabled: glad_glIsEnabled(GLenum(GL_FRAMEBUFFER_SRGB)) == GL_TRUE,
             sampleBuffers: sampleBuffers,
             samples: samples,
             multisampleEnabled: glad_glIsEnabled(GLenum(GL_MULTISAMPLE)) == GL_TRUE,
-            readFramebuffer: readFramebuffer,
+            readFramebuffer: framebuffer.readFramebuffer,
             drawFramebuffer: drawFramebuffer,
-            readBuffer: readBuffer,
+            readBuffer: framebuffer.readBuffer,
             viewport: viewport
         )
         try self.init(
@@ -190,7 +163,8 @@ struct GLComparisonReport {
             "viewport": metadata.viewport,
             "difference": difference,
             "tolerance": tolerance,
-            "pixelFormat": "RGBA8, bottom-up rows"
+            "pixelFormat": "RGBA8, bottom-up rows",
+            "comparisonColorSpace": "sRGB, opaque RGBA"
         ]
         if failed {
             try glPixels.write(to: output.appending(path: "\(scene)-gl.rgba"), options: .atomic)

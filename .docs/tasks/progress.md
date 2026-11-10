@@ -7,6 +7,7 @@
 - Os testes do executor usam processos Ruby controlados e não precisam de GPU; a suíte roda em macOS/Linux.
 - Em macOS, o target de bootstrap exclusivo dos testes inicializa AppKit antes do async main apenas no modo GL opt-in; deixar o GLFW iniciar o loop dentro do Swift Testing pode encerrar o executor sem resumo.
 - O resumo de falha do Swift Testing pode terminar em `with N issues`; isso é uma execução concluída com falha, não uma saída incompleta.
+- A comparação GL/software usa bitmap sRGB opaco: converta RGB linear do framebuffer GL para sRGB somente quando os bytes armazenados ainda forem lineares; rejeite alpha não opaco até existir conversão pré-multiplicada adequada.
 
 ---
 
@@ -45,4 +46,14 @@
 - **Learnings for future iterations:**
   - O loop AppKit iniciado por GLFW dentro do async main interrompia o executor; inicializar AppKit antes de o helper entrar no async main permitiu a emissão do resumo.
   - Framebuffer linear e bitmap sRGB explicam uma parte observada das diferenças; US-003 deve validar a normalização, o readback e a cobertura visual sem elevar tolerâncias.
+---
+
+## 2026-11-10 - US-003
+- Diagnosticada a comparação de cinco cenas: o framebuffer GL era linear enquanto o bitmap usava sRGB. As comparações agora normalizam os pixels opacos para sRGB usando `CGColor.converted(to:)`, sem mudar tolerâncias.
+- Verificado o contexto atual antes de desenhar e ler, tamanho e viewport reais, presença de pixels coloridos e estabilidade do readback antes/depois de `glFinish`. Registrados ambiente, métricas e limitações em `.docs/GLComparisonDiagnostics.md`.
+- `ruby scripts/run-gl-tests.rb --timeout 40`: duas suítes GL passaram com resumo conclusivo e todas as sete cenas dentro dos limites; `swift test -Xswiftc -strict-concurrency=complete`: 183 testes passaram; `swift build -Xswiftc -strict-concurrency=complete` e `git diff --check` passaram.
+- Files changed: `.docs/GLComparisonDiagnostics.md`, `README.md`, `Tests/OpenCoreGraphicsTests/Rendering/GLComparisonPixels.swift`, `GLComparisonPixelsTests.swift`, `GLComparisonReport.swift`, `GLGlyphComparisonTests.swift`, `GLSoftwareComparisonTests.swift`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`.
+- **Learnings for future iterations:**
+  - Nesta máquina a comparação usa framebuffer 128×128 linear com MSAA 4; corrija a comparação de espaço de cor, não o limite de erro.
+  - Não extrapolar o resultado para múltiplas janelas, alpha parcial ou outros drivers; essas situações exigem testes próprios.
 ---
