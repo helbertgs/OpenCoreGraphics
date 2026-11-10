@@ -398,6 +398,14 @@ final class SoftwareRenderer: CGRenderBackend {
                 result[2] = min(1, result[2] / alpha)
             }
         }
+        if let sourceColorSpace = image.colorSpace,
+           sourceColorSpace == .sRGB || sourceColorSpace == .genericRGBLinear {
+            guard let color = CGColor(colorSpace: sourceColorSpace, components: result),
+                  let converted = color.converted(to: .genericRGBLinear) else {
+                return nil
+            }
+            result = converted.components
+        }
         return result
     }
 
@@ -476,11 +484,24 @@ final class SoftwareRenderer: CGRenderBackend {
         let sourceAlpha = source[3]
         let destinationAlpha = Double(destination.alpha) / 255
         let sourcePremultiplied = [source[0], source[1], source[2]].map { $0 * sourceAlpha }
-        let destinationPremultiplied = [
+        var destinationPremultiplied = [
             Double(destination.red) / 255,
             Double(destination.green) / 255,
             Double(destination.blue) / 255
         ]
+        if surface.colorSpace == .sRGB {
+            let straightDestination = destinationAlpha == 0
+                ? [0, 0, 0]
+                : destinationPremultiplied.map { $0 / destinationAlpha }
+            guard let storedColor = CGColor(
+                colorSpace: .sRGB,
+                components: straightDestination + [destinationAlpha]
+            ),
+            let linearColor = storedColor.converted(to: .genericRGBLinear) else {
+                return
+            }
+            destinationPremultiplied = linearColor.components.prefix(3).map { $0 * destinationAlpha }
+        }
         let result: [Double]
         let resultAlpha: Double
 
@@ -539,11 +560,27 @@ final class SoftwareRenderer: CGRenderBackend {
         }
 
         let remainingCoverage = 1 - coverage
+        let outputAlpha = resultAlpha * coverage + destinationAlpha * remainingCoverage
+        var outputColor = (0..<3).map { index in
+            result[index] * coverage + destinationPremultiplied[index] * remainingCoverage
+        }
+        if surface.colorSpace == .sRGB, outputAlpha > 0 {
+            let straightOutput = outputColor.map { $0 / outputAlpha }
+            guard let linearColor = CGColor(
+                colorSpace: .genericRGBLinear,
+                components: straightOutput + [outputAlpha]
+            ),
+            let srgbColor = linearColor.converted(to: .sRGB) else {
+                return
+            }
+            outputColor = srgbColor.components.prefix(3).map { $0 * outputAlpha }
+        }
+
         let output = PixelSurface.Pixel(
-            red: channel(result[0] * coverage + destinationPremultiplied[0] * remainingCoverage),
-            green: channel(result[1] * coverage + destinationPremultiplied[1] * remainingCoverage),
-            blue: channel(result[2] * coverage + destinationPremultiplied[2] * remainingCoverage),
-            alpha: channel(resultAlpha * coverage + destinationAlpha * remainingCoverage)
+            red: channel(outputColor[0]),
+            green: channel(outputColor[1]),
+            blue: channel(outputColor[2]),
+            alpha: channel(outputAlpha)
         )
         surface.setPixel(output, x: x, y: y)
     }
@@ -636,22 +673,35 @@ final class SoftwareRenderer: CGRenderBackend {
     /// - Returns: Four finite components clamped to the unit range, or nil when unsupported.
     private func rgbaComponents(for color: CGColor) -> [Double]? {
         guard let colorSpace = color.colorSpace else { return nil }
+        let convertedColor: CGColor
+        if colorSpace == .sRGB || colorSpace == .genericRGBLinear {
+            guard let converted = color.converted(to: .genericRGBLinear) else { return nil }
+            convertedColor = converted
+        } else {
+            convertedColor = color
+        }
+
         let components: [Double]
         switch colorSpace.model {
         case .rgb:
-            guard color.components.count == 4 else { return nil }
-            components = color.components
+            guard convertedColor.components.count == 4 else { return nil }
+            components = convertedColor.components
         case .gray:
-            guard color.components.count == 2 else { return nil }
-            components = [color.components[0], color.components[0], color.components[0], color.components[1]]
-        case .cmyk:
-            guard color.components.count == 5 else { return nil }
-            let black = color.components[3]
+            guard convertedColor.components.count == 2 else { return nil }
             components = [
-                (1 - color.components[0]) * (1 - black),
-                (1 - color.components[1]) * (1 - black),
-                (1 - color.components[2]) * (1 - black),
-                color.components[4]
+                convertedColor.components[0],
+                convertedColor.components[0],
+                convertedColor.components[0],
+                convertedColor.components[1]
+            ]
+        case .cmyk:
+            guard convertedColor.components.count == 5 else { return nil }
+            let black = convertedColor.components[3]
+            components = [
+                (1 - convertedColor.components[0]) * (1 - black),
+                (1 - convertedColor.components[1]) * (1 - black),
+                (1 - convertedColor.components[2]) * (1 - black),
+                convertedColor.components[4]
             ]
         case .deviceN, .lab:
             return nil

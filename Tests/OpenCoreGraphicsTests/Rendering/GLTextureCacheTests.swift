@@ -28,6 +28,20 @@ struct GLTextureCacheTests {
         #expect(prepared.data == Data([100, 50, 25, 128]))
     }
 
+    /// Verifies sRGB image channels are converted to linear values before texture upload.
+    @Test
+    func convertsSRGBPixelsToLinearTextureChannels() throws {
+        let snapshot = makeSnapshot(
+            data: [128, 128, 128, 128],
+            alphaInfo: .last,
+            bitmapInfo: .byteOrder32Big,
+            colorSpace: .sRGB
+        )
+        let prepared = try OpenGLTextureLoader().uploadData(for: snapshot)
+
+        #expect(prepared.data == Data([28, 28, 28, 128]))
+    }
+
     /// Verifies already-premultiplied pixels are preserved and alpha-first bytes become RGBA.
     @Test
     func preservesPremultipliedTextureBytesAndNormalizesAlphaFirst() throws {
@@ -147,7 +161,7 @@ struct GLTextureCacheTests {
             bitsPerPixel: 32,
             bytesPerRow: 4,
             alphaInfo: .premultipliedLast,
-            colorSpace: .sRGB,
+            colorSpace: .genericRGBLinear,
             bitmapInfo: .byteOrder32Big
         )
     }
@@ -157,11 +171,13 @@ struct GLTextureCacheTests {
     ///   - data: The source pixel bytes.
     ///   - alphaInfo: The alpha layout associated with the bytes.
     ///   - bitmapInfo: The byte order associated with the bytes.
+    ///   - colorSpace: The color space used to interpret the RGB channels.
     /// - Returns: A complete one-pixel image snapshot.
     private func makeSnapshot(
         data: [UInt8],
         alphaInfo: CGImageAlphaInfo,
-        bitmapInfo: CGBitmapInfo
+        bitmapInfo: CGBitmapInfo,
+        colorSpace: CGColorSpace = .genericRGBLinear
     ) -> CGImageSnapshot {
         CGImageSnapshot(
             identity: UUID(),
@@ -172,7 +188,7 @@ struct GLTextureCacheTests {
             bitsPerPixel: 32,
             bytesPerRow: 4,
             alphaInfo: alphaInfo,
-            colorSpace: .sRGB,
+            colorSpace: colorSpace,
             bitmapInfo: bitmapInfo
         )
     }

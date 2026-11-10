@@ -42,6 +42,23 @@ struct CGColorTests {
         #expect(color.description == "CGColor(colorSpace: CGColorSpace.genericRGBLinear, components: [0.2, 0.4, 0.6, 0.8], alpha: 0.8)")
     }
 
+    /// Verifies sRGB values convert to linear RGB and back without changing alpha.
+    @Test
+    func convertsBetweenSRGBAndLinearRGB() throws {
+        let linear = try #require(
+            CGColor(sred: 0.5, green: 0.5, blue: 0.5, alpha: 0.25)
+                .converted(to: .genericRGBLinear)
+        )
+        let srgb = try #require(linear.converted(to: .sRGB))
+
+        #expect(linear.colorSpace == .genericRGBLinear)
+        #expect(abs(linear.components[0] - 0.2140) < 0.001)
+        #expect(linear.alpha == 0.25)
+        #expect(srgb.colorSpace == .sRGB)
+        #expect(abs(srgb.components[0] - 0.5) < 0.001)
+        #expect(srgb.alpha == 0.25)
+    }
+
     /// Verifies copying a decoded color with no color space returns nil safely.
     @Test
     func copyWithoutColorSpaceReturnsNil() throws {

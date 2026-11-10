@@ -160,6 +160,7 @@ struct OpenGLTextureLoader: GLTextureLoader {
                 sourcePixelBytes: channelCount,
                 alphaInfo: image.alphaInfo,
                 bitmapInfo: image.bitmapInfo,
+                colorSpace: image.colorSpace,
                 outputByteCount: outputByteCount
             ),
             pixelFormat
@@ -198,7 +199,7 @@ struct OpenGLTextureLoader: GLTextureLoader {
         }
     }
 
-    /// Removes row padding, normalizes alpha layouts, and premultiplies color channels.
+    /// Removes row padding, normalizes alpha layouts, and prepares linear premultiplied channels.
     /// - Parameters:
     ///   - data: The validated source pixel bytes.
     ///   - width: The image width in pixels.
@@ -207,6 +208,7 @@ struct OpenGLTextureLoader: GLTextureLoader {
     ///   - sourcePixelBytes: The number of bytes occupied by each source pixel.
     ///   - alphaInfo: The alpha layout used by each pixel.
     ///   - bitmapInfo: The byte order used by each pixel.
+    ///   - colorSpace: The color space used to interpret the source RGB channels.
     ///   - outputByteCount: The number of packed bytes to reserve.
     /// - Throws: `GLTextureError.invalidBitmapLayout` for unsupported alpha-only pixels.
     private func tightlyPackedData(
@@ -217,6 +219,7 @@ struct OpenGLTextureLoader: GLTextureLoader {
         sourcePixelBytes: Int,
         alphaInfo: CGImageAlphaInfo,
         bitmapInfo: CGBitmapInfo,
+        colorSpace: CGColorSpace?,
         outputByteCount: Int
     ) throws -> Data {
         var packedData = Data()
@@ -226,7 +229,20 @@ struct OpenGLTextureLoader: GLTextureLoader {
         for row in 0..<height {
             let rowStart = row * sourceRowBytes
             let rowData = data.subdata(in: rowStart..<(rowStart + sourcePixelRowBytes))
-            if sourcePixelBytes == 2 {
+            if sourcePixelBytes == 3, colorSpace == .sRGB {
+                for pixelIndex in stride(from: 0, to: rowData.count, by: 3) {
+                    let color = CGColor(
+                        sred: Double(rowData[pixelIndex]) / 255,
+                        green: Double(rowData[pixelIndex + 1]) / 255,
+                        blue: Double(rowData[pixelIndex + 2]) / 255,
+                        alpha: 1
+                    )
+                    guard let linearColor = color.converted(to: .genericRGBLinear) else {
+                        throw GLTextureError.invalidBitmapLayout
+                    }
+                    packedData.append(contentsOf: linearColor.components.prefix(3).map(byte))
+                }
+            } else if sourcePixelBytes == 2 {
                 for pixelIndex in stride(from: 0, to: rowData.count, by: 2) {
                     let grayIndex: Int
                     let alphaIndex: Int?
@@ -267,7 +283,34 @@ struct OpenGLTextureLoader: GLTextureLoader {
                     let red = rowData[pixelIndex + indices.red]
                     let green = rowData[pixelIndex + indices.green]
                     let blue = rowData[pixelIndex + indices.blue]
-                    if isPremultiplied(alphaInfo) || indices.alpha == nil {
+                    if colorSpace == .sRGB {
+                        let alphaComponent = Double(alpha) / 255
+                        let sourceRGB: [Double]
+                        if isPremultiplied(alphaInfo) {
+                            sourceRGB = alpha == 0
+                                ? [0, 0, 0]
+                                : [
+                                    min(1, Double(red) / Double(alpha)),
+                                    min(1, Double(green) / Double(alpha)),
+                                    min(1, Double(blue) / Double(alpha))
+                                ]
+                        } else {
+                            sourceRGB = [red, green, blue].map { Double($0) / 255 }
+                        }
+                        let color = CGColor(
+                            sred: sourceRGB[0],
+                            green: sourceRGB[1],
+                            blue: sourceRGB[2],
+                            alpha: 1
+                        )
+                        guard let linearColor = color.converted(to: .genericRGBLinear) else {
+                            throw GLTextureError.invalidBitmapLayout
+                        }
+                        packedData.append(contentsOf: linearColor.components.prefix(3).map {
+                            byte($0 * alphaComponent)
+                        })
+                        packedData.append(alpha)
+                    } else if isPremultiplied(alphaInfo) || indices.alpha == nil {
                         packedData.append(contentsOf: [red, green, blue, alpha])
                     } else {
                         packedData.append(contentsOf: [
@@ -284,6 +327,13 @@ struct OpenGLTextureLoader: GLTextureLoader {
         }
 
         return packedData
+    }
+
+    /// Converts a normalized linear component into its nearest 8-bit channel value.
+    /// - Parameter component: A color or alpha value in the unit range.
+    /// - Returns: The rounded channel byte.
+    private func byte(_ component: Double) -> UInt8 {
+        UInt8((min(1, max(0, component)) * 255).rounded())
     }
 
     /// Resolves the red, green, blue, and optional alpha byte positions for a 32-bit pixel.

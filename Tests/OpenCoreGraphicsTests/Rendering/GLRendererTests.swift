@@ -196,4 +196,19 @@ struct GLRendererTests {
             ) == [1, 1, 1, 1]
         )
     }
+
+    /// Verifies OpenGL color uniforms receive linearized sRGB values before premultiplication.
+    @Test
+    func convertsSRGBColorToLinearShaderComponents() throws {
+        let components = try #require(
+            GLRendererGeometry.rgbaComponents(
+                for: CGColor(sred: 0.5, green: 0.5, blue: 0.5, alpha: 0.5)
+            )
+        )
+
+        #expect(abs(Double(components[0]) - 0.1070) < 0.001)
+        #expect(abs(Double(components[1]) - 0.1070) < 0.001)
+        #expect(abs(Double(components[2]) - 0.1070) < 0.001)
+        #expect(components[3] == 0.5)
+    }
 }

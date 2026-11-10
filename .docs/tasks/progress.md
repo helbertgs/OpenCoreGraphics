@@ -12,6 +12,7 @@
 - `CGWindow.clear()` desativa scissoring antes de limpar a janela; o renderer reaplica o clip persistente ao iniciar o próximo lote.
 - Ao pedir MSAA, mantenha fallback sem amostras: tente criar com `GLFW_SAMPLES=4`, repita com `0` se necessário e consulte `GL_SAMPLE_BUFFERS` antes de ativar `GL_MULTISAMPLE`.
 - O `SoftwareRenderer` interpreta imagens usando metadados do snapshot, amostra o quad pela transformação afim inversa e interpola canais de cor em espaço pré-multiplicado.
+- Faça a composição de cores e imagens em RGB linear; converta para sRGB apenas ao armazenar em superfícies sRGB e consulte a codificação real do framebuffer antes de habilitar `GL_FRAMEBUFFER_SRGB`.
 - A exportação BMP lê pixels pelo `PixelSurface.pixel(x:y:)`, converte alpha pré-multiplicado para reto e escreve linhas top-down em BGRA.
 - A apresentação direta de um `PixelSurface` no OpenGL usa identidade estável por alvo e `GLTextureCache.updateTexture`; atualize a imagem existente com `glTexSubImage2D` e realoque o armazenamento somente quando as dimensões mudarem.
 - Imagens usam linhas top-down no `CGImage`; ao comparar renderizadores, mantenha coerentes a coordenada `v` do shader GL e a amostragem vertical do software, validando com um bitmap assimétrico.
@@ -541,4 +542,14 @@
 - Files changed: `Sources/OpenCoreGraphics/Rendering/GL/GLBlendMode.swift`, `Sources/OpenCoreGraphics/Rendering/GL/GLBatchBuffer.swift`, `Sources/OpenCoreGraphics/Rendering/GL/GLRenderer.swift`, `Sources/OpenCoreGraphics/Rendering/GL/GLTextureLoader.swift`, `Sources/OpenCoreGraphicsSample/main.swift`, `Tests/OpenCoreGraphicsTests/Rendering/GLBlendModeTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/GLRendererTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/GLTextureCacheTests.swift`, `.docs/GLBlendModeMapping.md`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
 - **Learnings for future iterations:**
   - `CGImageAlphaInfo` e `CGBitmapInfo` determinam tanto a posição dos canais quanto se os valores RGB já incluem alpha; normalize esses casos para RGBA pré-multiplicado antes do upload, sem multiplicar duas vezes os dados premultiplicados.
+---
+
+## 2026-11-10 - US-056
+- Adicionado `CGColor.converted(to:)` com as funções de transferência sRGB ↔ RGB linear e preservação do alpha.
+- O renderer de software compõe em linear, convertendo amostras e pixels sRGB nas fronteiras da superfície; o renderer GL lineariza cores e texturas e ativa `GL_FRAMEBUFFER_SRGB` apenas quando a attachment real do framebuffer é sRGB.
+- A documentação em `.docs/ColorSpaceConversion.md` descreve as conversões, a consulta de capacidade da janela e o fallback para framebuffer linear.
+- `swift test` passou (152 testes em 28 suítes), `swift build --target OpenCoreGraphicsSample`, validação de `.docs/tasks/prd.json` e `git diff --check` passaram.
+- Files changed: `Sources/OpenCoreGraphics/Colors and Fonts/CGColor.swift`, `Sources/OpenCoreGraphics/Rendering/SoftwareRenderer.swift`, `Sources/OpenCoreGraphics/Rendering/GL/GLRenderer.swift`, `Sources/OpenCoreGraphics/Rendering/GL/GLTextureLoader.swift`, `Sources/OpenCoreGraphics/Services/Window Services/CGWindow.swift`, `Tests/OpenCoreGraphicsTests/Colors and Fonts/CGColorTests.swift`, `Tests/OpenCoreGraphicsTests/2D Drawing/CGContextTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/GLRendererTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/GLTextureCacheTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/SoftwareRendererTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/BMPEncoderTests.swift`, `.docs/ColorSpaceConversion.md`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
+- **Learnings for future iterations:**
+  - Em uma surface sRGB, converta também o destino premultiplicado para linear antes do blending e re-encode o resultado depois; a pista GLFW de sRGB não garante o formato efetivo, então consulte a attachment.
 ---

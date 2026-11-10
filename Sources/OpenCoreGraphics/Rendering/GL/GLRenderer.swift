@@ -262,36 +262,44 @@ enum GLRendererGeometry {
     /// - Parameter color: The color to convert.
     /// - Returns: Four RGBA values, or nil for unsupported or incomplete color data.
     static func rgbaComponents(for color: CGColor) -> [Float]? {
-        guard let colorSpace = color.colorSpace else { return nil }
+        guard let sourceColorSpace = color.colorSpace else { return nil }
+        let linearColor: CGColor
+        if sourceColorSpace == .sRGB || sourceColorSpace == .genericRGBLinear {
+            guard let converted = color.converted(to: .genericRGBLinear) else { return nil }
+            linearColor = converted
+        } else {
+            linearColor = color
+        }
 
+        guard let colorSpace = linearColor.colorSpace else { return nil }
         switch colorSpace.model {
         case .rgb:
-            guard color.components.count == 4 else { return nil }
+            guard linearColor.components.count == 4 else { return nil }
             return premultipliedRGBA(
-                red: color.components[0],
-                green: color.components[1],
-                blue: color.components[2],
-                alpha: color.components[3]
+                red: linearColor.components[0],
+                green: linearColor.components[1],
+                blue: linearColor.components[2],
+                alpha: linearColor.components[3]
             )
         case .gray:
-            guard color.components.count == 2 else { return nil }
+            guard linearColor.components.count == 2 else { return nil }
             return premultipliedRGBA(
-                red: color.components[0],
-                green: color.components[0],
-                blue: color.components[0],
-                alpha: color.components[1]
+                red: linearColor.components[0],
+                green: linearColor.components[0],
+                blue: linearColor.components[0],
+                alpha: linearColor.components[1]
             )
         case .cmyk:
-            guard color.components.count == 5 else { return nil }
-            let cyan = color.components[0]
-            let magenta = color.components[1]
-            let yellow = color.components[2]
-            let black = color.components[3]
+            guard linearColor.components.count == 5 else { return nil }
+            let cyan = linearColor.components[0]
+            let magenta = linearColor.components[1]
+            let yellow = linearColor.components[2]
+            let black = linearColor.components[3]
             return premultipliedRGBA(
                 red: (1 - cyan) * (1 - black),
                 green: (1 - magenta) * (1 - black),
                 blue: (1 - yellow) * (1 - black),
-                alpha: color.components[4]
+                alpha: linearColor.components[4]
             )
         case .deviceN, .lab:
             return nil

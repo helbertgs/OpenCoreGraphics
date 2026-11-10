@@ -86,7 +86,7 @@ struct BMPEncoderTests {
                 height: 64,
                 bitsPerComponent: 8,
                 bytesPerRow: 0,
-                space: .sRGB,
+                space: .genericRGBLinear,
                 bitmapInfo: 0
             )
         )

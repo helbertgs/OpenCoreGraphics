@@ -14,6 +14,67 @@ struct CGContextTests {
         #expect(context.bytesPerRow == 0)
     }
 
+    /// Verifies software rendering converts sRGB fills and images into the bitmap color space.
+    @Test
+    func convertsSRGBFillsAndImagesToLinearBitmapPixels() throws {
+        let context = try #require(
+            CGContext(
+                data: nil,
+                width: 1,
+                height: 1,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: .genericRGBLinear,
+                bitmapInfo: 0
+            )
+        )
+        let color = CGColor(sred: 0.5, green: 0.5, blue: 0.5, alpha: 1)
+        context.setFillColor(color)
+        context.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
+        context.flush()
+        #expect(Array(context.data.prefix(4)) == [55, 55, 55, 255])
+
+        let image = CGImage(
+            width: 1,
+            height: 1,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: 4,
+            space: .sRGB,
+            bitmapInfo: .byteOrder32Big,
+            provider: CGDataProvider(data: Data([128, 128, 128, 255])),
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent
+        )
+        context.draw(image, in: CGRect(x: 0, y: 0, width: 1, height: 1))
+        context.flush()
+
+        #expect(Array(context.data.prefix(4)) == [55, 55, 55, 255])
+    }
+
+    /// Verifies software rendering encodes linear output for sRGB bitmap surfaces.
+    @Test
+    func encodesLinearColorsForSRGBBitmapPixels() throws {
+        let context = try #require(
+            CGContext(
+                data: nil,
+                width: 1,
+                height: 1,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: .sRGB,
+                bitmapInfo: 0
+            )
+        )
+        let linearMidpoint = 0.21404114048223255
+        context.setFillColor(CGColor(red: linearMidpoint, green: linearMidpoint, blue: linearMidpoint, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: 1, height: 1))
+        context.flush()
+
+        #expect(Array(context.data.prefix(4)) == [128, 128, 128, 255])
+    }
+
     /// Verifies that restoring an empty graphics-state stack leaves state unchanged.
     @Test
     func restoreWithoutSaveLeavesGraphicsStateUnchanged() {

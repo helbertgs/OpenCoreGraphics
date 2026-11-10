@@ -128,6 +128,35 @@ public struct CGColor : Codable, Equatable, Hashable, Sendable {
     }
 }
 
+extension CGColor {
+    /// Converts the color between sRGB and linear RGB while preserving its alpha.
+    /// - Parameter colorSpace: The destination color space.
+    /// - Returns: The converted color, or nil when the conversion is unsupported.
+    func converted(to colorSpace: CGColorSpace) -> CGColor? {
+        guard let sourceColorSpace = self.colorSpace else { return nil }
+        guard sourceColorSpace != colorSpace else { return self }
+        guard components.count == 4,
+              components.allSatisfy(\.isFinite),
+              (sourceColorSpace == .sRGB && colorSpace == .genericRGBLinear)
+                || (sourceColorSpace == .genericRGBLinear && colorSpace == .sRGB) else {
+            return nil
+        }
+
+        let convertedComponents = components.prefix(3).map { component in
+            if sourceColorSpace == .sRGB {
+                return component <= 0.04045
+                    ? component / 12.92
+                    : pow((component + 0.055) / 1.055, 2.4)
+            }
+            return component <= 0.0031308
+                ? component * 12.92
+                : 1.055 * pow(component, 1 / 2.4) - 0.055
+        } + [components[3]]
+
+        return CGColor(colorSpace: colorSpace, components: convertedComponents)
+    }
+}
+
 extension CGColor : CustomStringConvertible {
     public var description: String {
         return "CGColor(colorSpace: \(colorSpace?.description ?? "nil"), components: \(components), alpha: \(alpha))"

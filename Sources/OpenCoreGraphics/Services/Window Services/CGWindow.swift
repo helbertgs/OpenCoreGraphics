@@ -190,6 +190,7 @@ extension CGWindow {
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE)
         glfwWindowHint(GLFW_STENCIL_BITS, 8)
         glfwWindowHint(GLFW_SAMPLES, 4)
+        glfwWindowHint(GLFW_SRGB_CAPABLE, GLFW_TRUE)
         glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE)
 
         let requestedWindow = glfwCreateWindow(
@@ -224,6 +225,19 @@ extension CGWindow {
             glfwMakeContextCurrent(nil)
             destroy()
             throw CGWindowError.gladLoadFailed
+        }
+
+        var framebufferColorEncoding: GLint = GLint(GL_LINEAR)
+        glad_glGetFramebufferAttachmentParameteriv(
+            GLenum(GL_FRAMEBUFFER),
+            GLenum(GL_BACK_LEFT),
+            GLenum(GL_FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING),
+            &framebufferColorEncoding
+        )
+        if GLenum(framebufferColorEncoding) == GLenum(GL_SRGB) {
+            glad_glEnable(GLenum(GL_FRAMEBUFFER_SRGB))
+        } else {
+            glad_glDisable(GLenum(GL_FRAMEBUFFER_SRGB))
         }
 
         var sampleBufferCount: Int32 = 0

@@ -847,8 +847,8 @@
         "Build e testes passam"
       ],
       "priority": 56,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "`CGColor.converted(to:)` agora centraliza as transferências sRGB ↔ RGB linear e preserva alpha. Software e GL convertem cores para linear antes de compor; o software converte pixels de/para o espaço do bitmap, e uploads GL linearizam texturas sRGB. A janela solicita framebuffer sRGB e habilita `GL_FRAMEBUFFER_SRGB` somente quando a codificação real da attachment é `GL_SRGB`; a decisão está documentada em `.docs/ColorSpaceConversion.md`. Testes validam 0.5 sRGB ≈ 0.2140 linear, o inverso, cores/imagens nos dois renderizadores e texturas. `swift test` passou (152 testes em 28 suítes), `swift build --target OpenCoreGraphicsSample`, validação do JSON e `git diff --check` passaram."
     },
     {
       "id": "US-057",
