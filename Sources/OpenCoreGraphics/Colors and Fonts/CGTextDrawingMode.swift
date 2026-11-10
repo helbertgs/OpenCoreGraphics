@@ -6,7 +6,7 @@ import Foundation
 /// Text drawing modes determine how Core Graphics renders individual glyphs onscreen. 
 /// For example, you can set a text drawing mode to draw text filled in or outlined (stroked) or both. 
 /// You can also create special effects with the text clipping drawing modes, such as clipping an image to a glyph shape.
-@frozen public enum CGTextDrawingMode : String, Codable, Equatable, Hashable, Sendable {
+public enum CGTextDrawingMode : String, Codable, Equatable, Hashable, Sendable {
 
     /// Perform a fill operation on the text.
     case fill

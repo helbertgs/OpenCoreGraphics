@@ -1,7 +1,7 @@
 import Foundation
 
 /// An offscreen context for reusing content drawn with Core Graphics.
-public class CGLayer {
+public struct CGLayer {
 
     // MARK: - Creating Layer Objects
 
@@ -24,7 +24,7 @@ public class CGLayer {
     // MARK: - Examining a Layer
 
     /// Returns the graphics context associated with a layer object.
-    public let context: CGContext?
+    public let context: CGContext
 
     /// Returns the width and height of a layer object.
     public let size: CGSize

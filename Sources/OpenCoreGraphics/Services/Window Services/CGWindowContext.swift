@@ -235,7 +235,7 @@ open class CGWindowContext {
     ///   - startAngle: The angle to the starting point of the arc, measured in radians from the positive x-axis.
     ///   - endAngle: The angle to the end point of the arc, measured in radians from the positive x-axis.
     ///   - clockwise: true to make a clockwise arc; false to make a counterclockwise arc.
-    public func addArc(center: CGPoint, radius: Float, startAngle: Float, endAngle: Float, clockwise: Bool) {
+    public func addArc(center: CGPoint, radius: Double, startAngle: Double, endAngle: Double, clockwise: Bool) {
         path?.addArc(center: center, radius: radius, startAngle: startAngle, endAngle: endAngle, clockwise: clockwise)
     }
     
@@ -250,7 +250,7 @@ open class CGWindowContext {
     ///   - tangent1End: The end point, in user space coordinates, for the first tangent line to be used in constructing the arc. (The start point for this tangent line is the path’s current point.)
     ///   - tangent2End: The end point, in user space coordinates, for the second tangent line to be used in constructing the arc. (The start point for this tangent line is the tangent1End point.)
     ///   - radius: The radius of the arc, in user space coordinates.
-    public func addArc(tangent1End: CGPoint, tangent2End: CGPoint, radius: Float) {
+    public func addArc(tangent1End: CGPoint, tangent2End: CGPoint, radius: Double) {
         path?.addArc(tangent1End: tangent1End, tangent2End: tangent2End, radius: radius)
     }
 
@@ -566,9 +566,9 @@ open class CGWindowContext {
 
     private var font: CGFont?
 
-    private var fontSize: Float = 16
+    private var fontSize: Double = 16
 
-    private var characterSpacing: Float = 2
+    private var characterSpacing: Double = 2
 
     private var textDrawingMode: CGTextDrawingMode = .fill
 
@@ -582,7 +582,7 @@ open class CGWindowContext {
     /// 
     /// Core Graphics adds the additional space to the advance between the origin of one character and the origin of the next character.
     /// - Parameter spacing: A value that represents the amount of additional space to place between glyphs, in text space coordinates.
-    public func setCharacterSpacing(_ spacing: Float) {
+    public func setCharacterSpacing(_ spacing: Double) {
         self.characterSpacing = spacing
     }
 
@@ -594,7 +594,7 @@ open class CGWindowContext {
 
     /// Sets the current font size.
     /// - Parameter size: A font size, expressed in text space units.
-    public func setFontSize(_ size: Float) {
+    public func setFontSize(_ size: Double) {
         self.fontSize = size
     }
 
@@ -628,7 +628,7 @@ open class CGWindowContext {
     private var strokeColorSpace: CGColorSpace = .genericRGBLinear
 
     /// The current  line width for a graphics context.
-    private var lineWidth: Float = 1.0
+    private var lineWidth: Double = 1.0
 
     /// Sets the current fill color in a graphics context, using a CGColor.
     /// - Parameter color: The new fill color.
@@ -648,7 +648,7 @@ open class CGWindowContext {
     ///   - yellow: The yellow intensity value for the color to set.
     ///   - black: The black intensity value for the color to set.
     ///   - alpha: A value that specifies the opacity level.
-    public func setFillColor(cyan: Float, magenta: Float, yellow: Float, black: Float, alpha: Float) {
+    public func setFillColor(cyan: Double, magenta: Double, yellow: Double, black: Double, alpha: Double) {
         self.fillColorSpace = .genericCMYK
         self.fillColor = .init(cyan: cyan, magenta: magenta, yellow: yellow, black: black, alpha: alpha)
     }
@@ -661,7 +661,7 @@ open class CGWindowContext {
     /// - Parameters:
     ///   - gray: A value that specifies the desired gray level. 
     ///   - alpha: A value that specifies the opacity level.
-    public func setFillColor(gray: Float, alpha: Float) {
+    public func setFillColor(gray: Double, alpha: Double) {
         self.fillColorSpace = .linearGray
         self.fillColor = .init(gray: gray, alpha: alpha)
     }
@@ -676,7 +676,7 @@ open class CGWindowContext {
     ///   - green: The green intensity value for the color to set.
     ///   - blue: The blue intensity value for the color to set.
     ///   - alpha: A value that specifies the opacity level.
-    public func setFillColor(red: Float, green: Float, blue: Float, alpha: Float) {
+    public func setFillColor(red: Double, green: Double, blue: Double, alpha: Double) {
         self.fillColorSpace = .genericRGBLinear
         self.fillColor = .init(red: red, green: green, blue: blue, alpha: alpha)
     }
@@ -708,7 +708,7 @@ open class CGWindowContext {
     ///   - yellow: The yellow intensity value for the color to set. 
     ///   - black: The black intensity value for the color to set. 
     ///   - alpha: A value that specifies the opacity level.
-    public func setStrokeColor(cyan: Float, magenta: Float, yellow: Float, black: Float, alpha: Float) {
+    public func setStrokeColor(cyan: Double, magenta: Double, yellow: Double, black: Double, alpha: Double) {
         self.strokeColorSpace = .genericCMYK
         self.strokeColor = .init(cyan: cyan, magenta: magenta, yellow: yellow, black: black, alpha: alpha)
     }
@@ -722,7 +722,7 @@ open class CGWindowContext {
     /// - Parameters:
     ///   - gray: A value that specifies the desired gray level.
     ///   - alpha: A value that specifies the opacity level.
-    public func setStrokeColor(gray: Float, alpha: Float) {
+    public func setStrokeColor(gray: Double, alpha: Double) {
         self.strokeColorSpace = .linearGray
         self.strokeColor = .init(gray: gray, alpha: alpha)
     }
@@ -737,7 +737,7 @@ open class CGWindowContext {
     ///   - green: The green intensity value for the color to set. 
     ///   - blue: The blue intensity value for the color to set.
     ///   - alpha: A value that specifies the opacity level.
-    public func setStrokeColor(red: Float, green: Float, blue: Float, alpha: Float) {
+    public func setStrokeColor(red: Double, green: Double, blue: Double, alpha: Double) {
         self.strokeColorSpace = .genericRGBLinear
         self.strokeColor = .init(red: red, green: green, blue: blue, alpha: alpha)
     }
@@ -798,7 +798,7 @@ open class CGWindowContext {
     /// The default line width is 1 unit. 
     /// When stroked, the line straddles the path, with half of the total width on either side.
     /// - Parameter width: The new line width to use, in user space units. The value must be greater than 0.
-    public func setLineWidth(_ width: Float = 1) {
+    public func setLineWidth(_ width: Double = 1) {
         self.lineWidth = width
     }
 

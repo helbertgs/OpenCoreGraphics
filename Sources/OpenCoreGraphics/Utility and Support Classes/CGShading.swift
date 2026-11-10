@@ -108,7 +108,7 @@ public class CGShading {
 
     func setUniform4f(name: String, value: CGColor) {
         let location = getUniformLocation(name: name)
-        glad_glUniform4f(location, value.components[0], value.components[1], value.components[2], value.components[3])
+        glad_glUniform4f(location, Float(value.components[0]), Float(value.components[1]), Float(value.components[2]), Float(value.components[3]))
     }
 }
 

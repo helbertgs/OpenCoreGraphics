@@ -21,34 +21,21 @@ import Foundation
 ///       An indexed color space contains a color table with up to 256 entries and a base color space to which the color table entries are mapped. 
 ///       Each entry in the color table specifies one color in the base color space. 
 ///       A pattern color space is used when stroking or filling with a pattern.
-public final class CGColorSpace : Sendable  {
-
-    // MARK: - Creating Color Spaces
-
-    /// Creates a specified type of color space.
-    /// - Parameter name: A color space name.
-    public init?(name: String) {
-        self.name = name
-    }
-
-    // MARK: - Examining a Color Space
-
-    /// Returns the name used to create the specified color space.
-    public let name: String?
+public enum CGColorSpace : String, CaseIterable, Codable, Equatable, Hashable, Sendable  {
 
     // MARK: - Accessing System-Defined Color Spaces
 
     /// The standard Red Green Blue (sRGB) color space.
-    public static let sRGB = CGColorSpace(name: "kCGColorSpaceSRGB")!
+    case sRGB
 
     /// The generic CMYK color space.
-    public static let genericCMYK = CGColorSpace(name: "kCGColorSpaceGenericCMYK")!
+    case genericCMYK
 
     /// The generic RGB color space with a linear transfer function.
-    public static let genericRGBLinear = CGColorSpace(name: "kCGColorSpaceGenericRGBLinear")!
+    case genericRGBLinear
 
     /// The gray color space using a linear transfer function.
-    public static let linearGray = CGColorSpace(name: "kCGColorSpaceLinearGray")!
+    case linearGray
 
     // MARK: - Instance Methods
     public func isHDR() -> Bool {
@@ -58,18 +45,6 @@ public final class CGColorSpace : Sendable  {
 
 extension CGColorSpace : CustomStringConvertible {
     public var description: String {
-        return "CGColorSpace(name: \(name ?? "nil"))"
-    }
-}
-
-extension CGColorSpace : Equatable {
-    public static func == (lhs: CGColorSpace, rhs: CGColorSpace) -> Bool {
-        return lhs.name == rhs.name
-    }
-}
-
-extension CGColorSpace : Hashable {
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(name)
+        return "CGColorSpace.\(rawValue)"
     }
 }

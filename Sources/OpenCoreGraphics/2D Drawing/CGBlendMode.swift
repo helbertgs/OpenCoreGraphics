@@ -11,7 +11,7 @@ import Foundation
 /// 
 /// You can find more information on blend modes, including examples of images produced using them, and many mathematical descriptions of the modes, in PDF Reference, Fourth Edition, Version 1.5, Adobe Systems, 
 /// Inc. If you are a former QuickDraw developer, it may be helpful for you to think of blend modes as an alternative to transfer modes
-public enum CGBlendMode {
+public enum CGBlendMode : String, CaseIterable, Codable, Equatable, Hashable, Sendable {
     case normal
     case multiply
     case screen

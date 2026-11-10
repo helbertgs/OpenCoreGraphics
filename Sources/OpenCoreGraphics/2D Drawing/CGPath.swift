@@ -16,7 +16,7 @@ import Foundation
 /// Your application explicitly closes a subpath by calling closeSubpath(). 
 /// 
 /// Closing the subpath adds a line segment that terminates at the subpath’s starting point, and also changes how those lines are rendered
-public class CGPath {
+public struct CGPath : Codable, Equatable, Hashable, Sendable {
 
     // MARK: - Instance Properties
 
@@ -70,7 +70,7 @@ public class CGPath {
     ///   - cornerWidth: The width of the rounded corner sections.
     ///   - cornerHeight: The height of the rounded corner sections.
     ///   - transform: A pointer to an affine transformation matrix, or nil if no transformation is needed. If specified, Core Graphics applies the transformation to the rectangle before it is added to the path.
-    public init(roundedRect rect: CGRect, cornerWidth: Float, cornerHeight: Float, transform: CGAffineTransform? = nil) {
+    public init(roundedRect rect: CGRect, cornerWidth: Double, cornerHeight: Double, transform: CGAffineTransform? = nil) {
         addRoundedRect(in: rect, cornerWidth: cornerWidth, cornerHeight: cornerHeight, transform: transform ?? .identity)
     }
 
@@ -137,7 +137,7 @@ public class CGPath {
     /// - Parameters:
     ///   - point: The point, in user space coordinates, at which to start a new subpath.
     ///   - transform: An affine transform to apply to the point before adding to the path.
-    public func move(to point: CGPoint, transform: CGAffineTransform = .identity) {
+    mutating public func move(to point: CGPoint, transform: CGAffineTransform = .identity) {
         let element = CGPathElement(type: .moveToPoint, points: [point.applying(transform)])
         subpath.append(element)
 
@@ -150,7 +150,7 @@ public class CGPath {
     /// - Parameters:
     ///   - point: The location, in user space coordinates, for the end of the new line segment.
     ///   - transform: An affine transform to apply to the point before adding to the path. 
-    public func addLine(to point: CGPoint, transform: CGAffineTransform = .identity) {
+    mutating public func addLine(to point: CGPoint, transform: CGAffineTransform = .identity) {
         let element = CGPathElement(type: .addLineToPoint, points: [ currentPoint, point.applying(transform)])
         subpath.append(element)
         currentPoint = point.applying(transform)
@@ -163,7 +163,7 @@ public class CGPath {
     /// - Parameters:
     ///   - points: An array of values that specify the start and end points of the line segments to draw. Each point in the array specifies a position in user space. The first point in the array specifies the initial starting point.
     ///   - transform: An affine transform to apply to the points before adding to the path.
-    public func addLines(between points: [CGPoint], transform: CGAffineTransform = .identity) {
+    mutating public func addLines(between points: [CGPoint], transform: CGAffineTransform = .identity) {
         points.forEach { point in
             addLine(to: point, transform: transform)
         }
@@ -175,7 +175,7 @@ public class CGPath {
     /// - Parameters:
     ///   - rect: A rectangle, specified in user space coordinates.
     ///   - transform: An affine transform to apply to the rectangle before adding to the path.
-    public func addRect(_ rect: CGRect, transform: CGAffineTransform = .identity) {
+    mutating public func addRect(_ rect: CGRect, transform: CGAffineTransform = .identity) {
         let bottomLeft = CGPoint(x: rect.minX, y: rect.minY).applying(transform)
         let bottomRight = CGPoint(x: rect.maxX, y: rect.minY).applying(transform)
         let topRight = CGPoint(x: rect.maxX, y: rect.maxY).applying(transform)
@@ -198,7 +198,7 @@ public class CGPath {
     /// - Parameters:
     ///   - rects: An array of rectangles, specified in user space coordinates.
     ///   - transform: An affine transform to apply to the rectangles before adding to the path. 
-    public func addRects(_ rects: [CGRect], transform: CGAffineTransform = .identity) {
+    mutating public func addRects(_ rects: [CGRect], transform: CGAffineTransform = .identity) {
         rects.forEach { rect in
             addRect(rect, transform: transform)
         }
@@ -215,7 +215,7 @@ public class CGPath {
     /// - Parameters:
     ///   - rect: A rectangle that defines the area for the ellipse to fit in.
     ///   - transform: An affine transform to apply to the ellipse before adding to the path.
-    public func addEllipse(in rect: CGRect, transform: CGAffineTransform = .identity) {
+    mutating public func addEllipse(in rect: CGRect, transform: CGAffineTransform = .identity) {
         // Aproximação da elipse com 4 curvas de Bézier
         let rx = rect.width / 2.0
         let ry = rect.height / 2.0
@@ -259,7 +259,7 @@ public class CGPath {
     ///   - cornerWidth: The horizontal size, in user space coordinates, for rounded corner sections.
     ///   - cornerHeight: The vertical size, in user space coordinates, for rounded corner sections.
     ///   - transform: An affine transform to apply to the rectangle before adding to the path. 
-    public func addRoundedRect(in rect: CGRect, cornerWidth: Float, cornerHeight: Float, transform: CGAffineTransform = .identity) {
+    mutating public func addRoundedRect(in rect: CGRect, cornerWidth: Double, cornerHeight: Double, transform: CGAffineTransform = .identity) {
         let minX = rect.minX, minY = rect.minY, maxX = rect.maxX, maxY = rect.maxY
         let cw = CGFloat(cornerWidth), ch = CGFloat(cornerHeight)
         let kappa: CGFloat = 0.552284749831
@@ -312,10 +312,10 @@ public class CGPath {
     ///   - endAngle: The angle to the end point of the arc, measured in radians from the positive x-axis.
     ///   - clockwise: true to make a clockwise arc; false to make a counterclockwise arc.
     ///   - transform: An affine transform to apply to the arc before adding to the path.
-    public func addArc(center: CGPoint, radius: Float, startAngle: Float, endAngle: Float, clockwise: Bool, transform: CGAffineTransform = .identity) {
+    mutating public func addArc(center: CGPoint, radius: Double, startAngle: Double, endAngle: Double, clockwise: Bool, transform: CGAffineTransform = .identity) {
         // Aproximação do arco com segmentos de linha (pode ser melhorado para Bézier)
         let steps = 8
-        let delta = (endAngle - startAngle) / Float(steps)
+        let delta = (endAngle - startAngle) / Double(steps)
         var angle = startAngle
         let r = CGFloat(radius)
         let c = CGPoint(x: center.x, y: center.y)
@@ -340,7 +340,7 @@ public class CGPath {
     ///   - tangent2End: The end point, in user space coordinates, for the second tangent line to be used in constructing the arc. (The start point for this tangent line is the tangent1End point.)
     ///   - radius: The radius of the arc, in user space coordinates.
     ///   - transform: An affine transform to apply to the arc before adding to the path.
-    public func addArc(tangent1End: CGPoint, tangent2End: CGPoint, radius: Float,transform: CGAffineTransform = .identity) {
+    mutating public func addArc(tangent1End: CGPoint, tangent2End: CGPoint, radius: Double,transform: CGAffineTransform = .identity) {
         // Implementação simplificada: conecta os pontos com linhas
         addLine(to: tangent1End, transform: transform)
         addLine(to: tangent2End, transform: transform)
@@ -362,7 +362,7 @@ public class CGPath {
     ///   - startAngle: The angle to the starting point of the arc, measured in radians from the positive x-axis.
     ///   - delta: The difference, measured in radians, between the starting angle and ending angle of the arc. A positive value creates a counter-clockwise arc (in user space coordinates), and vice versa.
     ///   - transform: An affine transform to apply to the arc before adding to the path.
-    public func addRelativeArc(center: CGPoint, radius: Float, startAngle: Float, delta: Float, transform: CGAffineTransform = .identity) {
+    mutating public func addRelativeArc(center: CGPoint, radius: Double, startAngle: Double, delta: Double, transform: CGAffineTransform = .identity) {
         addArc(center: center, radius: radius, startAngle: startAngle, endAngle: startAngle + delta, clockwise: delta < 0, transform: transform)
     }
 
@@ -375,7 +375,7 @@ public class CGPath {
     ///   - control1: The first control point of the curve, in user space coordinates.
     ///   - control2: The second control point of the curve, in user space coordinates.
     ///   - transform: An affine transform to apply to the curve before adding to the path.
-    public func addCurve(to end: CGPoint, control1: CGPoint, control2: CGPoint, transform: CGAffineTransform = .identity) {
+    mutating public func addCurve(to end: CGPoint, control1: CGPoint, control2: CGPoint, transform: CGAffineTransform = .identity) {
         let element = CGPathElement(
             type: .addCurveToPoint,
             points: [
@@ -397,7 +397,7 @@ public class CGPath {
     ///   - end: The point, in user space coordinates, at which to end the curve.
     ///   - control: The control point of the curve, in user space coordinates.
     ///   - transform: An affine transform to apply to the curve before adding to the path.
-    public func addQuadCurve(to end: CGPoint, control: CGPoint, transform: CGAffineTransform = .identity) {
+    mutating public func addQuadCurve(to end: CGPoint, control: CGPoint, transform: CGAffineTransform = .identity) {
         let element = CGPathElement(
             type: .addQuadCurveToPoint,
             points: [
@@ -417,7 +417,7 @@ public class CGPath {
     /// - Parameters:
     ///   - path: The path to add.
     ///   - transform: An affine transform to apply to the path parameter before adding to this path.
-    public func addPath(_ path: CGPath, transform: CGAffineTransform = .identity) {
+    mutating public func addPath(_ path: CGPath, transform: CGAffineTransform = .identity) {
         for element in path.subpath {
             let transformedPoints = element.points.map { $0.applying(transform) }
             let newElement = CGPathElement(type: element.type, points: transformedPoints)
@@ -433,7 +433,7 @@ public class CGPath {
     /// Appends a line from the current point to the starting point of the current subpath and ends the subpath. 
     /// After closing the subpath, your application can begin a new subpath without first calling ``move(to:)``. 
     /// In this case, a new subpath is implicitly created with a starting and current point equal to the previous subpath’s starting point.
-    public func closeSubpath() {
+    mutating public func closeSubpath() {
         let element = CGPathElement(type: .closeSubpath, points: [])
         subpath.append(element)
         currentPoint = .zero

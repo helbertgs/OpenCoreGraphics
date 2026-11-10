@@ -9,7 +9,7 @@ import Foundation
 /// 
 /// Color objects provide a fast and convenient way to manage and set colors, especially colors that are used repeatedly. 
 /// Drawing operations use color objects for setting fill and stroke colors, managing alpha, and setting color with a pattern.
-public final class CGColor : Sendable {
+public struct CGColor : Codable, Equatable, Hashable, Sendable {
 
     // MARK: - Creating Colors
 
@@ -26,7 +26,7 @@ public final class CGColor : Sendable {
     /// Creates a copy of an existing color, substituting a new alpha value.
     /// - Parameter alpha: A value that specifies the desired opacity of the copy. Values outside the range [0,1] are clamped to 0 or 1.
     /// - Returns: A copy of the specified color, using the specified alpha value. 
-    public func copy(alpha: Float) -> CGColor? {
+    public func copy(alpha: Double) -> CGColor? {
         guard let colorSpace = self.colorSpace else { 
             return nil 
         }
@@ -44,7 +44,7 @@ public final class CGColor : Sendable {
     ///   - yellow: A yellow value (0.0 - 1.0).
     ///   - black: A black value (0.0 - 1.0).
     ///   - alpha: An alpha value (0.0 - 1.0).
-    public init(cyan: Float, magenta: Float, yellow: Float, black: Float, alpha: Float) {
+    public init(cyan: Double, magenta: Double, yellow: Double, black: Double, alpha: Double) {
         self.alpha = alpha
         self.components = [cyan, magenta, yellow, black, alpha]
         self.colorSpace = .genericCMYK
@@ -54,7 +54,7 @@ public final class CGColor : Sendable {
     /// - Parameters:
     ///   - gray: A grayscale value (0.0 - 1.0).
     ///   - alpha: An alpha value (0.0 - 1.0).
-    public init(gray: Float, alpha: Float) {
+    public init(gray: Double, alpha: Double) {
         self.alpha = alpha
         self.components = [gray, alpha]
         self.colorSpace = .linearGray
@@ -66,7 +66,7 @@ public final class CGColor : Sendable {
     ///   - green: A green component value (0.0 - 1.0).
     ///   - blue: A blue component value (0.0 - 1.0).
     ///   - alpha: An alpha value (0.0 - 1.0).
-    public init(red: Float, green: Float, blue: Float, alpha: Float) {
+    public init(red: Double, green: Double, blue: Double, alpha: Double) {
         self.alpha = alpha
         self.components = [red, green, blue, alpha]
         self.colorSpace = .genericRGBLinear
@@ -78,7 +78,7 @@ public final class CGColor : Sendable {
     ///   - green: A green component value (0.0 - 1.0).
     ///   - blue: A blue component value (0.0 - 1.0).
     ///   - alpha: An alpha value (0.0 - 1.0).
-    public init(sred: Float, green: Float, blue: Float, alpha: Float) {
+    public init(sred: Double, green: Double, blue: Double, alpha: Double) {
         self.alpha = alpha
         self.components = [sred, green, blue, alpha]
         self.colorSpace = .sRGB
@@ -102,7 +102,7 @@ public final class CGColor : Sendable {
     ///                 The array should contain n+1 values that correspond to the n color components in the specified color space, followed by the alpha component. 
     ///                 Each component value should be in the range appropriate for the color space. 
     ///                 Values outside this range will be clamped to the nearest correct value.
-    public init?(colorSpace space: CGColorSpace, components: [Float]) {
+    public init?(colorSpace space: CGColorSpace, components: [Double]) {
         self.colorSpace = space
         self.components = components
         self.alpha = components.last ?? 1.0
@@ -111,7 +111,7 @@ public final class CGColor : Sendable {
     // MARK: - Examining a Color
 
     /// Returns the value of the alpha component associated with a color.
-    public let alpha: Float
+    public let alpha: Double
 
     /// Returns the color space associated with a color.
     public let colorSpace: CGColorSpace?
@@ -120,7 +120,7 @@ public final class CGColor : Sendable {
     /// 
     /// An array of intensity values for the color components (including alpha) associated with the specified color. 
     /// The size of the array is equal to the color’s numberOfComponents value.
-    public let components: [Float]
+    public let components: [Double]
 
     /// Returns the number of color components (including alpha) associated with a color.
     public var numberOfComponents: Int {
@@ -131,18 +131,5 @@ public final class CGColor : Sendable {
 extension CGColor : CustomStringConvertible {
     public var description: String {
         return "CGColor(colorSpace: \(colorSpace?.description ?? "nil"), components: \(components), alpha: \(alpha))"
-    }
-}
-extension CGColor : Equatable {
-    public static func == (lhs: CGColor, rhs: CGColor) -> Bool {
-        return lhs.colorSpace == rhs.colorSpace && lhs.components == rhs.components && lhs.alpha == rhs.alpha
-    }
-}
-
-extension CGColor : Hashable {
-    public func hash(into hasher: inout Hasher) {
-        hasher.combine(colorSpace)
-        hasher.combine(components)
-        hasher.combine(alpha)
     }
 }

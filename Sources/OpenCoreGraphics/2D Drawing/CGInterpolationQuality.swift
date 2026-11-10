@@ -1,7 +1,7 @@
 import Foundation
 
 /// Levels of interpolation quality for rendering an image.
-@frozen public enum CGInterpolationQuality : String, Codable, Equatable, Hashable, Sendable {
+@frozen public enum CGInterpolationQuality : String, CaseIterable, Codable, Equatable, Hashable, Sendable {
 
     /// The default level of quality.
     case `default`
