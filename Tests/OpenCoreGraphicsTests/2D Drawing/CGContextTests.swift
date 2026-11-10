@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import OpenCoreGraphics
 
@@ -86,8 +87,8 @@ struct CGContextTests {
 
     /// Verifies pixel-space coordinate conversions and inverse CTM behavior.
     @Test
-    func coordinateConversionsUsePixelsAndRoundTrip() {
-        let context = CGContext(
+    func coordinateConversionsUsePixelsAndRoundTrip() throws {
+        let context = try #require(CGContext(
             data: nil,
             width: 200,
             height: 100,
@@ -95,7 +96,7 @@ struct CGContextTests {
             bytesPerRow: 0,
             space: .genericRGBLinear,
             bitmapInfo: 0
-        )
+        ))
         let points = [
             CGPoint.zero,
             CGPoint(x: 200, y: 100),
@@ -130,6 +131,165 @@ struct CGContextTests {
         #expect(context.convertToUserSpace(context.convertToDeviceSpace(userRect)) == userRect)
         let userSize = CGSize(width: 8, height: 6)
         #expect(context.convertToUserSpace(context.convertToDeviceSpace(userSize)) == userSize)
+    }
+
+    /// Verifies an allocated bitmap context derives its row size and image metadata.
+    @Test
+    func bitmapContextAllocatesStorageAndCreatesImage() throws {
+        let context = try #require(
+            CGContext(
+                data: nil,
+                width: 2,
+                height: 2,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: .sRGB,
+                bitmapInfo: 0
+            )
+        )
+
+        #expect(context.width == 2)
+        #expect(context.height == 2)
+        #expect(context.bitsPerComponent == 8)
+        #expect(context.bitsPerPixel == 32)
+        #expect(context.bytesPerRow == 8)
+        #expect(context.alphaInfo == .premultipliedLast)
+        #expect(context.data == Data(repeating: 0, count: 16))
+
+        let image = try #require(context.makeImage())
+        #expect(image.width == 2)
+        #expect(image.height == 2)
+        #expect(image.bitsPerComponent == 8)
+        #expect(image.bitsPerPixel == 32)
+        #expect(image.bytesPerRow == 8)
+        #expect(image.alphaInfo == .premultipliedLast)
+        #expect(image.dataProvider?.data == context.data)
+    }
+
+    /// Verifies invalid bitmap dimensions, formats, and row layouts are rejected.
+    @Test
+    func rejectsInvalidBitmapContextParameters() {
+        #expect(
+            CGContext(
+                data: nil,
+                width: 0,
+                height: 2,
+                bitsPerComponent: 8,
+                bytesPerRow: 0,
+                space: .sRGB,
+                bitmapInfo: 0
+            ) == nil
+        )
+        #expect(
+            CGContext(
+                data: nil,
+                width: 2,
+                height: 2,
+                bitsPerComponent: 16,
+                bytesPerRow: 8,
+                space: .sRGB,
+                bitmapInfo: 0
+            ) == nil
+        )
+        #expect(
+            CGContext(
+                data: nil,
+                width: 2,
+                height: 2,
+                bitsPerComponent: 8,
+                bytesPerRow: 7,
+                space: .sRGB,
+                bitmapInfo: 0
+            ) == nil
+        )
+        #expect(
+            CGContext(
+                data: nil,
+                width: 2,
+                height: 2,
+                bitsPerComponent: 8,
+                bytesPerRow: 8,
+                space: .genericCMYK,
+                bitmapInfo: 0
+            ) == nil
+        )
+        #expect(
+            CGContext(
+                data: nil,
+                width: 2,
+                height: 2,
+                bitsPerComponent: 8,
+                bytesPerRow: 8,
+                space: .sRGB,
+                bitmapInfo: -1
+            ) == nil
+        )
+    }
+
+    /// Verifies a bitmap context borrows caller memory and snapshots it into images.
+    @Test
+    func bitmapContextUsesBorrowedMemoryAndCopiesImages() throws {
+        var storage = [UInt8](repeating: 0, count: 16)
+        try storage.withUnsafeMutableBufferPointer { buffer in
+            let pointer = try #require(buffer.baseAddress)
+            let context = try #require(
+                CGContext(
+                    data: UnsafeMutableRawPointer(pointer),
+                    width: 2,
+                    height: 2,
+                    bitsPerComponent: 8,
+                    bytesPerRow: 8,
+                    space: .sRGB,
+                    bitmapInfo: 0
+                )
+            )
+            buffer[0] = 10
+            buffer[1] = 20
+            buffer[2] = 30
+            buffer[3] = 40
+            #expect(context.data == Data(buffer))
+
+            let image = try #require(context.makeImage())
+            buffer[0] = 99
+
+            #expect(context.data[0] == 99)
+            #expect(image.dataProvider?.data?[0] == 10)
+            #expect(image.alphaInfo == .premultipliedLast)
+        }
+    }
+
+    /// Verifies little-endian bitmap contexts infer BGRA alpha-first metadata.
+    @Test
+    func infersBGRAFormatFromLittleEndianBitmapInfo() throws {
+        let context = try #require(
+            CGContext(
+                data: nil,
+                width: 1,
+                height: 1,
+                bitsPerComponent: 8,
+                bytesPerRow: 4,
+                space: .sRGB,
+                bitmapInfo: CGBitmapInfo.byteOrder32Little.rawValue
+            )
+        )
+
+        #expect(context.bitmapInfo == .byteOrder32Little)
+        #expect(context.alphaInfo == .premultipliedFirst)
+        #expect(context.makeImage()?.alphaInfo == .premultipliedFirst)
+
+        let opaqueContext = try #require(
+            CGContext(
+                data: nil,
+                width: 1,
+                height: 1,
+                bitsPerComponent: 8,
+                bytesPerRow: 4,
+                space: .sRGB,
+                bitmapInfo: 6
+            )
+        )
+        #expect(opaqueContext.alphaInfo == .noneSkipFirst)
+        #expect(opaqueContext.makeImage()?.alphaInfo == .noneSkipFirst)
     }
 
     /// Verifies that every curve and arc method applies the context transform.
@@ -204,14 +364,6 @@ struct CGContextTests {
 
     /// Creates a bitmap context for testing graphics-state behavior without a window.
     private func makeContext() -> CGContext {
-        CGContext(
-            data: nil,
-            width: 64,
-            height: 64,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: .genericRGBLinear,
-            bitmapInfo: 0
-        )
+        CGContext(width: 64, height: 64)
     }
 }

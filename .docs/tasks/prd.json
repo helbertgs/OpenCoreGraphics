@@ -678,8 +678,8 @@
         "Build e testes passam"
       ],
       "priority": 45,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "CGContext.init(data:...) agora é failable, valida dimensões/formato/stride e usa PixelSurface alocado ou emprestado; bytesPerRow zero é calculado quando data é nil. data reflete o buffer e makeImage cria uma cópia com metadados e alphaInfo correspondentes. Testes cobrem alocação, formatos inválidos, memória do chamador, cópia independente e metadados. swift test passou (120 testes em 24 suítes), sem warnings."
     },
     {
       "id": "US-046",

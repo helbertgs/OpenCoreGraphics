@@ -50,6 +50,49 @@ public class CGImage : Equatable, Hashable {
         self.decode = decode
         self.shouldInterpolate = shouldInterpolate
         self.renderingIntent = intent
+        self.alphaInfo = .none
+    }
+
+    /// Creates an image with an explicit alpha layout for copied bitmap pixels.
+    /// - Parameters:
+    ///   - width: The width of the image in pixels.
+    ///   - height: The height of the image in pixels.
+    ///   - bitsPerComponent: The number of bits for each color component.
+    ///   - bitsPerPixel: The number of bits used by each pixel.
+    ///   - bytesPerRow: The byte distance between row starts.
+    ///   - space: The color space of the image.
+    ///   - bitmapInfo: The byte-order information for the pixels.
+    ///   - provider: The source of pixel data.
+    ///   - decode: An optional decode array.
+    ///   - shouldInterpolate: Whether image interpolation is enabled.
+    ///   - intent: The color rendering intent.
+    ///   - alphaInfo: The alpha layout associated with the pixel bytes.
+    init(
+        width: Int,
+        height: Int,
+        bitsPerComponent: Int,
+        bitsPerPixel: Int,
+        bytesPerRow: Int,
+        space: CGColorSpace,
+        bitmapInfo: CGBitmapInfo,
+        provider: CGDataProvider,
+        decode: UnsafePointer<CGFloat>?,
+        shouldInterpolate: Bool,
+        intent: CGColorRenderingIntent,
+        alphaInfo: CGImageAlphaInfo
+    ) {
+        self.width = width
+        self.height = height
+        self.bitsPerComponent = bitsPerComponent
+        self.bitsPerPixel = bitsPerPixel
+        self.bytesPerRow = bytesPerRow
+        self.colorSpace = space
+        self.bitmapInfo = bitmapInfo
+        self.dataProvider = provider
+        self.decode = decode
+        self.shouldInterpolate = shouldInterpolate
+        self.renderingIntent = intent
+        self.alphaInfo = alphaInfo
     }
 
     /// Loads and decodes an image file into owned RGBA pixel data.

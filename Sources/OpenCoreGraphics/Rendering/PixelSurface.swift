@@ -29,6 +29,11 @@ struct PixelSurface {
     /// The byte distance between the starts of adjacent rows.
     let bytesPerRow: Int
 
+    /// The total number of bytes occupied by all rows.
+    var byteCount: Int {
+        bytesPerRow * height
+    }
+
     /// The supported channel order of the surface's storage.
     private let channelOrder: ChannelOrder
 

@@ -11,6 +11,7 @@ open class CGContext {
     /// Creates a bitmap graphics context.
     /// 
     /// When you draw into this context, Core Graphics renders your drawing as bitmapped data in the specified block of memory.
+    /// This implementation accepts 8-bit RGB pixels with supported RGBA or BGRA layouts and returns nil for invalid dimensions or formats.
     /// The pixel format for a new bitmap context is determined by three parameters—the number of bits per component, the color space, and an alpha option (expressed as a ``CGBitmapInfo`` constant). 
     /// The alpha value determines the opacity of a pixel when it is drawn.
     /// - Parameters:
@@ -30,16 +31,54 @@ open class CGContext {
     ///   - bitmapInfo: Constants that specify whether the bitmap should contain an alpha channel, the alpha channel’s relative location in a pixel, and information about whether the pixel components are floating-point or integer values. 
     ///                 The constants for specifying the alpha channel information are declared with the ``CGImageAlphaInfo`` type but can be passed to this parameter safely. 
     ///                 You can also pass the other constants associated with the ``CGBitmapInfo`` type.
-    public init(data: UnsafeMutableRawPointer?, width: Int, height: Int, bitsPerComponent: Int, bytesPerRow: Int, space: CGColorSpace, bitmapInfo: Int) {
-        self.data = Data()
+    public init?(
+        data: UnsafeMutableRawPointer?,
+        width: Int,
+        height: Int,
+        bitsPerComponent: Int,
+        bytesPerRow: Int,
+        space: CGColorSpace,
+        bitmapInfo: Int
+    ) {
+        guard bitsPerComponent == 8,
+              space.model == .rgb,
+              let resolvedFormat = BitmapSurfaceFormat(rawValue: bitmapInfo) else {
+            return nil
+        }
+
+        let alphaInfo = resolvedFormat.defaultAlphaInfo
+        let (minimumBytesPerRow, rowSizeOverflow) = width.multipliedReportingOverflow(by: 4)
+        guard width > 0, height > 0, rowSizeOverflow == false else { return nil }
+        let effectiveBytesPerRow: Int
+        if bytesPerRow == 0, data == nil {
+            effectiveBytesPerRow = minimumBytesPerRow
+        } else {
+            effectiveBytesPerRow = bytesPerRow
+        }
+        let (_, totalSizeOverflow) = effectiveBytesPerRow.multipliedReportingOverflow(by: height)
+        guard totalSizeOverflow == false else { return nil }
+        guard let surface = PixelSurface(
+            data: data,
+            width: width,
+            height: height,
+            bytesPerRow: effectiveBytesPerRow,
+            colorSpace: space,
+            alphaInfo: alphaInfo,
+            bitmapInfo: resolvedFormat.bitmapInfo
+        ) else {
+            return nil
+        }
+
+        pixelSurface = surface
+        storedData = Data()
         self.width = width
         self.height = height
         self.bitsPerComponent = bitsPerComponent
-        self.bytesPerRow = bytesPerRow
+        self.bytesPerRow = effectiveBytesPerRow
         self.colorSpace = space
-        self.bitmapInfo = CGBitmapInfo(rawValue: bitmapInfo)
-        self.alphaInfo = .premultipliedLast
-        self.bitsPerPixel = 0
+        self.bitmapInfo = resolvedFormat.bitmapInfo
+        self.alphaInfo = alphaInfo
+        self.bitsPerPixel = 32
     }
 
     /// Compatibility name for contexts previously created by `CGWindow`.
@@ -51,15 +90,24 @@ open class CGContext {
     ///   - width: The width of the drawing destination in pixels.
     ///   - height: The height of the drawing destination in pixels.
     public convenience init(width: Int, height: Int) {
-        self.init(
-            data: nil,
-            width: width,
-            height: height,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: .genericRGBLinear,
-            bitmapInfo: 0
-        )
+        self.init(renderTargetWidth: width, height: height)
+    }
+
+    /// Creates a context without bitmap storage for window-backed rendering.
+    /// - Parameters:
+    ///   - width: The width of the drawing destination in pixels.
+    ///   - height: The height of the drawing destination in pixels.
+    private init(renderTargetWidth width: Int, height: Int) {
+        pixelSurface = nil
+        storedData = Data()
+        self.width = width
+        self.height = height
+        bitsPerComponent = 8
+        bitsPerPixel = 0
+        bytesPerRow = 0
+        colorSpace = .genericRGBLinear
+        bitmapInfo = .byteOrderDefault
+        alphaInfo = .premultipliedLast
     }
 
     /// Returns an affine transform that maps user space coordinates to device space coordinates.
@@ -973,6 +1021,12 @@ open class CGContext {
 
     // MARK: - Managing a Bitmap Graphics Context
 
+    /// The bitmap memory used by a context that was created for in-memory drawing.
+    private var pixelSurface: PixelSurface?
+
+    /// Data retained by contexts that render directly to a window.
+    private var storedData: Data
+
     /// Obtains the bitmap information associated with a bitmap graphics context.
     public var bitmapInfo: CGBitmapInfo
 
@@ -991,8 +1045,29 @@ open class CGContext {
     /// Returns the color space of a bitmap context.
     public var colorSpace: CGColorSpace?
     
-    /// Returns a pointer to the image data associated with a bitmap context.
-    public var data: Data
+    /// Returns a copy of the current bitmap bytes, or the stored data for a window context.
+    ///
+    /// Assigning bitmap data requires exactly `bytesPerRow * height` bytes.
+    public var data: Data {
+        get {
+            guard let pixelSurface else { return storedData }
+            return Data(bytes: pixelSurface.dataPointer, count: pixelSurface.byteCount)
+        }
+        set {
+            guard let pixelSurface else {
+                storedData = newValue
+                return
+            }
+            precondition(
+                newValue.count == pixelSurface.byteCount,
+                "Bitmap data must contain exactly bytesPerRow * height bytes."
+            )
+            newValue.withUnsafeBytes { source in
+                guard let baseAddress = source.baseAddress else { return }
+                pixelSurface.dataPointer.copyMemory(from: baseAddress, byteCount: pixelSurface.byteCount)
+            }
+        }
+    }
     
     /// Returns the height in pixels of a bitmap context.
     public var height: Int
@@ -1000,9 +1075,11 @@ open class CGContext {
     /// Returns the width in pixels of a bitmap context.
     public var width: Int
     
-    /// Creates and returns a CGImage from the pixel data in a bitmap graphics context.
+    /// Creates and returns a CGImage containing a copy of the bitmap context's pixels.
+    /// - Returns: The copied image, or nil when this context has no bitmap storage.
     public func makeImage() -> CGImage? {
-        .init(
+        guard let pixelSurface else { return nil }
+        return .init(
             width: width, 
             height: height, 
             bitsPerComponent: bitsPerComponent, 
@@ -1010,10 +1087,45 @@ open class CGContext {
             bytesPerRow: bytesPerRow, 
             space: colorSpace ?? .genericRGBLinear, 
             bitmapInfo: bitmapInfo, 
-            provider: CGDataProvider(data: data), 
+            provider: CGDataProvider(data: Data(bytes: pixelSurface.dataPointer, count: pixelSurface.byteCount)),
             decode: nil, 
             shouldInterpolate: false, 
-            intent: .defaultIntent
+            intent: .defaultIntent,
+            alphaInfo: alphaInfo
         )
+    }
+}
+
+/// Resolves the byte order and default alpha layout for bitmap-context creation.
+private struct BitmapSurfaceFormat {
+    /// The byte order accepted by `PixelSurface`.
+    let bitmapInfo: CGBitmapInfo
+
+    /// The alpha layout inferred when the caller does not specify one.
+    let defaultAlphaInfo: CGImageAlphaInfo
+
+    /// Creates a format from a supported bitmap-info raw value.
+    /// - Parameter rawValue: The raw bitmap-info value supplied to `CGContext`.
+    /// - Returns: The resolved format, or nil when the raw value is unsupported.
+    init?(rawValue: Int) {
+        switch rawValue {
+        case 0, CGBitmapInfo.byteOrderDefault.rawValue:
+            bitmapInfo = .byteOrderDefault
+            defaultAlphaInfo = .premultipliedLast
+        case CGBitmapInfo.byteOrder32Little.rawValue:
+            bitmapInfo = .byteOrder32Little
+            defaultAlphaInfo = .premultipliedFirst
+        case CGBitmapInfo.byteOrder32Big.rawValue:
+            bitmapInfo = .byteOrder32Big
+            defaultAlphaInfo = .premultipliedLast
+        case 5:
+            bitmapInfo = .byteOrderDefault
+            defaultAlphaInfo = .noneSkipLast
+        case 6:
+            bitmapInfo = .byteOrder32Little
+            defaultAlphaInfo = .noneSkipFirst
+        default:
+            return nil
+        }
     }
 }

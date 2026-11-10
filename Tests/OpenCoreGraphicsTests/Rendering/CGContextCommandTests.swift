@@ -340,15 +340,7 @@ struct CGContextCommandTests {
     /// Creates a bitmap context connected to an in-memory recording target.
     /// - Returns: The context and its target for inspecting submitted commands.
     private func makeRecordingContext() -> (CGContext, RecordingRenderTarget) {
-        let context = CGContext(
-            data: nil,
-            width: 64,
-            height: 64,
-            bitsPerComponent: 8,
-            bytesPerRow: 0,
-            space: .genericRGBLinear,
-            bitmapInfo: 0
-        )
+        let context = CGContext(width: 64, height: 64)
         let target = RecordingRenderTarget(size: CGSize(width: 64, height: 64))
         context.renderTarget = target
         return (context, target)

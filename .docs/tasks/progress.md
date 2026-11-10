@@ -418,3 +418,13 @@
   - O enum `CGBitmapInfo` representa cada byte order como um caso, e não permite combinar os casos como uma máscara; valide o par `alphaInfo`/`bitmapInfo` diretamente.
   - A alocação de um tipo valor precisa ser mantida por um objeto proprietário de referência, já que `struct` não pode liberar recursos em `deinit`.
 ---
+
+## 2026-11-10 - US-045
+- `CGContext.init(data:...)` agora é failable e valida componentes de 8 bits, RGB, dimensões, formato e stride; `bytesPerRow == 0` é calculado quando a memória é alocada internamente.
+- Contextos bitmap usam `PixelSurface` própria ou emprestada; `data` lê/escreve o buffer e `makeImage()` copia os bytes com tamanho, stride, formato e `alphaInfo` corretos.
+- Contextos de janela mantêm o inicializador por dimensões sem armazenamento bitmap; `makeImage()` retorna nil nesse tipo de contexto.
+- Testes cobrem alocação, rejeição de parâmetros inválidos, memória externa, cópia independente da imagem e metadados RGBA/BGRA/opacos; `swift test` passou (120 testes em 24 suítes), sem warnings.
+- **Learnings for future iterations:**
+  - `CGImage` precisa manter `alphaInfo` separado da ordem de bytes; o overload interno permite que `makeImage()` preserve o layout sem alterar o inicializador público existente.
+  - Uma superfície emprestada deve permanecer válida enquanto o contexto existir; `makeImage()` precisa copiar os bytes para não depender do tempo de vida do buffer do chamador.
+---
