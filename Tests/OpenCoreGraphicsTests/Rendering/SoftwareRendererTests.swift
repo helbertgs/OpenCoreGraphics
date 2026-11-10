@@ -243,6 +243,28 @@ struct SoftwareRendererTests {
         #expect(pixel(at: 7, y: 7, in: pixels)[3] == 0)
     }
 
+    /// Verifies rectangle clipping and resetClip restore the full bitmap region.
+    @Test
+    func clipsToPublicRectangleAndResetsTheClip() throws {
+        let context = try #require(makeContext())
+        let clipRect = CGRect(x: 2, y: 2, width: 4, height: 4)
+        context.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        context.clip(to: clipRect)
+        #expect(context.boundingBoxOfClipPath == clipRect)
+        context.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+
+        context.resetClip()
+        #expect(context.boundingBoxOfClipPath == CGRect(x: 0, y: 0, width: 8, height: 8))
+        context.setFillColor(CGColor(red: 0, green: 0, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 7, y: 7, width: 1, height: 1))
+        context.flush()
+
+        let pixels = Array(context.data)
+        #expect(pixel(at: 1, y: 1, in: pixels)[3] == 0)
+        #expect(pixel(at: 3, y: 3, in: pixels) == [255, 0, 0, 255])
+        #expect(pixel(at: 7, y: 7, in: pixels) == [0, 0, 255, 255])
+    }
+
     /// Verifies restoring graphics state restores the previous clipping mask.
     @Test
     func restoreGStateRestoresPreviousClipMask() throws {

@@ -21,6 +21,37 @@ struct CGContextCommandTests {
         #expect(target.commands == [.fillPath(path: path, rule: .evenOdd, color: .black, blendMode: .normal)])
     }
 
+    /// Verifies public clip regions are tracked, restored, and reset in order.
+    @Test
+    func publicClipAPIsTrackAndRestoreRegions() {
+        let (context, target) = makeRecordingContext()
+        let rectangle = CGRect(x: 3.25, y: 4.5, width: 18.5, height: 20.25)
+        context.clip(to: rectangle)
+        #expect(context.boundingBoxOfClipPath == rectangle)
+        #expect(target.clipRegions == [.rectangle(rectangle)])
+
+        context.saveGState()
+        context.beginPath()
+        context.addPath(CGPath(ellipseIn: CGRect(x: 5, y: 6, width: 12, height: 14)))
+        context.clip(using: .evenOdd)
+        #expect(target.clipRegions.count == 2)
+
+        context.restoreGState()
+        #expect(target.clipRegions == [.rectangle(rectangle)])
+
+        context.resetClip()
+        #expect(target.clipRegions.isEmpty)
+        #expect(context.boundingBoxOfClipPath == CGRect(x: 0, y: 0, width: 64, height: 64))
+
+        let (rotatedContext, rotatedTarget) = makeRecordingContext()
+        rotatedContext.rotate(by: .pi / 4)
+        rotatedContext.clip(to: rectangle)
+        let usesPathClip = rotatedTarget.clipRegions.first.map { region in
+            if case .path = region { true } else { false }
+        } ?? false
+        #expect(usesPathClip)
+    }
+
     /// Verifies that stroking captures the current line state and clears the path.
     @Test
     func strokePathRecordsStyleAndClearsPath() throws {

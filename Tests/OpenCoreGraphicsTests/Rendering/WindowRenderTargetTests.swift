@@ -31,6 +31,32 @@ struct WindowRenderTargetTests {
         #expect(renderer.size == CGSize(width: 40, height: 48))
     }
 
+    /// Verifies clip changes execute after pending drawing and reset the previous clip.
+    @Test
+    func appliesAndResetsClipRegions() {
+        let renderer = RecordingRenderBackend()
+        let target = WindowRenderTarget(size: CGSize(width: 32, height: 24), renderer: renderer)
+        let rectangle = CGRect(x: 2, y: 3, width: 10, height: 12)
+        let draw = DrawCommand.fillPath(
+            path: CGPath(rect: rectangle),
+            rule: .winding,
+            color: .black,
+            blendMode: .normal
+        )
+
+        target.submit(draw)
+        target.flush()
+        target.setClipRegions([.rectangle(rectangle)])
+        target.setClipRegions([])
+
+        #expect(renderer.commands == [
+            draw,
+            .resetClip,
+            .clipRect(rectangle),
+            .resetClip
+        ])
+    }
+
     /// Verifies a surface is presented after queued commands with stable texture identity and updated pixels.
     @Test
     func presentsSoftwareSurfaceAfterPendingCommands() throws {

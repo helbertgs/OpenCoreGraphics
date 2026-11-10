@@ -229,6 +229,9 @@ open class CGContext {
     /// The current clipping coverage captured by graphics-state snapshots.
     private var clipMask: CoverageMask?
 
+    /// The ordered device-space regions that define the current clip.
+    private var clipRegions: [CGClipRegion] = []
+
     /// The current line cap style captured by graphics-state snapshots.
     private var lineCap: CGLineCap = .butt
 
@@ -431,6 +434,34 @@ open class CGContext {
         path?.boundingBox ?? .zero
     }
 
+    /// The smallest rectangle containing the current clipping region in user space.
+    ///
+    /// When no clipping has been applied, this is the full context bounds transformed into user space.
+    open var boundingBoxOfClipPath: CGRect {
+        var deviceBounds = CGRect(x: 0, y: 0, width: Double(width), height: Double(height))
+        for region in clipRegions {
+            let regionBounds = region.boundingBox
+            guard regionBounds.origin.x.isFinite,
+                  regionBounds.origin.y.isFinite,
+                  regionBounds.size.width.isFinite,
+                  regionBounds.size.height.isFinite else {
+                return .zero
+            }
+            let minimumX = max(deviceBounds.minX, regionBounds.minX)
+            let minimumY = max(deviceBounds.minY, regionBounds.minY)
+            let maximumX = min(deviceBounds.maxX, regionBounds.maxX)
+            let maximumY = min(deviceBounds.maxY, regionBounds.maxY)
+            guard minimumX < maximumX, minimumY < maximumY else { return .zero }
+            deviceBounds = CGRect(
+                x: minimumX,
+                y: minimumY,
+                width: maximumX - minimumX,
+                height: maximumY - minimumY
+            )
+        }
+        return convertToUserSpace(deviceBounds)
+    }
+
     /// Returns the current point in a non-empty path.
     public var currentPointOfPath: CGPoint {
         path?.currentPoint ?? .zero
@@ -494,18 +525,102 @@ open class CGContext {
 
     /// Intersects the current clipping region with the current path.
     /// - Parameter rule: The fill rule used to determine the path's interior.
-    func clip(using rule: CGPath.CGPathFillRule = .winding) {
+    open func clip(using rule: CGPath.CGPathFillRule = .winding) {
         guard let path else { return }
         self.path = nil
         guard let newMask = CoverageMask(path: path, rule: rule, width: width, height: height) else { return }
 
+        appendClipRegion(.path(path, rule: rule), mask: newMask)
+    }
+
+    /// Intersects the current clipping region with a rectangle in user space.
+    /// - Parameter rect: The rectangle to add to the current clipping region.
+    open func clip(to rect: CGRect) {
+        let clipPath = CGPath(rect: rect, transform: ctm)
+        guard let newMask = CoverageMask(
+            path: clipPath,
+            rule: .winding,
+            width: width,
+            height: height
+        ) else {
+            return
+        }
+
+        let region: CGClipRegion = isAxisAlignedRectangle(clipPath)
+            ? .rectangle(clipPath.boundingBoxOfPath)
+            : .path(clipPath, rule: .winding)
+        appendClipRegion(region, mask: newMask)
+    }
+
+    /// Removes all clipping restrictions from the context.
+    open func resetClip() {
         flush()
-        if let clipMask, let intersection = clipMask.intersecting(newMask) {
+        clipMask = nil
+        clipRegions.removeAll(keepingCapacity: true)
+        renderTarget?.setClipMask(nil)
+        renderTarget?.setClipRegions(clipRegions)
+    }
+
+    /// Intersects the current clip with a coverage mask and records its backend region.
+    /// - Parameters:
+    ///   - region: The device-space region to append to the current clip.
+    ///   - mask: The rasterized coverage for the new region.
+    private func appendClipRegion(_ region: CGClipRegion, mask: CoverageMask) {
+        flush()
+        if let clipMask, let intersection = clipMask.intersecting(mask) {
             self.clipMask = intersection
         } else {
-            clipMask = newMask
+            clipMask = mask
         }
+        clipRegions.append(region)
         renderTarget?.setClipMask(clipMask)
+        renderTarget?.setClipRegions(clipRegions)
+    }
+
+    /// Checks whether a transformed rectangular path can be represented by an axis-aligned scissor.
+    /// - Parameter path: The transformed rectangle path.
+    /// - Returns: True when all four corners form an axis-aligned rectangle.
+    private func isAxisAlignedRectangle(_ path: CGPath) -> Bool {
+        let elements = path.subpath
+        guard elements.count == 5,
+              elements[0].type == .moveToPoint,
+              elements[0].points.count == 1,
+              elements[1].type == .addLineToPoint,
+              elements[1].points.count == 2,
+              elements[2].type == .addLineToPoint,
+              elements[2].points.count == 2,
+              elements[3].type == .addLineToPoint,
+              elements[3].points.count == 2,
+              elements[4].type == .closeSubpath else {
+            return false
+        }
+
+        let bounds = path.boundingBoxOfPath
+        let points = [
+            elements[0].points[0],
+            elements[1].points[1],
+            elements[2].points[1],
+            elements[3].points[1]
+        ]
+        let tolerance = max(
+            1,
+            max(max(abs(bounds.minX), abs(bounds.maxX)), max(abs(bounds.minY), abs(bounds.maxY)))
+        ) * 1e-10
+        let corners = [
+            CGPoint(x: bounds.minX, y: bounds.minY),
+            CGPoint(x: bounds.maxX, y: bounds.minY),
+            CGPoint(x: bounds.maxX, y: bounds.maxY),
+            CGPoint(x: bounds.minX, y: bounds.maxY)
+        ]
+
+        return points.allSatisfy { point in
+            (abs(point.x - bounds.minX) <= tolerance || abs(point.x - bounds.maxX) <= tolerance)
+                && (abs(point.y - bounds.minY) <= tolerance || abs(point.y - bounds.maxY) <= tolerance)
+        } && corners.allSatisfy { corner in
+            points.contains {
+                abs($0.x - corner.x) <= tolerance && abs($0.y - corner.y) <= tolerance
+            }
+        }
     }
 
     /// Paints a line along the current path.
@@ -944,7 +1059,7 @@ open class CGContext {
             return
         }
 
-        if state.clip != clipMask {
+        if state.clip != clipMask || state.clipRegions != clipRegions {
             flush()
         }
         restoreGraphicsState(state)
@@ -968,6 +1083,7 @@ open class CGContext {
         state.interpolationQuality = interpolationQuality
         state.renderingIntent = renderingIntent
         state.clip = clipMask
+        state.clipRegions = clipRegions
         state.font = font?.fullName
         state.fontSize = fontSize
         state.characterSpacing = characterSpacing
@@ -978,6 +1094,7 @@ open class CGContext {
     /// Restores the graphics-state parameters from a saved value snapshot.
     /// - Parameter state: The graphics state to restore.
     private func restoreGraphicsState(_ state: CGGraphicsState) {
+        let clipRegionsChanged = state.clipRegions != clipRegions
         ctm = state.ctm
         fillColor = state.fillColor
         strokeColor = state.strokeColor
@@ -993,7 +1110,11 @@ open class CGContext {
         interpolationQuality = state.interpolationQuality
         renderingIntent = state.renderingIntent
         clipMask = state.clip
+        clipRegions = state.clipRegions
         renderTarget?.setClipMask(clipMask)
+        if clipRegionsChanged {
+            renderTarget?.setClipRegions(clipRegions)
+        }
         font = state.font.flatMap(CGFont.init)
         fontSize = state.fontSize
         characterSpacing = state.characterSpacing

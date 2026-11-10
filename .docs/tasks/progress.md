@@ -8,6 +8,8 @@
 - `CGRenderTarget` e `CGRenderBackend` não são isolados por ator, para permitir renderização síncrona em bitmap. O target de janela mantém seu estado no `MainActor` e usa `MainActor.assumeIsolated` nos requisitos síncronos; o backend OpenGL aplica a mesma fronteira ao acessar o contexto GL.
 - O renderer de bitmap mantém o fast path para retângulos alinhados e rasteriza outras formas pelo `PathFlattener` e amostragem scanline 4×4; cobertura parcial é aplicada como alpha antes do source-over.
 - Mudanças no clip do bitmap descarregam os comandos pendentes antes de substituir a máscara; isso mantém a ordem de desenho quando estados são salvos e restaurados.
+- O alvo OpenGL mantém o clip entre lotes; descarregue desenhos pendentes antes de alterar o estado e reaplique a lista ordenada de regiões após `resetClip` ao restaurar o estado salvo.
+- `CGWindow.clear()` desativa scissoring antes de limpar a janela; o renderer reaplica o clip persistente ao iniciar o próximo lote.
 - O `SoftwareRenderer` interpreta imagens usando metadados do snapshot, amostra o quad pela transformação afim inversa e interpola canais de cor em espaço pré-multiplicado.
 - A exportação BMP lê pixels pelo `PixelSurface.pixel(x:y:)`, converte alpha pré-multiplicado para reto e escreve linhas top-down em BGRA.
 - A apresentação direta de um `PixelSurface` no OpenGL usa identidade estável por alvo e `GLTextureCache.updateTexture`; atualize a imagem existente com `glTexSubImage2D` e realoque o armazenamento somente quando as dimensões mudarem.
@@ -505,4 +507,16 @@
 - **Learnings for future iterations:**
   - O readback do framebuffer com `glReadPixels` já retorna linhas bottom-up compatíveis com o buffer lógico do `SoftwareRenderer`; não inverta o resultado da comparação.
   - O teste comparativo depende de uma sessão com GLFW/OpenGL e permanece opt-in, evitando dependência de GPU ou display em CI.
+---
+
+## 2026-11-10 - US-053
+- Publicadas as APIs de clipping retangular e por caminho, reset e bounding box; o retângulo é transformado para device space e usa scissor apenas quando continua alinhado aos eixos.
+- O bitmap compõe `CoverageMask`; o alvo de janela sincroniza a lista ordenada de regiões. O OpenGL usa `glScissor` para retângulos e alterna bits 0x80/0x40 do stencil para interseções de caminhos, reservando os seis bits baixos para preenchimentos temporários.
+- `saveGState`/`restoreGState` preservam e reaplicam clips nos dois backends. O Sample e a cena comparativa opcional demonstram o recorte de um retângulo por uma elipse.
+- `swift test` passou (143 testes em 27 suítes), `swift build --target OpenCoreGraphicsSample` e `git diff --check` passaram. A comparação OpenGL opt-in iniciou, mas não emitiu um resumo final e não foi confirmada.
+- Files changed: `Sources/OpenCoreGraphics/2D Drawing/CGContext.swift`, `Sources/OpenCoreGraphics/Rendering/CGRenderTarget.swift`, `Sources/OpenCoreGraphics/Rendering/DrawCommand.swift`, `Sources/OpenCoreGraphics/Rendering/GL/GLRenderer.swift`, `Sources/OpenCoreGraphics/Rendering/GL/WindowRenderTarget.swift`, `Sources/OpenCoreGraphics/Rendering/SoftwareRenderer.swift`, `Sources/OpenCoreGraphics/Services/Window Services/CGGraphicsState.swift`, `Sources/OpenCoreGraphics/Services/Window Services/CGWindow.swift`, `Sources/OpenCoreGraphicsSample/main.swift`, `Tests/OpenCoreGraphicsTests/Rendering/CGContextCommandTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/GLSoftwareComparisonTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/SoftwareRendererTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/WindowRenderTargetTests.swift`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
+- **Learnings for future iterations:**
+  - O stencil alterna dois bits altos ao intersectar caminhos: um mantém o clip anterior enquanto o outro recebe a nova interseção; os bits baixos continuam disponíveis para o preenchimento corrente.
+  - Como o scissor também restringe `glClear`, desative-o durante a limpeza do framebuffer e reaplique o estado de clip antes do próximo desenho.
+  - A comparação GL opcional pode encerrar sem emitir o relatório do Swift Testing neste ambiente; confirme o resumo final antes de tratá-la como executada.
 ---

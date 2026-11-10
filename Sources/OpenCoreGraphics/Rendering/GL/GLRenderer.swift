@@ -309,6 +309,15 @@ final class GLRenderer: CGRenderBackend, CGPixelSurfaceRenderer, CGPixelReadback
     /// The textures reused across image draw commands.
     private let textureCache: GLTextureCache
 
+    /// The low stencil bits reserved for temporary path fills.
+    private let stencilFillMask = GLuint(0x3F)
+
+    /// The stencil bit containing the currently active path clip, if any.
+    private var activeClipStencilBit: GLuint?
+
+    /// The current intersection of rectangular clip regions in device pixels.
+    private var clipScissorRect: CGRect?
+
     /// Creates the shader program and reusable geometry buffers.
     /// - Parameters:
     ///   - shaderCache: The cache from which the solid-color program is loaded.
@@ -409,6 +418,7 @@ final class GLRenderer: CGRenderBackend, CGPixelSurfaceRenderer, CGPixelReadback
 
         program.use()
         setProjection(projection)
+        applyClipState()
         var currentColor: [Float]?
 
         for command in commands {
@@ -445,6 +455,14 @@ final class GLRenderer: CGRenderBackend, CGPixelSurfaceRenderer, CGPixelReadback
                     projection: projection
                 )
                 currentColor = nil
+            case let .clip(path, rule):
+                applyClipPath(path, rule: rule, size: size)
+                currentColor = nil
+            case let .clipRect(rect):
+                applyClipRectangle(rect, size: size)
+            case .resetClip:
+                resetClip()
+                currentColor = nil
             default:
                 continue
             }
@@ -479,6 +497,7 @@ final class GLRenderer: CGRenderBackend, CGPixelSurfaceRenderer, CGPixelReadback
         }
 
         batchBuffer.flush()
+        applyClipState()
         let texture: GLTexture
         do {
             texture = try updateTexture
@@ -548,6 +567,7 @@ final class GLRenderer: CGRenderBackend, CGPixelSurfaceRenderer, CGPixelReadback
             currentColor = rgba
         }
 
+        applyClipState()
         let vertexData = vertices.flatMap { [$0.positionX, $0.positionY, $0.textureX, $0.textureY] }
         do {
             try batchBuffer.append(
@@ -569,13 +589,179 @@ final class GLRenderer: CGRenderBackend, CGPixelSurfaceRenderer, CGPixelReadback
     ) -> Bool {
         guard vertices.isEmpty == false else { return false }
 
+        clearStencilBits(stencilFillMask)
+        applyScissor()
         glad_glEnable(GLenum(GL_STENCIL_TEST))
+        glad_glStencilMask(stencilFillMask)
+        if let activeClipStencilBit {
+            glad_glStencilFunc(
+                GLenum(GL_EQUAL),
+                GLint(activeClipStencilBit),
+                activeClipStencilBit
+            )
+        } else {
+            glad_glStencilFunc(GLenum(GL_ALWAYS), 0, GLuint(0xFF))
+        }
+        glad_glColorMask(GLboolean(GL_FALSE), GLboolean(GL_FALSE), GLboolean(GL_FALSE), GLboolean(GL_FALSE))
+        setStencilRule(rule)
+
+        appendAndFlush(vertices, blendMode: blendMode)
+
+        glad_glColorMask(GLboolean(GL_TRUE), GLboolean(GL_TRUE), GLboolean(GL_TRUE), GLboolean(GL_TRUE))
+        glad_glStencilMask(0)
+        glad_glStencilFunc(GLenum(GL_NOTEQUAL), 0, stencilFillMask)
+        glad_glStencilOp(GLenum(GL_KEEP), GLenum(GL_KEEP), GLenum(GL_KEEP))
+        setColor(rgba)
+        appendAndFlush(GLRendererGeometry.coverVertices(for: size), blendMode: blendMode)
+
         glad_glStencilMask(GLuint(0xFF))
+        clearStencilBits(stencilFillMask)
+        applyClipState()
+        return true
+    }
+
+    /// Intersects the current rectangular scissor with a device-space rectangle.
+    /// - Parameters:
+    ///   - rect: The rectangle to add to the current clip.
+    ///   - size: The framebuffer dimensions used to clamp the rectangle.
+    private func applyClipRectangle(_ rect: CGRect, size: CGSize) {
+        batchBuffer.flush()
+        let x1 = rect.origin.x
+        let y1 = rect.origin.y
+        let x2 = x1 + rect.size.width
+        let y2 = y1 + rect.size.height
+
+        guard x1.isFinite, y1.isFinite, x2.isFinite, y2.isFinite,
+              size.width.isFinite, size.height.isFinite else {
+            clipScissorRect = .zero
+            applyClipState()
+            return
+        }
+
+        let left = max(0, min(size.width, min(x1, x2).rounded(.down)))
+        let bottom = max(0, min(size.height, min(y1, y2).rounded(.down)))
+        let right = max(left, min(size.width, max(x1, x2).rounded(.up)))
+        let top = max(bottom, min(size.height, max(y1, y2).rounded(.up)))
+        let newRect = CGRect(x: left, y: bottom, width: right - left, height: top - bottom)
+
+        if let clipScissorRect {
+            let intersectionLeft = max(clipScissorRect.minX, newRect.minX)
+            let intersectionBottom = max(clipScissorRect.minY, newRect.minY)
+            let intersectionRight = min(clipScissorRect.maxX, newRect.maxX)
+            let intersectionTop = min(clipScissorRect.maxY, newRect.maxY)
+            self.clipScissorRect = CGRect(
+                x: intersectionLeft,
+                y: intersectionBottom,
+                width: max(0, intersectionRight - intersectionLeft),
+                height: max(0, intersectionTop - intersectionBottom)
+            )
+        } else {
+            clipScissorRect = newRect
+        }
+
+        applyClipState()
+    }
+
+    /// Intersects the current clip with a path using a separate stencil bit.
+    /// - Parameters:
+    ///   - path: The device-space path defining the additional clip.
+    ///   - rule: The fill rule used to determine the path's interior.
+    ///   - size: The framebuffer dimensions used by the cover geometry.
+    private func applyClipPath(_ path: CGPath, rule: CGPath.CGPathFillRule, size: CGSize) {
+        batchBuffer.flush()
+        let nextClipBit = activeClipStencilBit == 0x80 ? GLuint(0x40) : GLuint(0x80)
+        clearStencilBits(stencilFillMask | nextClipBit)
+        applyScissor()
+
+        let vertices = GLRendererGeometry.stencilVertices(for: path)
+        glad_glEnable(GLenum(GL_STENCIL_TEST))
+        glad_glStencilMask(stencilFillMask)
+        if let activeClipStencilBit {
+            glad_glStencilFunc(
+                GLenum(GL_EQUAL),
+                GLint(activeClipStencilBit),
+                activeClipStencilBit
+            )
+        } else {
+            glad_glStencilFunc(GLenum(GL_ALWAYS), 0, GLuint(0xFF))
+        }
+        glad_glColorMask(GLboolean(GL_FALSE), GLboolean(GL_FALSE), GLboolean(GL_FALSE), GLboolean(GL_FALSE))
+        setStencilRule(rule)
+        if vertices.isEmpty == false {
+            appendAndFlush(vertices, blendMode: .normal)
+        }
+
+        glad_glStencilMask(nextClipBit)
+        glad_glStencilFunc(GLenum(GL_NOTEQUAL), GLint(nextClipBit), stencilFillMask)
+        glad_glStencilOp(GLenum(GL_KEEP), GLenum(GL_KEEP), GLenum(GL_REPLACE))
+        if vertices.isEmpty == false {
+            appendAndFlush(GLRendererGeometry.coverVertices(for: size), blendMode: .normal)
+        }
+
+        glad_glColorMask(GLboolean(GL_TRUE), GLboolean(GL_TRUE), GLboolean(GL_TRUE), GLboolean(GL_TRUE))
+        clearStencilBits(stencilFillMask)
+        activeClipStencilBit = nextClipBit
+        applyClipState()
+    }
+
+    /// Removes the active rectangle and path clipping state.
+    private func resetClip() {
+        batchBuffer.flush()
+        clipScissorRect = nil
+        activeClipStencilBit = nil
+        glad_glStencilMask(GLuint(0xFF))
+        glad_glDisable(GLenum(GL_STENCIL_TEST))
+        applyScissor()
+    }
+
+    /// Applies the current scissor rectangle and path stencil test to future geometry.
+    private func applyClipState() {
+        applyScissor()
+        guard let activeClipStencilBit else {
+            glad_glStencilMask(GLuint(0xFF))
+            glad_glDisable(GLenum(GL_STENCIL_TEST))
+            return
+        }
+
+        glad_glEnable(GLenum(GL_STENCIL_TEST))
+        glad_glStencilMask(0)
+        glad_glStencilFunc(
+            GLenum(GL_EQUAL),
+            GLint(activeClipStencilBit),
+            activeClipStencilBit
+        )
+        glad_glStencilOp(GLenum(GL_KEEP), GLenum(GL_KEEP), GLenum(GL_KEEP))
+    }
+
+    /// Enables the current scissor or disables scissoring when no rectangle clip is active.
+    private func applyScissor() {
+        guard let clipScissorRect else {
+            glad_glDisable(GLenum(GL_SCISSOR_TEST))
+            return
+        }
+
+        glad_glEnable(GLenum(GL_SCISSOR_TEST))
+        glad_glScissor(
+            GLint(Int(clipScissorRect.origin.x)),
+            GLint(Int(clipScissorRect.origin.y)),
+            GLsizei(Int(clipScissorRect.size.width)),
+            GLsizei(Int(clipScissorRect.size.height))
+        )
+    }
+
+    /// Clears selected stencil bits across the full framebuffer without changing the clip scissor.
+    /// - Parameter mask: The stencil bits to clear.
+    private func clearStencilBits(_ mask: GLuint) {
+        glad_glDisable(GLenum(GL_SCISSOR_TEST))
+        glad_glStencilMask(mask)
         glad_glClearStencil(0)
         glad_glClear(GLbitfield(GL_STENCIL_BUFFER_BIT))
-        glad_glColorMask(GLboolean(GL_FALSE), GLboolean(GL_FALSE), GLboolean(GL_FALSE), GLboolean(GL_FALSE))
-        glad_glStencilFunc(GLenum(GL_ALWAYS), 0, GLuint(0xFF))
+        applyScissor()
+    }
 
+    /// Configures the stencil operation used to accumulate path winding.
+    /// - Parameter rule: The fill rule used to determine path interiors.
+    private func setStencilRule(_ rule: CGPath.CGPathFillRule) {
         switch rule {
         case .winding:
             glad_glStencilOpSeparate(GLenum(GL_FRONT), GLenum(GL_KEEP), GLenum(GL_KEEP), GLenum(GL_INCR_WRAP))
@@ -583,18 +769,6 @@ final class GLRenderer: CGRenderBackend, CGPixelSurfaceRenderer, CGPixelReadback
         case .evenOdd:
             glad_glStencilOp(GLenum(GL_KEEP), GLenum(GL_KEEP), GLenum(GL_INVERT))
         }
-
-        appendAndFlush(vertices, blendMode: blendMode)
-
-        glad_glColorMask(GLboolean(GL_TRUE), GLboolean(GL_TRUE), GLboolean(GL_TRUE), GLboolean(GL_TRUE))
-        glad_glStencilFunc(GLenum(GL_NOTEQUAL), 0, GLuint(0xFF))
-        glad_glStencilOp(GLenum(GL_KEEP), GLenum(GL_KEEP), GLenum(GL_KEEP))
-        setColor(rgba)
-        appendAndFlush(GLRendererGeometry.coverVertices(for: size), blendMode: blendMode)
-
-        glad_glStencilMask(GLuint(0xFF))
-        glad_glDisable(GLenum(GL_STENCIL_TEST))
-        return true
     }
 
     /// Appends geometry for the solid-color program and immediately draws it.

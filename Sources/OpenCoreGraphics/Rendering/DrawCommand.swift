@@ -20,6 +20,12 @@ enum DrawCommand: Equatable, Sendable {
     /// Restricts subsequent drawing to the interior of a path.
     case clip(path: CGPath, rule: CGPath.CGPathFillRule)
 
+    /// Restricts subsequent drawing to an axis-aligned device-space rectangle.
+    case clipRect(CGRect)
+
+    /// Removes all clipping restrictions from subsequent drawing.
+    case resetClip
+
     /// Draws positioned glyphs using a font snapshot and captured text state.
     case glyphs(glyphs: [CGGlyph], positions: [CGPoint], fontName: String?, fontSize: Double, color: CGColor, blendMode: CGBlendMode)
 }

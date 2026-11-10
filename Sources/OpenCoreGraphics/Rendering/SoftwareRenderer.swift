@@ -38,7 +38,7 @@ final class SoftwareRenderer: CGRenderBackend {
                     byTiling: byTiling,
                     blendMode: blendMode
                 )
-            case .clip, .glyphs:
+            case .clip, .clipRect, .resetClip, .glyphs:
                 continue
             }
         }

@@ -99,6 +99,17 @@ struct GLSoftwareComparisonTests {
                 image,
                 in: CGRect(x: 8 * scale, y: 8 * scale, width: 48 * scale, height: 48 * scale)
             )
+        case .clipIntersection:
+            context.saveGState()
+            context.clip(to: CGRect(x: 12 * scale, y: 12 * scale, width: 40 * scale, height: 40 * scale))
+            context.beginPath()
+            context.addPath(
+                CGPath(ellipseIn: CGRect(x: 5 * scale, y: 8 * scale, width: 54 * scale, height: 48 * scale))
+            )
+            context.clip()
+            context.setFillColor(CGColor(red: 0.9, green: 0.2, blue: 0.4, alpha: 1))
+            context.fill(CGRect(x: 0, y: 0, width: 64 * scale, height: 64 * scale))
+            context.restoreGState()
         }
     }
 
@@ -154,10 +165,13 @@ private enum ComparisonScene: String, CaseIterable {
     /// A scaled, vertically asymmetric bitmap image.
     case image
 
+    /// A solid rectangle intersected with both rectangular and elliptical clipping.
+    case clipIntersection
+
     /// Whether scan conversion can differ at the scene's curved or stroked edges.
     var hasCurvedEdges: Bool {
         switch self {
-        case .ellipse, .evenOddStar, .roundJoinStroke:
+        case .ellipse, .evenOddStar, .roundJoinStroke, .clipIntersection:
             true
         case .rectangle, .image:
             false

@@ -803,8 +803,8 @@
         "Build e testes passam"
       ],
       "priority": 53,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Adicionadas as APIs públicas `clip(to:)`, `clip(using:)`, `resetClip()` e `boundingBoxOfClipPath`. O bitmap mantém `CoverageMask`; o alvo OpenGL reaplica regiões ordenadas, usa `glScissor` para retângulos alinhados e bits alternados do stencil para interseções de caminhos, preservando os bits temporários de preenchimento. O Sample e a comparação opcional GL × software demonstram a interseção retângulo-elipse. `swift test` passou (143 testes em 27 suítes), `swift build --target OpenCoreGraphicsSample` e `git diff --check` passaram. A comparação GL opt-in iniciou, mas não forneceu um resumo final de execução neste ambiente."
     },
     {
       "id": "US-054",

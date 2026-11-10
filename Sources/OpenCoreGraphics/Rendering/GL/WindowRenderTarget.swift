@@ -24,6 +24,9 @@ final class WindowRenderTarget: CGRenderTarget {
     /// Commands accumulated until the context flushes its current frame.
     private var pendingCommands: [DrawCommand] = []
 
+    /// The ordered device-space regions that define the current window clip.
+    private var clipRegions: [CGClipRegion] = []
+
     /// Stable identity used to update one cached texture as the surface changes.
     private let surfaceTextureIdentity = UUID()
 
@@ -45,6 +48,9 @@ final class WindowRenderTarget: CGRenderTarget {
     /// - Parameter size: The new window dimensions in pixels.
     func updateSize(_ size: CGSize) {
         windowSize = size
+        if clipRegions.isEmpty == false {
+            applyClipRegions()
+        }
     }
 
     /// Flushes pending commands, then displays the supplied software surface full-screen.
@@ -90,6 +96,22 @@ final class WindowRenderTarget: CGRenderTarget {
             renderer.execute(pendingCommands, size: windowSize)
             pendingCommands.removeAll(keepingCapacity: true)
         }
+    }
+
+    /// Replaces the clip state used by the window's OpenGL renderer.
+    /// - Parameter regions: The device-space regions that form the current clip.
+    nonisolated func setClipRegions(_ regions: [CGClipRegion]) {
+        MainActor.assumeIsolated {
+            clipRegions = regions
+            applyClipRegions()
+        }
+    }
+
+    /// Resets the renderer's clip state and reapplies the current ordered regions.
+    private func applyClipRegions() {
+        guard let renderer else { return }
+        let commands = [DrawCommand.resetClip] + clipRegions.map(\.drawCommand)
+        renderer.execute(commands, size: windowSize)
     }
 
     /// Copies logical RGBA pixels into top-down rows for the textured-image shader.

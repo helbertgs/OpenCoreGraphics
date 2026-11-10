@@ -273,6 +273,7 @@ extension CGWindow {
     func clear() {
         let c = backgroundColor.components
         glad_glClearColor(Float(c[0]), Float(c[1]), Float(c[2]), Float(c[3]))
+        glad_glDisable(GLenum(GL_SCISSOR_TEST))
         glad_glClear(GLenum(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT))
     }
 

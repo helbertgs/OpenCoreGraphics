@@ -17,14 +17,25 @@ if CommandLine.arguments.contains("--software") {
         preconditionFailure("The software sample bitmap context could not be created.")
     }
 
-    softwareContext.setFillColor(CGColor(red: 0.2, green: 0.5, blue: 0.8, alpha: 1))
-    softwareContext.fill(CGRect(x: 20, y: 20, width: 150, height: 200))
+    if CommandLine.arguments.contains("--test-clip") {
+        softwareContext.saveGState()
+        softwareContext.clip(to: CGRect(x: 100, y: 100, width: 300, height: 300))
+        softwareContext.beginPath()
+        softwareContext.addPath(CGPath(ellipseIn: CGRect(x: 150, y: 80, width: 300, height: 400)))
+        softwareContext.clip()
+        softwareContext.setFillColor(CGColor(red: 0.9, green: 0.2, blue: 0.4, alpha: 1))
+        softwareContext.fill(CGRect(x: 50, y: 50, width: 400, height: 400))
+        softwareContext.restoreGState()
+    } else {
+        softwareContext.setFillColor(CGColor(red: 0.2, green: 0.5, blue: 0.8, alpha: 1))
+        softwareContext.fill(CGRect(x: 20, y: 20, width: 150, height: 200))
 
-    softwareContext.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
-    softwareContext.fill(CGRect(x: 200, y: 100, width: 150, height: 200))
+        softwareContext.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+        softwareContext.fill(CGRect(x: 200, y: 100, width: 150, height: 200))
 
-    softwareContext.setFillColor(CGColor(red: 0.2, green: 0.8, blue: 0.4, alpha: 1))
-    softwareContext.fillEllipse(in: CGRect(x: 180, y: 340, width: 150, height: 100))
+        softwareContext.setFillColor(CGColor(red: 0.2, green: 0.8, blue: 0.4, alpha: 1))
+        softwareContext.fillEllipse(in: CGRect(x: 180, y: 340, width: 150, height: 100))
+    }
     softwareContext.flush()
 
     guard let image = softwareContext.makeImage() else {
@@ -47,6 +58,18 @@ window.display = {
             softwareImage,
             in: CGRect(x: 0, y: 0, width: Double(cgContext.width), height: Double(cgContext.height))
         )
+        cgContext.restoreGState()
+        return
+    }
+
+    if CommandLine.arguments.contains("--test-clip") {
+        cgContext.saveGState()
+        cgContext.clip(to: CGRect(x: 100, y: 100, width: 300, height: 300))
+        cgContext.beginPath()
+        cgContext.addPath(CGPath(ellipseIn: CGRect(x: 150, y: 80, width: 300, height: 400)))
+        cgContext.clip()
+        cgContext.setFillColor(CGColor(red: 0.9, green: 0.2, blue: 0.4, alpha: 1))
+        cgContext.fill(CGRect(x: 50, y: 50, width: 400, height: 400))
         cgContext.restoreGState()
         return
     }

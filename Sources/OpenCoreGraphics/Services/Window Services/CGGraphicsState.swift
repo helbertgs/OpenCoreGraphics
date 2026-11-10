@@ -1,5 +1,34 @@
 import Foundation
 
+/// A device-space region that restricts subsequent drawing.
+enum CGClipRegion: Equatable, Sendable {
+    /// An axis-aligned rectangle that can be represented by an OpenGL scissor.
+    case rectangle(CGRect)
+
+    /// A path whose interior is represented by a stencil mask.
+    case path(CGPath, rule: CGPath.CGPathFillRule)
+
+    /// The smallest device-space rectangle enclosing this region.
+    var boundingBox: CGRect {
+        switch self {
+        case let .rectangle(rect):
+            rect
+        case let .path(path, _):
+            path.boundingBoxOfPath
+        }
+    }
+
+    /// Converts the region into the backend command used to apply it.
+    var drawCommand: DrawCommand {
+        switch self {
+        case let .rectangle(rect):
+            .clipRect(rect)
+        case let .path(path, rule):
+            .clip(path: path, rule: rule)
+        }
+    }
+}
+
 /// A value snapshot of the drawing parameters stored by a graphics context.
 struct CGGraphicsState: Sendable {
     /// The transform from user space to device space.
@@ -46,6 +75,9 @@ struct CGGraphicsState: Sendable {
 
     /// The clipping coverage mask, or nil when no clipping has been applied.
     var clip: CoverageMask?
+
+    /// The ordered device-space regions that define the current clip.
+    var clipRegions: [CGClipRegion] = []
 
     /// The selected font's name, or nil when no font has been selected.
     var font: String?

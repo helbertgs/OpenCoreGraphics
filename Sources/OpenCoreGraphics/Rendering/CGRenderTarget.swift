@@ -17,6 +17,10 @@ protocol CGRenderTarget {
     /// - Parameter mask: The current clip coverage, or nil to remove clipping.
     func setClipMask(_ mask: CoverageMask?)
 
+    /// Replaces the ordered clip regions used by backends that apply clipping directly.
+    /// - Parameter regions: The device-space regions that form the current clip.
+    func setClipRegions(_ regions: [CGClipRegion])
+
     /// Completes rendering for the commands submitted since the previous flush.
     func flush()
 }
@@ -25,6 +29,10 @@ extension CGRenderTarget {
     /// Does nothing for targets that do not support coverage clipping.
     /// - Parameter mask: The current clip coverage, or nil to remove clipping.
     func setClipMask(_ mask: CoverageMask?) { }
+
+    /// Does nothing for targets that apply clipping through a coverage mask.
+    /// - Parameter regions: The device-space regions that form the current clip.
+    func setClipRegions(_ regions: [CGClipRegion]) { }
 
     /// Does nothing for targets that render each submitted command immediately.
     func flush() { }
@@ -64,6 +72,9 @@ final class RecordingRenderTarget: CGRenderTarget {
     /// The commands submitted to this target, in submission order.
     private(set) var commands: [DrawCommand] = []
 
+    /// The ordered clip regions most recently assigned to this target.
+    private(set) var clipRegions: [CGClipRegion] = []
+
     /// Creates a command-recording target.
     /// - Parameter size: The dimensions to associate with the target.
     init(size: CGSize) {
@@ -80,5 +91,11 @@ final class RecordingRenderTarget: CGRenderTarget {
     /// - Returns: Always nil for a command-only recording target.
     func readPixels() -> Data? {
         nil
+    }
+
+    /// Stores the clip regions for later inspection.
+    /// - Parameter regions: The device-space regions that form the current clip.
+    func setClipRegions(_ regions: [CGClipRegion]) {
+        clipRegions = regions
     }
 }
