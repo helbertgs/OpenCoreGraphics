@@ -314,3 +314,12 @@
   - Para aproximar um arco circular com Béziers cúbicas, divida o sweep em segmentos de até 90 graus e use `4/3 * tan(delta/4)` para o controle tangente.
   - O ponto corrente do `CGContext` já está em device space; operações de arco tangente precisam convertê-lo de volta ao espaço de usuário antes de calcular o raio e as tangentes.
 ---
+
+## 2026-11-10 - US-033
+- `addRect` agora cria subpaths padrão com `moveToPoint`, três `addLineToPoint` e `closeSubpath`; `addRects` e `CGPath(rect:)` usam a mesma representação.
+- O renderer continua reconhecendo retângulos canônicos e elementos legados; `addPath` obtém o currentPoint da cópia mesmo quando o último elemento `closeSubpath` não tem pontos.
+- Testes validam tipos e contagem dos elementos, currentPoint após fechar e triangulação OpenGL; `swift test` passou (81 testes em 19 suítes).
+- **Learnings for future iterations:**
+  - Após um subpath fechado, recupere o currentPoint da propriedade do caminho, pois o elemento `closeSubpath` não armazena pontos.
+  - Ao padronizar elementos de geometria, atualize também os reconhecedores de formas otimizados do renderer para não perder o caminho rápido existente.
+---

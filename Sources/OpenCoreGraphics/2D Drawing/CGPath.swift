@@ -235,20 +235,11 @@ public struct CGPath : Codable, Equatable, Hashable, Sendable {
     ///   - rect: A rectangle, specified in user space coordinates.
     ///   - transform: An affine transform to apply to the rectangle before adding to the path.
     mutating public func addRect(_ rect: CGRect, transform: CGAffineTransform = .identity) {
-        let bottomLeft = CGPoint(x: rect.minX, y: rect.minY).applying(transform)
-        let bottomRight = CGPoint(x: rect.maxX, y: rect.minY).applying(transform)
-        let topRight = CGPoint(x: rect.maxX, y: rect.maxY).applying(transform)
-        let topLeft = CGPoint(x: rect.minX, y: rect.maxY).applying(transform)
-
-        let element = CGPathElement(type: .addRectToPoint, points: [
-            bottomLeft,
-            bottomRight,
-            topRight,
-            topLeft,
-        ])
-
-        append(element)
-        currentPoint = bottomLeft
+        move(to: CGPoint(x: rect.minX, y: rect.minY), transform: transform)
+        addLine(to: CGPoint(x: rect.maxX, y: rect.minY), transform: transform)
+        addLine(to: CGPoint(x: rect.maxX, y: rect.maxY), transform: transform)
+        addLine(to: CGPoint(x: rect.minX, y: rect.maxY), transform: transform)
+        closeSubpath()
     }
 
     /// Adds a set of rectangular subpaths to the path.
@@ -577,8 +568,8 @@ public struct CGPath : Codable, Equatable, Hashable, Sendable {
             let newElement = CGPathElement(type: element.type, points: transformedPoints)
             append(newElement)
         }
-        if let last = path.subpath.last, let lastPoint = last.points.last {
-            currentPoint = lastPoint
+        if path.isEmpty == false {
+            currentPoint = path.currentPoint.applying(transform)
         }
     }
 
@@ -864,7 +855,7 @@ extension CGPath {
         /// The path element that adds a cubic curve from the current point to the specified point.
         case addCurveToPoint
 
-        /// The path element that adds a line from the current point to the specified point and then closes the subpath.
+        /// A legacy rectangle element retained for decoding paths created by earlier versions.
         case addRectToPoint
 
         /// The path element that closes and completes a subpath. 

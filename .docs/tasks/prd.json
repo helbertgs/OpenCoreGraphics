@@ -494,8 +494,8 @@
         "Build e testes passam"
       ],
       "priority": 33,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "addRect gera moveToPoint, três addLineToPoint e closeSubpath; CGPath(rect:), addRects e addPath mantêm bounds e currentPoint corretos. O renderer triangula os retângulos canônicos e ainda lê elementos legados. swift test passou (81 testes em 19 suítes)."
     },
     {
       "id": "US-034",

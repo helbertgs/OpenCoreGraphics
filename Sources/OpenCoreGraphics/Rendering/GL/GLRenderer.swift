@@ -6,21 +6,71 @@ enum GLRendererGeometry {
     /// - Parameter path: A path containing only rectangular subpaths.
     /// - Returns: Six vertices per rectangle, or nil when any element is not a rectangle.
     static func rectangleVertices(for path: CGPath) -> [GLBatchVertex]? {
-        guard path.subpath.isEmpty == false,
-              path.subpath.allSatisfy({ $0.type == .addRectToPoint && $0.points.count == 4 }) else {
+        let elements = path.subpath
+        guard elements.isEmpty == false else { return nil }
+        var geometryVertices: [GLBatchVertex] = []
+        var index = 0
+
+        while index < elements.count {
+            let element = elements[index]
+            if element.type == .addRectToPoint {
+                guard let rectangleVertices = vertices(for: element.points) else { return nil }
+                geometryVertices.append(contentsOf: rectangleVertices)
+                index += 1
+                continue
+            }
+
+            guard index + 4 < elements.count,
+                  element.type == .moveToPoint,
+                  element.points.count == 1,
+                  elements[index + 1].type == .addLineToPoint,
+                  elements[index + 1].points.count == 2,
+                  elements[index + 2].type == .addLineToPoint,
+                  elements[index + 2].points.count == 2,
+                  elements[index + 3].type == .addLineToPoint,
+                  elements[index + 3].points.count == 2,
+                  elements[index + 4].type == .closeSubpath,
+                  elements[index + 1].points[0] == element.points[0],
+                  elements[index + 2].points[0] == elements[index + 1].points[1],
+                  elements[index + 3].points[0] == elements[index + 2].points[1],
+                  let rectangleVertices = vertices(for: [
+                    element.points[0],
+                    elements[index + 1].points[1],
+                    elements[index + 2].points[1],
+                    elements[index + 3].points[1]
+                  ]) else {
+                return nil
+            }
+
+            geometryVertices.append(contentsOf: rectangleVertices)
+            index += 5
+        }
+
+        return geometryVertices
+    }
+
+    /// Triangulates four points that form an affine-transformed rectangle.
+    /// - Parameter points: The rectangle corners in path order.
+    /// - Returns: Six vertices, or nil when the points do not form a parallelogram.
+    private static func vertices(for points: [CGPoint]) -> [GLBatchVertex]? {
+        guard points.count == 4 else { return nil }
+        let scale = max(
+            1,
+            points.reduce(0) { max($0, max(abs($1.x), abs($1.y))) }
+        )
+        guard abs(points[0].x + points[2].x - points[1].x - points[3].x) <= scale * 1e-10,
+              abs(points[0].y + points[2].y - points[1].y - points[3].y) <= scale * 1e-10 else {
             return nil
         }
 
-        return path.subpath.flatMap { element in
-            [0, 1, 2, 0, 2, 3].map { index in
-                let point = element.points[index]
-                return GLBatchVertex(
-                    positionX: Float(point.x),
-                    positionY: Float(point.y),
-                    textureX: 0,
-                    textureY: 0
-                )
-            }
+        return [0, 1, 2, 0, 2, 3].map { index in
+            let point = points[index]
+            return GLBatchVertex(
+                positionX: Float(point.x),
+                positionY: Float(point.y),
+                textureX: 0,
+                textureY: 0
+            )
         }
     }
 

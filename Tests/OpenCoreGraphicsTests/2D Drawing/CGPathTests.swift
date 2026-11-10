@@ -13,7 +13,13 @@ struct CGPathTests {
         let rect = CGRect(x: 0, y: 0, width: 10, height: 20)
         let path = CGPath(rect: rect)
         #expect(!path.isEmpty)
-        #expect(path.subpath.count == 1)
+        #expect(path.subpath.map(\.type) == [
+            .moveToPoint,
+            .addLineToPoint,
+            .addLineToPoint,
+            .addLineToPoint,
+            .closeSubpath
+        ])
     }
 
     @Test func initEllipse() {
@@ -60,18 +66,30 @@ struct CGPathTests {
         #expect(path == originalPath)
     }
 
-    @Test func addRect() {
+    /// Verifies rectangles use the standard move, line, and close elements.
+    @Test
+    func addRect() {
         var path = CGPath()
         let rect = CGRect(x: 0, y: 0, width: 5, height: 5)
         path.addRect(rect)
-        #expect(path.subpath.count == 1)
+        #expect(path.subpath.map(\.type) == [
+            .moveToPoint,
+            .addLineToPoint,
+            .addLineToPoint,
+            .addLineToPoint,
+            .closeSubpath
+        ])
+        #expect(path.currentPoint == CGPoint(x: 0, y: 0))
     }
 
+    /// Verifies each rectangle in a batch uses a complete standard subpath.
     @Test func addRects() {
         var path = CGPath()
         let rects = [CGRect(x: 0, y: 0, width: 2, height: 2), CGRect(x: 2, y: 2, width: 2, height: 2)]
         path.addRects(rects)
-        #expect(path.subpath.count == 2)
+        #expect(path.subpath.count == 10)
+        #expect(path.subpath.filter { $0.type == .closeSubpath }.count == 2)
+        #expect(path.currentPoint == CGPoint(x: 2, y: 2))
     }
 
     @Test func addEllipse() {
@@ -186,6 +204,11 @@ struct CGPathTests {
         path2.addPath(path1)
         #expect(path2.subpath.count == path1.subpath.count)
         #expect(path2.currentPoint == path1.currentPoint)
+
+        let rectanglePath = CGPath(rect: CGRect(x: 1, y: 2, width: 3, height: 4))
+        var transformedRectanglePath = CGPath()
+        transformedRectanglePath.addPath(rectanglePath, transform: .translate(5, 7))
+        #expect(transformedRectanglePath.currentPoint == CGPoint(x: 6, y: 9))
     }
 
     @Test func closeSubpath() {
