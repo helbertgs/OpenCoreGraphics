@@ -509,8 +509,8 @@
         "Build e testes passam"
       ],
       "priority": 34,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Criados Polyline e PathFlattener; o flatten usa subdivisão adaptativa de De Casteljau para curvas quadráticas/cúbicas, preserva subpaths e fechamento, e usa tolerância padrão de 0,25. Testes verificam o círculo de raio 100 dentro da tolerância e linha com 2 pontos. swift test passou (85 testes em 20 suítes)."
     },
     {
       "id": "US-035",

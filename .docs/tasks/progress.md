@@ -323,3 +323,12 @@
   - Após um subpath fechado, recupere o currentPoint da propriedade do caminho, pois o elemento `closeSubpath` não armazena pontos.
   - Ao padronizar elementos de geometria, atualize também os reconhecedores de formas otimizados do renderer para não perder o caminho rápido existente.
 ---
+
+## 2026-11-10 - US-034
+- Criados `Polyline` e `PathFlattener.flatten(_:tolerance:)` com tolerância padrão de 0,25 e subdivisão adaptativa de De Casteljau para curvas quadráticas e cúbicas.
+- Linhas mantêm apenas os endpoints; subpaths abertos/fechados e retângulos legados preservam seus limites sem duplicar o ponto inicial no fechamento.
+- Testes cobrem linha com dois pontos, curva quadrática, múltiplos subpaths e círculo de raio 100 dentro do erro radial de 0,25; `swift test` passou (85 testes em 20 suítes).
+- **Learnings for future iterations:**
+  - Para controlar o erro da curva, compare os pontos de controle com o segmento de corda e subdivida em t=0,5 até que todos estejam dentro da tolerância.
+  - A polilinha guarda os pontos únicos e um indicador `isClosed`; o consumidor cria explicitamente a aresta final quando necessário.
+---
