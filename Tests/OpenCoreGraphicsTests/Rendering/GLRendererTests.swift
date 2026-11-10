@@ -95,6 +95,25 @@ struct GLRendererTests {
         #expect(stencilVertices.count == 54)
     }
 
+    /// Verifies a requested line width expands a rectangle into both outline contours.
+    @Test
+    func expandsStrokePathIntoFilledOutlineGeometry() throws {
+        let path = CGPath(rect: CGRect(x: 0, y: 0, width: 10, height: 10))
+        let style = StrokeStyle(width: 8, cap: .butt, join: .miter, miterLimit: 10)
+        let vertices = GLRendererGeometry.strokeVertices(for: path, style: style)
+        let points = vertices.map { CGPoint(x: Double($0.positionX), y: Double($0.positionY)) }
+        let minimumX = try #require(points.map(\.x).min())
+        let maximumX = try #require(points.map(\.x).max())
+        let minimumY = try #require(points.map(\.y).min())
+        let maximumY = try #require(points.map(\.y).max())
+
+        #expect(vertices.count == 12)
+        #expect(minimumX == -4)
+        #expect(maximumX == 14)
+        #expect(minimumY == -4)
+        #expect(maximumY == 14)
+    }
+
     /// Verifies pixel coordinates map to the expected column-major clip matrix.
     @Test
     func buildsPixelSpaceOrthographicProjection() throws {

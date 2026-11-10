@@ -5,6 +5,19 @@ let window = try CGWindow(frame: CGRect(x: 0, y: 0, width: 512, height: 512), ti
 window.display = {
     let cgContext = window.cgContext
 
+    if CommandLine.arguments.contains("--test-stroke") {
+        cgContext.setStrokeColor(CGColor(red: 0.2, green: 0.5, blue: 0.8, alpha: 1))
+        cgContext.setLineWidth(8)
+        cgContext.beginPath()
+        cgContext.move(to: CGPoint(x: 100, y: 100))
+        cgContext.addLine(to: CGPoint(x: 412, y: 100))
+        cgContext.addLine(to: CGPoint(x: 412, y: 412))
+        cgContext.addLine(to: CGPoint(x: 100, y: 412))
+        cgContext.closePath()
+        cgContext.strokePath()
+        return
+    }
+
     if CommandLine.arguments.contains("--test-rendering") {
         var windingStar = CGPath()
         windingStar.move(to: CGPoint(x: 128, y: 38))

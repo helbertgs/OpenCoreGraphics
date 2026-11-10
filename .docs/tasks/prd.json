@@ -585,8 +585,8 @@
         "Build e testes passam"
       ],
       "priority": 39,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "GLRenderer processa strokePath com PathFlattener e Stroker, transformando o contorno em geometria preenchida pelo stencil sob winding. Não há uso de glLineWidth; a cor e largura capturadas pelo DrawCommand são preservadas. O Sample aceita --test-stroke para exibir uma moldura de 8 px. swift test passou (97 testes em 21 suítes)."
     },
     {
       "id": "US-040",

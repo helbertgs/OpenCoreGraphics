@@ -366,3 +366,11 @@
 - **Learnings for future iterations:**
   - Triângulos orientados em fan preservam o contorno como uma cadeia assinada; o stencil cancela sobreposições externas e trata buracos sem tesselação limitada por número de vértices.
 ---
+
+## 2026-11-10 - US-039
+- O renderer agora transforma `strokePath` em polilinhas via `PathFlattener`, gera os contornos com `Stroker` e preenche esses contornos pelo stencil usando winding.
+- O `DrawCommand` fornece a cor de traço e largura capturadas; não há uso de `glLineWidth`.
+- O Sample aceita `--test-stroke` para desenhar uma moldura de 8 px; teste verifica contornos interno/externo e bounds da largura. `swift test` passou (97 testes em 21 suítes).
+- **Learnings for future iterations:**
+  - O contorno de um stroke fechado tem anéis com orientações opostas; acumular ambos pelo winding conserva o interior transparente.
+---

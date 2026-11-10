@@ -87,6 +87,16 @@ enum GLRendererGeometry {
         }
     }
 
+    /// Expands a path into the fill triangles for its requested stroke outline.
+    /// - Parameters:
+    ///   - path: The path whose centerline will be stroked.
+    ///   - style: The line width, caps, joins, miter limit, and dash pattern.
+    /// - Returns: The triangles that cover the stroke outline contours.
+    static func strokeVertices(for path: CGPath, style: StrokeStyle) -> [GLBatchVertex] {
+        let polylines = PathFlattener.flatten(path)
+        return stencilVertices(for: Stroker.outline(polylines, style: style))
+    }
+
     /// Creates two triangles that cover the destination.
     /// - Parameter size: The destination dimensions in pixels.
     /// - Returns: Six vertices covering the destination bounds.
@@ -287,46 +297,86 @@ final class GLRenderer: CGRenderBackend {
         var currentColor: [Float]?
 
         for command in commands {
-            guard case let .fillPath(path, rule, color, blendMode) = command,
-                  let rgba = GLRendererGeometry.rgbaComponents(for: color) else {
-                continue
-            }
-
-            let vertices: [GLBatchVertex]
-            if let rectangleVertices = GLRendererGeometry.rectangleVertices(for: path) {
-                vertices = rectangleVertices
-            } else {
-                let polylines = PathFlattener.flatten(path)
-                if let convexVertices = GLRendererGeometry.convexPolygonVertices(for: polylines) {
-                    vertices = convexVertices
-                } else {
-                    batchBuffer.flush()
-                    let stencilVertices = GLRendererGeometry.stencilVertices(for: polylines)
-                    if renderStencilFill(stencilVertices, rule: rule, rgba: rgba, blendMode: blendMode, size: size) {
-                        currentColor = rgba
-                    }
-                    continue
-                }
-            }
-
-            if currentColor != rgba {
-                batchBuffer.flush()
-                setColor(rgba)
-                currentColor = rgba
-            }
-
-            let vertexData = vertices.flatMap { [$0.positionX, $0.positionY, $0.textureX, $0.textureY] }
-            do {
-                try batchBuffer.append(
-                    vertices: vertexData,
-                    state: GLBatchState(program: program.identifier, texture: nil, blendMode: blendMode)
+            switch command {
+            case let .fillPath(path, rule, color, blendMode):
+                renderFillPath(
+                    path,
+                    rule: rule,
+                    color: color,
+                    blendMode: blendMode,
+                    size: size,
+                    currentColor: &currentColor
                 )
-            } catch {
-                preconditionFailure("Rectangle triangulation produced incomplete vertex data: \(error)")
+            case let .strokePath(path, color, style, blendMode):
+                guard let rgba = GLRendererGeometry.rgbaComponents(for: color) else { continue }
+                batchBuffer.flush()
+                let vertices = GLRendererGeometry.strokeVertices(for: path, style: style)
+                if renderStencilFill(
+                    vertices,
+                    rule: .winding,
+                    rgba: rgba,
+                    blendMode: blendMode,
+                    size: size
+                ) {
+                    currentColor = rgba
+                }
+            default:
+                continue
             }
         }
 
         batchBuffer.flush()
+    }
+
+    /// Draws a fill command directly for simple geometry or through the stencil buffer for complex paths.
+    private func renderFillPath(
+        _ path: CGPath,
+        rule: CGPath.CGPathFillRule,
+        color: CGColor,
+        blendMode: CGBlendMode,
+        size: CGSize,
+        currentColor: inout [Float]?
+    ) {
+        guard let rgba = GLRendererGeometry.rgbaComponents(for: color) else { return }
+
+        let vertices: [GLBatchVertex]
+        if let rectangleVertices = GLRendererGeometry.rectangleVertices(for: path) {
+            vertices = rectangleVertices
+        } else {
+            let polylines = PathFlattener.flatten(path)
+            if let convexVertices = GLRendererGeometry.convexPolygonVertices(for: polylines) {
+                vertices = convexVertices
+            } else {
+                batchBuffer.flush()
+                let stencilVertices = GLRendererGeometry.stencilVertices(for: polylines)
+                if renderStencilFill(
+                    stencilVertices,
+                    rule: rule,
+                    rgba: rgba,
+                    blendMode: blendMode,
+                    size: size
+                ) {
+                    currentColor = rgba
+                }
+                return
+            }
+        }
+
+        if currentColor != rgba {
+            batchBuffer.flush()
+            setColor(rgba)
+            currentColor = rgba
+        }
+
+        let vertexData = vertices.flatMap { [$0.positionX, $0.positionY, $0.textureX, $0.textureY] }
+        do {
+            try batchBuffer.append(
+                vertices: vertexData,
+                state: GLBatchState(program: program.identifier, texture: nil, blendMode: blendMode)
+            )
+        } catch {
+            preconditionFailure("Path triangulation produced incomplete vertex data: \(error)")
+        }
     }
 
     /// Fills an arbitrary path by accumulating its contour winding in the stencil buffer.
