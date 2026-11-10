@@ -56,6 +56,16 @@ let package = Package(
             dependencies: ["OpenCoreGraphics"],
             path: "tools/WindowBaseline"
         ),
+        .executableTarget(
+            name: "OpenCoreGraphicsWindowCooperative",
+            dependencies: ["OpenCoreGraphics"],
+            path: "tools/WindowCooperative"
+        ),
+        .executableTarget(
+            name: "OpenCoreGraphicsWindowAsyncMain",
+            dependencies: ["OpenCoreGraphics", .product(name: "OpenGLFW", package: "OpenGLFW")],
+            path: "tools/WindowAsyncMain"
+        ),
         .testTarget(
             name: "OpenCoreGraphicsTests",
             dependencies: [

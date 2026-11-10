@@ -204,8 +204,8 @@
         "Typecheck passes"
       ],
       "priority": 12,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "API async aditiva autorizada, coordenador cooperativo e testes gráficos no host AppKit documentado; async main puro permanece limitação reproduzida no macOS, latências não comparáveis."
     },
     {
       "id": "US-013",

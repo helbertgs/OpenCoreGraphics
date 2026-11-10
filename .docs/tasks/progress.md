@@ -135,3 +135,13 @@
 - **Learnings for future iterations:**
   - Polling ou espera síncrona no MainActor não constitui ponto de suspensão Swift; preservar a API legada não garante cooperação.
 ---
+
+## 2026-11-10 - US-012
+- Implementada API assíncrona aditiva autorizada e coordenador compartilhado para eventos, redraw, animação, cancelamento e múltiplas janelas, sem alterar a API síncrona.
+- Testes determinísticos e execução gráfica supervisionada comprovam progresso de tarefa MainActor e comportamento de duas janelas no host AppKit documentado. O caminho `async main` puro apresenta encerramento prematuro intermitente no macOS e continua não suportado; não há alegação de validação em Linux/Windows.
+- Comparadas medições de CPU e latência com a baseline em `.docs/WindowLoopCooperative.md`; as cargas e caminhos de eventos diferem, impossibilitando concluir ganho ou regressão. Nova reprodução: 2,193% de um núcleo, 20/20 eventos e conclusão das duas janelas.
+- Validação: 239 testes na suíte padrão com concorrência estrita; build estrito; sonda cooperativa supervisionada; testes GL reais separados; `git diff --check` passou. Testes gráficos são opt-in na suíte padrão.
+- Files changed: `.docs/WindowLoopCooperative.md`, `.docs/WindowLoopStrategy.md`, `README.md`, `Package.swift`, `Sources/OpenCoreGraphics/Services/Window Services/CGWindow.swift`, `WindowLoopTestHandle.swift`, testes, scripts, ferramentas e arquivos de progresso.
+- **Learnings for future iterations:**
+  - No macOS testado, o host síncrono deve manter `NSApplication.run()` ativo antes de criar janelas em tarefas; `async main` puro não é equivalente e pode terminar sem resumo.
+---

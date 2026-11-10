@@ -1,5 +1,10 @@
 # US-011 — Estratégia cooperativa do loop de janela
 
+> **Atualização da US-012:** o usuário autorizou especificamente
+> `makeKeyAndOrderFrontAsync(_:) async throws`. A decisão e as limitações da
+> implementação estão em [WindowLoopCooperative.md](WindowLoopCooperative.md).
+> O bloqueio descrito abaixo registra o estado anterior à autorização.
+
 **Estado:** bloqueio documentado; nenhuma estratégia é implementável dentro das
 restrições públicas atuais.
 

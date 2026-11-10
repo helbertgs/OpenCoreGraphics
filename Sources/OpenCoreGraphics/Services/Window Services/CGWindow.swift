@@ -119,6 +119,62 @@ open class CGWindow {
         }
     }
 
+    /// Shows the window and cooperatively processes events until its close is requested.
+    ///
+    /// Concurrent calls for different windows share one event pump. Keep
+    /// `viewsNeedDisplay` true for continuous animation, or set it to false
+    /// after a static frame and back to true to request another frame. Events
+    /// and invalidations are checked on a cooperative timer, not immediately.
+    /// Cancelling this operation stops its participation without closing the
+    /// window. The caller must arrange further event processing or close it.
+    ///
+    /// On macOS, the supported standalone host starts `NSApplication.run()`
+    /// from a synchronous main entry point and creates windows inside a
+    /// `MainActor` task after that host loop is running. A standalone
+    /// `async main` without this host is not supported by the tested GLFW
+    /// integration; it can terminate before the task completes.
+    ///
+    /// - Parameter sender: The message's sender.
+    /// - Throws: `CancellationError` on cancellation, or an error when the
+    ///   window cannot participate, GLFW runs off its required main thread,
+    ///   or the window's OpenGL context cannot be selected.
+    public func makeKeyAndOrderFrontAsync(_ sender: Any? = nil) async throws {
+        try Task.checkCancellation()
+        guard WindowLoopCoordinator.isOnMainThread() else { throw WindowLoopError.wrongThread }
+        guard windowRef != nil else { throw WindowLoopError.windowUnavailable }
+
+        let id = UUID()
+        try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            try await WindowLoopCoordinator.shared.participate(
+                id: id,
+                windowID: ObjectIdentifier(self),
+                show: { self.showWindow() },
+                step: {
+                    guard self.windowRef != nil else { throw WindowLoopError.windowUnavailable }
+                    if self.shouldClose() { return false }
+                    guard let selector = self.contextSelector else { throw WindowLoopError.windowUnavailable }
+                    if let error = selector.select() { throw error }
+                    if self.viewsNeedDisplay {
+                        guard let target = self.windowRenderTarget else { throw WindowLoopError.windowUnavailable }
+                        guard target.retryFramebufferResize() else { throw WindowLoopError.framebufferUnavailable }
+                        self.clear()
+                        self.displayIfNeeded()
+                        guard self.windowRef != nil else { throw WindowLoopError.windowUnavailable }
+                        if let error = target.contextError { throw error }
+                        if let error = selector.select() { throw error }
+                        self.swapBuffers()
+                    }
+                    return true
+                }
+            )
+        } onCancel: {
+            Task { @MainActor in
+                WindowLoopCoordinator.shared.cancel(id: id)
+            }
+        }
+    }
+
     // MARK: - Drawing Windows
 
     /// Passes a display message down the window’s view hierarchy, thus redrawing all views that need displaying.
@@ -491,6 +547,155 @@ extension CGWindow {
         windowRef = nil
         hasRetainedPlatform = false
         return teardown
+    }
+}
+
+/// Failures specific to cooperative window processing.
+private enum WindowLoopError: Error {
+    /// GLFW operations must run on the operating system's main thread.
+    case wrongThread
+    /// The window no longer has a GLFW handle.
+    case windowUnavailable
+    /// A window cannot participate twice in the shared event pump.
+    case alreadyParticipating
+    /// A pending framebuffer resize could not be completed.
+    case framebufferUnavailable
+}
+
+/// Serializes event processing and frame scheduling for all asynchronous windows.
+@MainActor
+final class WindowLoopCoordinator {
+    /// A window and the continuation waiting for its processing to end.
+    private struct Participant {
+        /// Identity used to prevent duplicate participation.
+        let windowID: ObjectIdentifier
+        /// Performs one frame or reports a close request.
+        let step: @MainActor () throws -> Bool
+        /// The suspended caller.
+        let continuation: CheckedContinuation<Void, any Error>
+    }
+
+    /// The single process-wide event coordinator.
+    fileprivate static let shared: WindowLoopCoordinator = {
+        let pause: @MainActor () async -> Void = {
+            try? await Task.sleep(for: .milliseconds(16))
+        }
+        return WindowLoopCoordinator(
+            poll: { glfwPollEvents() },
+            pause: pause,
+            threadCheck: { Thread.isMainThread }
+        )
+    }()
+
+    /// Constructs an isolated pump with controlled event and clock drivers for tests.
+    static let makeForTesting: (
+        @escaping @MainActor () -> Void,
+        @escaping @MainActor () async -> Void
+    ) -> WindowLoopTestHandle = { poll, pause in
+        let coordinator = WindowLoopCoordinator(poll: poll, pause: pause, threadCheck: { true })
+        return WindowLoopTestHandle(
+            participate: { id, windowID, show, step in
+                try await coordinator.participate(id: id, windowID: windowID, show: show, step: step)
+            },
+            cancel: { id in coordinator.cancel(id: id) }
+        )
+    }
+
+    /// Processes operating-system events once per pump iteration.
+    private let poll: @MainActor () -> Void
+    /// Suspends between pump iterations.
+    private let pause: @MainActor () async -> Void
+    /// Validates the thread on which event and frame work executes.
+    private let threadCheck: @MainActor () -> Bool
+
+    /// Current participants in insertion order.
+    private var participants: [UUID: Participant] = [:]
+    /// Stable ordering prevents a continuously animated window from taking precedence.
+    private var order: [UUID] = []
+    /// Whether a pump already owns the event-processing loop.
+    private var running = false
+
+    /// Checks the OS thread immediately before executing synchronous GLFW work.
+    fileprivate static func isOnMainThread() -> Bool {
+        Thread.isMainThread
+    }
+
+    /// Creates a coordinator using event and suspension operations.
+    private init(
+        poll: @escaping @MainActor () -> Void,
+        pause: @escaping @MainActor () async -> Void,
+        threadCheck: @escaping @MainActor () -> Bool
+    ) {
+        self.poll = poll
+        self.pause = pause
+        self.threadCheck = threadCheck
+    }
+
+    /// Registers a window and suspends until it closes, fails, or is cancelled.
+    fileprivate func participate(
+        id: UUID,
+        windowID: ObjectIdentifier,
+        show: @MainActor () -> Void,
+        step: @escaping @MainActor () throws -> Bool
+    ) async throws {
+        guard threadCheck() else { throw WindowLoopError.wrongThread }
+        guard !participants.values.contains(where: { $0.windowID == windowID }) else {
+            throw WindowLoopError.alreadyParticipating
+        }
+        try Task.checkCancellation()
+        try await withCheckedThrowingContinuation { continuation in
+            participants[id] = Participant(windowID: windowID, step: step, continuation: continuation)
+            order.append(id)
+            show()
+            if !running {
+                running = true
+                Task { await pump() }
+            }
+        }
+    }
+
+    /// Removes only the caller that requested cancellation.
+    fileprivate func cancel(id: UUID) {
+        finish(id: id, error: CancellationError())
+    }
+
+    /// Completes a participant at most once.
+    private func finish(id: UUID, error: (any Error)? = nil) {
+        guard let participant = participants.removeValue(forKey: id) else { return }
+        order.removeAll { $0 == id }
+        if let error {
+            participant.continuation.resume(throwing: error)
+        } else {
+            participant.continuation.resume()
+        }
+    }
+
+    /// Polls GLFW once per cooperative tick and advances every registered window.
+    private func pump() async {
+        while !participants.isEmpty {
+            guard threadCheck() else {
+                for id in order { finish(id: id, error: WindowLoopError.wrongThread) }
+                break
+            }
+            poll()
+            for id in order {
+                guard let participant = participants[id] else { continue }
+                guard threadCheck() else {
+                    for remaining in order { finish(id: remaining, error: WindowLoopError.wrongThread) }
+                    break
+                }
+                do {
+                    if try !participant.step() { finish(id: id) }
+                } catch {
+                    finish(id: id, error: error)
+                }
+                await Task.yield()
+            }
+            if !participants.isEmpty {
+                await pause()
+            }
+        }
+        running = false
     }
 }
 
