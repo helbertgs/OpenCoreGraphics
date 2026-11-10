@@ -40,9 +40,23 @@ struct CGPathTests {
     @Test func addLinesBetween() {
         var path = CGPath()
         let points = [CGPoint(x: 0, y: 0), CGPoint(x: 1, y: 1), CGPoint(x: 2, y: 2)]
-        path.move(to: points[0])
         path.addLines(between: points)
+
+        #expect(path.subpath.map(\.type) == [.moveToPoint, .addLineToPoint, .addLineToPoint])
+        #expect(path.subpath.first?.points == [points[0]])
         #expect(path.currentPoint == points.last)
+    }
+
+    /// Verifies an empty sequence does not change the path.
+    @Test
+    func addLinesBetweenEmptyPointsDoesNotChangePath() {
+        var path = CGPath()
+        path.move(to: CGPoint(x: 4, y: 5))
+        let originalPath = path
+
+        path.addLines(between: [])
+
+        #expect(path == originalPath)
     }
 
     @Test func addRect() {
@@ -118,11 +132,37 @@ struct CGPathTests {
 
     @Test func closeSubpath() {
         var path = CGPath()
-        path.move(to: CGPoint(x: 0, y: 0))
+        let startingPoint = CGPoint(x: 4, y: 5)
+        path.move(to: startingPoint)
         path.addLine(to: CGPoint(x: 1, y: 1))
         path.closeSubpath()
         #expect(path.subpath.last?.type == .closeSubpath)
-        #expect(path.currentPoint == .zero)
+        #expect(path.currentPoint == startingPoint)
+    }
+
+    /// Verifies closing an empty path is a no-op.
+    @Test
+    func closeEmptySubpathDoesNotChangePath() {
+        var path = CGPath()
+        let emptyPath = path
+
+        path.closeSubpath()
+
+        #expect(path == emptyPath)
+    }
+
+    /// Verifies closing a subpath that is already closed is a no-op.
+    @Test
+    func closeAlreadyClosedSubpathDoesNotChangePath() {
+        var path = CGPath()
+        path.move(to: CGPoint(x: 2, y: 3))
+        path.addLine(to: CGPoint(x: 5, y: 7))
+        path.closeSubpath()
+        let closedPath = path
+
+        path.closeSubpath()
+
+        #expect(path == closedPath)
     }
 
     @Test func isEmpty() {

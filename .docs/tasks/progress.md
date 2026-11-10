@@ -286,3 +286,12 @@
 - **Learnings for future iterations:**
   - Para APIs síncronas não isoladas que enviam comandos ao target OpenGL, `MainActor.assumeIsolated` é a fronteira explícita; valores enviados devem ser `Sendable`, mas o próprio `CGContext` mutável não deve ser marcado como `Sendable`.
 ---
+
+## 2026-11-10 - US-030
+- `closeSubpath()` agora encontra o ponto inicial do subpath atual, registra o fechamento e deixa `currentPoint` nesse ponto; caminhos vazios e subpaths já fechados não sofrem alteração.
+- `addLines(between:)` inicia um novo subpath no primeiro ponto e liga os demais; uma lista vazia é um no-op.
+- Testes cobrem ponto corrente após fechar, fechamento vazio/repetido, sequência de elementos de `addLines` e sequência vazia.
+- `swift test` passou (74 testes em 19 suítes).
+- **Learnings for future iterations:**
+  - Para obter a origem de um subpath no modelo atual, localize o elemento `moveToPoint` ou `addRectToPoint` mais recente; não derive a origem de `currentPoint`.
+---

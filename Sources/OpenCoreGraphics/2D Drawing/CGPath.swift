@@ -164,7 +164,9 @@ public struct CGPath : Codable, Equatable, Hashable, Sendable {
     ///   - points: An array of values that specify the start and end points of the line segments to draw. Each point in the array specifies a position in user space. The first point in the array specifies the initial starting point.
     ///   - transform: An affine transform to apply to the points before adding to the path.
     mutating public func addLines(between points: [CGPoint], transform: CGAffineTransform = .identity) {
-        points.forEach { point in
+        guard let firstPoint = points.first else { return }
+        move(to: firstPoint, transform: transform)
+        points.dropFirst().forEach { point in
             addLine(to: point, transform: transform)
         }
     }
@@ -431,9 +433,15 @@ public struct CGPath : Codable, Equatable, Hashable, Sendable {
     /// After closing the subpath, your application can begin a new subpath without first calling ``move(to:)``. 
     /// In this case, a new subpath is implicitly created with a starting and current point equal to the previous subpath’s starting point.
     mutating public func closeSubpath() {
+        guard subpath.last?.type != .closeSubpath,
+              let startingElement = subpath.last(where: { $0.type == .moveToPoint || $0.type == .addRectToPoint }),
+              let startingPoint = startingElement.points.first else {
+            return
+        }
+
         let element = CGPathElement(type: .closeSubpath, points: [])
         subpath.append(element)
-        currentPoint = .zero
+        currentPoint = startingPoint
     }
 }
 

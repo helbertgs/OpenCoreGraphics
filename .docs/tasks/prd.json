@@ -449,8 +449,8 @@
         "Build e testes passam"
       ],
       "priority": 30,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "closeSubpath atualiza currentPoint para o primeiro ponto do subpath e não altera paths vazios ou já fechados. addLines começa com move(to:) e não altera o path para uma lista vazia. swift test passou."
     },
     {
       "id": "US-031",
