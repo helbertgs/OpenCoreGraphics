@@ -389,8 +389,8 @@
         "Build e testes passam"
       ],
       "priority": 26,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "O Sample já usa a janela 512×512 e desenha os dois retângulos especificados; `swift build` e `swift test` validam o executável. A projeção foi testada para manter a origem no canto inferior esquerdo; a verificação visual manual não foi executada."
     },
     {
       "id": "US-027",

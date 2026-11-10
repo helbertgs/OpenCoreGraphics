@@ -251,3 +251,11 @@
 - **Learnings for future iterations:**
   - Use as dimensões do framebuffer (pixels) para viewport e projeção; `frame.size` representa o tamanho lógico da janela e pode divergir em telas HiDPI.
 ---
+
+## 2026-11-10 - US-026
+- Confirmado que `main.swift` cria uma janela 512×512, define a closure `display` e desenha os retângulos azul/vermelho nas posições e dimensões da story.
+- A projeção do renderer e seu teste garantem origem no canto inferior esquerdo.
+- `swift build` e `swift test` validam o target do Sample e as 71 unidades; não foi iniciada a janela para inspeção visual manual.
+- **Learnings for future iterations:**
+  - O Sample usa `CGContext` de janela diretamente e chama `makeKeyAndOrderFront()` em um loop bloqueante; não o execute como teste automatizado sem gerenciamento da janela.
+---
