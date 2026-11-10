@@ -185,4 +185,13 @@
 - Corrigidos `CGRect.isInfinite`, `isNull` e `isEmpty` para detectar dimensões infinitas, NaN ou zero, inclusive quando a outra dimensão não coincide com o retângulo sentinela.
 - `swift test --enable-code-coverage` passou (53 testes); cada tipo mensurável listado no critério atinge pelo menos 80% de cobertura de linhas.
 - Resultados completos: `.docs/tasks/coverage.md`.
+
+---
+
+## 2026-11-10 - US-019
+- Criado `GLFWPlatform`, isolado em `MainActor`, com `retain()`/`release()` e driver injetável; a contagem só inicializa no primeiro retain bem-sucedido e só encerra GLFW ao liberar o último proprietário.
+- `CGWindow` passou a adquirir a plataforma antes de criar a janela e libera a retenção ao destruir sua janela. O `isolated deinit` permite executar o teardown no ator correto sem terminar GLFW incondicionalmente.
+- Extraídas as chamadas `glfwInit` e `glfwTerminate` para o driver de sistema; elas não aparecem mais em `CGWindow.swift`.
+- Testes com driver falso cobrem aquisição múltipla, última liberação, release extra e nova tentativa após falha de inicialização, sem abrir janela.
+- `swift test` passou (55 testes em 13 suítes).
 ---

@@ -282,8 +282,8 @@
         "Build e testes passam"
       ],
       "priority": 19,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "GLFWPlatform controla as retenções na MainActor; o driver de sistema contém glfwInit/glfwTerminate e o driver falso testa inicialização única, liberação final, releases extras e retry após falha. CGWindow destrói apenas sua janela no isolated deinit e libera sua retenção. swift test passou com 55 testes em 13 suítes."
     },
     {
       "id": "US-020",

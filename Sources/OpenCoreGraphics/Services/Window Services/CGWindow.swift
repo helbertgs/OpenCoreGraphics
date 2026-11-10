@@ -16,8 +16,9 @@ open class CGWindow {
         createWindow()
     }
 
-    deinit {
-        terminate()
+    /// Releases the window's GLFW reference when it is deallocated.
+    isolated deinit {
+        destroy()
     }
 
     public var display: () -> Void = { }
@@ -26,6 +27,9 @@ open class CGWindow {
 
     /// The GLFW window reference associated with the window.
     var windowRef: OpaquePointer?
+
+    /// Indicates whether this window owns a GLFW platform reference.
+    private var hasRetainedPlatform = false
 
     /// The OpenGL context associated with the window.
     public lazy var cgContext: CGContext = {
@@ -139,9 +143,10 @@ open class CGWindow {
 
 extension CGWindow {
     func createWindow() {
-        if glfwInit() == GLFW_FALSE {
+        guard GLFWPlatform.shared.retain() else {
             fatalError("Failed to initialize GLFW")
         }
+        hasRetainedPlatform = true
 
         glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API)
         glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3)
@@ -203,10 +208,6 @@ extension CGWindow {
         glfwWaitEvents()
     }
 
-    nonisolated func terminate() {
-        glfwTerminate()
-    }
-
     func showWindow() {
         guard let windowRef = self.windowRef else { return }
         glfwShowWindow(windowRef)
@@ -218,6 +219,10 @@ extension CGWindow {
         }
 
         windowRef = nil
+        if hasRetainedPlatform {
+            hasRetainedPlatform = false
+            GLFWPlatform.shared.release()
+        }
     }
 
     func clear() {
