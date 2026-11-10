@@ -31,3 +31,27 @@ os bytes inclusive quando o `Data` original usa armazenamento externo sem
 cópia; o atlas constrói seu próprio buffer. A captura ainda exige que a origem
 não seja modificada simultaneamente durante a cópia. `CGContext`, `CGImage`,
 `CGDataProvider` e `CGFont` não recebem garantia `Sendable` por isso.
+
+## Evidência automatizada das fronteiras
+
+`RenderingConcurrencyTests` parte do `MainActor` e cria duas tarefas
+estruturadas. Cada tarefa executa uma função `@concurrent`, cria e renderiza
+seu próprio bitmap e devolve somente os bytes; os resultados vermelho e verde
+são verificados separadamente. Isso demonstra o uso independente, não a
+segurança de acessos simultâneos a uma mesma instância mutável.
+
+`WindowRenderTargetTests` exercita `CGContext` e um backend de janela de
+teste no `MainActor`, incluindo clip antes de `flush`. Em macOS e Linux,
+testes de saída verificam em processos filhos que chamadas não isoladas de
+`flush` e de substituição de clip no destino de janela falham fora do ator.
+Cada filho cria seu próprio destino no `MainActor` e não transfere um
+`CGContext`; um marcador confirma que a chamada foi alcançada. No macOS
+também se verifica o sinal `SIGTRAP`; no Linux verifica-se apenas uma saída
+malsucedida. Esses resultados comprovam o comportamento de runtime observado,
+não uma garantia estática para a ponte legada nem uma troca de executor.
+
+Os testes de saída são desabilitados quando
+`OPENCOREGRAPHICS_RUN_GL_COMPARISON=1`, para não iniciar o bootstrap gráfico
+do conjunto de testes nos processos filhos. Não são executados em outras
+plataformas; um teste ignorado não constitui evidência de aprovação. O
+backend falso não comprova funcionamento com um driver OpenGL real.

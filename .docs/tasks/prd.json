@@ -153,8 +153,8 @@
         "Typecheck passes"
       ],
       "priority": 9,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Bitmaps independentes testados em tarefas concorrentes; janela exercitada no MainActor e ponte legada verificada em subprocessos, sem alegar garantia estática."
     },
     {
       "id": "US-010",

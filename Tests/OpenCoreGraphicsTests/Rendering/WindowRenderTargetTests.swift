@@ -1,10 +1,82 @@
 import Foundation
 import Testing
+#if os(macOS)
+import Darwin
+#endif
 @testable import OpenCoreGraphics
 
 /// Tests command queuing and delegation for a window render target.
 @MainActor
 struct WindowRenderTargetTests {
+    /// Exercises the legacy context bridge and its window backend on the main actor.
+    @Test
+    private func legacyContextExecutesWindowCommandsOnMainActor() {
+        let renderer = RecordingRenderBackend()
+        let target = WindowRenderTarget(size: CGSize(width: 8, height: 8), renderer: renderer)
+        let context = CGContext(width: 8, height: 8)
+        context.renderTarget = target
+        let clip = CGRect(x: 1, y: 1, width: 4, height: 4)
+        let rectangle = CGRect(x: 2, y: 2, width: 2, height: 2)
+
+        context.clip(to: clip)
+        context.setFillColor(.black)
+        context.fill(rectangle)
+        context.flush()
+
+        #expect(renderer.commands == [
+            .resetClip,
+            .clipRect(clip),
+            .fillPath(path: CGPath(rect: rectangle), rule: .winding, color: .black, blendMode: .normal)
+        ])
+        #expect(renderer.size == CGSize(width: 8, height: 8))
+    }
+
+    #if os(macOS) || os(Linux)
+    /// Checks the legacy window target's runtime guard without sharing a mutable context.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["OPENCOREGRAPHICS_RUN_GL_COMPARISON"] != "1"))
+    private func legacyWindowFlushRejectsOffActorExecution() async {
+        #if os(macOS)
+        let expectedExit = ExitTest.Condition.signal(SIGTRAP)
+        #else
+        let expectedExit = ExitTest.Condition.failure
+        #endif
+        let result = await #expect(processExitsWith: expectedExit, observing: [\.standardErrorContent]) {
+            let target = await MainActor.run {
+                let renderer = RecordingRenderBackend()
+                return WindowRenderTarget(size: CGSize(width: 8, height: 8), renderer: renderer)
+            }
+            await Task.detached {
+                FileHandle.standardError.write(Data("about to flush\n".utf8))
+                target.flush()
+            }.value
+        }
+        #expect(result.map { String(decoding: $0.standardErrorContent, as: UTF8.self) }
+            .map { $0.contains("about to flush\n") } == true)
+    }
+
+    /// Checks that clipping also reaches the runtime guard before a window flush.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["OPENCOREGRAPHICS_RUN_GL_COMPARISON"] != "1"))
+    private func legacyWindowClipRejectsOffActorExecution() async {
+        #if os(macOS)
+        let expectedExit = ExitTest.Condition.signal(SIGTRAP)
+        #else
+        let expectedExit = ExitTest.Condition.failure
+        #endif
+        let result = await #expect(processExitsWith: expectedExit, observing: [\.standardErrorContent]) {
+            let target = await MainActor.run {
+                let renderer = RecordingRenderBackend()
+                return WindowRenderTarget(size: CGSize(width: 8, height: 8), renderer: renderer)
+            }
+            await Task.detached {
+                FileHandle.standardError.write(Data("about to clip\n".utf8))
+                target.setClipRegions([.rectangle(CGRect(x: 1, y: 1, width: 4, height: 4))])
+            }.value
+        }
+        #expect(result.map { String(decoding: $0.standardErrorContent, as: UTF8.self) }
+            .map { $0.contains("about to clip\n") } == true)
+    }
+    #endif
+
     /// Verifies commands are executed only when flushed and are not replayed.
     @Test
     func flushExecutesQueuedCommandsOnce() {

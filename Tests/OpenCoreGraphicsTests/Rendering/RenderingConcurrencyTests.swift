@@ -101,6 +101,35 @@ struct RenderingConcurrencyTests {
         #expect(greenPixels == Data([0, 255, 0, 255]))
     }
 
+    /// Starts independent bitmap tasks from the main actor and renders on the concurrent executor.
+    @MainActor
+    @Test
+    private func bitmapTasksLeaveMainActorAndKeepPixelsIndependent() async throws {
+        let pixels = try await withThrowingTaskGroup(of: (Int, Data).self) { group in
+            group.addTask { (0, try await renderConcurrentBitmap(red: 1, green: 0)) }
+            group.addTask { (1, try await renderConcurrentBitmap(red: 0, green: 1)) }
+
+            var results: [Int: Data] = [:]
+            for try await (index, data) in group {
+                results[index] = data
+            }
+            return results
+        }
+
+        #expect(pixels[0] == Data([255, 0, 0, 255]))
+        #expect(pixels[1] == Data([0, 255, 0, 255]))
+    }
+
+    /// Renders a new bitmap on the concurrent executor without transferring its mutable context.
+    /// - Parameters:
+    ///   - red: The red fill component.
+    ///   - green: The green fill component.
+    /// - Returns: The rendered RGBA pixel.
+    @concurrent
+    private func renderConcurrentBitmap(red: Double, green: Double) async throws -> Data {
+        try renderBitmap(red: red, green: green)
+    }
+
     /// Creates and synchronously renders a bitmap entirely within its caller's isolation domain.
     /// - Parameters:
     ///   - red: The red fill component.

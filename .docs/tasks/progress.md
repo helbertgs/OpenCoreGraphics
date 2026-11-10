@@ -107,3 +107,12 @@
 - **Learnings for future iterations:**
   - `Data` construído sem cópia pode apontar para memória externa mutável; snapshots transferíveis precisam adquirir bytes próprios.
 ---
+
+## 2026-11-10 - US-009
+- Duas tarefas estruturadas criam bitmaps independentes fora do MainActor e verificam pixels determinísticos sem compartilhar contextos mutáveis.
+- Testes exercitam janela no MainActor e precondições da ponte legada em subprocessos; documentada a distinção entre verificação em runtime e isolamento estático.
+- Validação: 223 testes na suíte padrão com concorrência estrita; testes direcionados, build estrito e comparações GL opt-in concluídas; `git diff --check` passou. Testes de saída são desabilitados na execução GL opt-in e não foram validados em Windows/Linux.
+- Files changed: `.docs/RenderingConcurrency.md`, `Tests/OpenCoreGraphicsTests/Rendering/RenderingConcurrencyTests.swift`, `WindowRenderTargetTests.swift`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`.
+- **Learnings for future iterations:**
+  - Testes de saída isolam precondições fatais da ponte legada; não são evidência de garantia estática.
+---
