@@ -143,6 +143,24 @@ open class CGWindowContext {
     /// Returns a path object built from the current path information in a graphics context.
     public var path: CGPath?
 
+    /// The stack of saved graphics-state snapshots.
+    private var graphicsStateStack: [CGGraphicsState] = []
+
+    /// The current clipping path captured by graphics-state snapshots.
+    private var clip: CGPath?
+
+    /// The current line cap style captured by graphics-state snapshots.
+    private var lineCap: CGLineCap = .butt
+
+    /// The current line join style captured by graphics-state snapshots.
+    private var lineJoin: CGLineJoin = .miter
+
+    /// The current miter limit captured by graphics-state snapshots.
+    private var miterLimit: Double = 10
+
+    /// The current line dash pattern captured by graphics-state snapshots.
+    private var lineDash: [Double] = []
+
     /// Creates a new empty path in a graphics context.
     /// 
     /// A graphics context can have only a single path in use at any time. 
@@ -780,12 +798,65 @@ open class CGWindowContext {
     /// fill color space, stroke color space, fill color, stroke color, alpha value, font, font size
     /// character spacing, text drawing mode, shadow parameters, the pattern phase, the font smoothing parameter, blend mode.
     public func saveGState() {
+        graphicsStateStack.append(currentGraphicsState)
     }
 
     /// Sets the current graphics state to the state most recently saved.
     /// 
     /// Core Graphics removes the graphics state at the top of the stack so that the most recently saved state becomes the current graphics state.
     public func restoreGState() {
+        guard let state = graphicsStateStack.popLast() else {
+            return
+        }
+
+        restoreGraphicsState(state)
+    }
+
+    /// Creates a value snapshot of the current graphics-state parameters.
+    private var currentGraphicsState: CGGraphicsState {
+        var state = CGGraphicsState()
+        state.ctm = ctm
+        state.fillColor = fillColor
+        state.strokeColor = strokeColor
+        state.fillColorSpace = fillColorSpace
+        state.strokeColorSpace = strokeColorSpace
+        state.lineWidth = lineWidth
+        state.lineCap = lineCap
+        state.lineJoin = lineJoin
+        state.miterLimit = miterLimit
+        state.lineDash = lineDash
+        state.blendMode = blendMode
+        state.interpolationQuality = interpolationQuality
+        state.renderingIntent = renderingIntent
+        state.clip = clip
+        state.font = font?.fullName
+        state.fontSize = fontSize
+        state.characterSpacing = characterSpacing
+        state.textDrawingMode = textDrawingMode
+        return state
+    }
+
+    /// Restores the graphics-state parameters from a saved value snapshot.
+    /// - Parameter state: The graphics state to restore.
+    private func restoreGraphicsState(_ state: CGGraphicsState) {
+        ctm = state.ctm
+        fillColor = state.fillColor
+        strokeColor = state.strokeColor
+        fillColorSpace = state.fillColorSpace
+        strokeColorSpace = state.strokeColorSpace
+        lineWidth = state.lineWidth
+        lineCap = state.lineCap
+        lineJoin = state.lineJoin
+        miterLimit = state.miterLimit
+        lineDash = state.lineDash
+        blendMode = state.blendMode
+        interpolationQuality = state.interpolationQuality
+        renderingIntent = state.renderingIntent
+        clip = state.clip
+        font = state.font.flatMap(CGFont.init)
+        fontSize = state.fontSize
+        characterSpacing = state.characterSpacing
+        textDrawingMode = state.textDrawingMode
     }
 
     // MARK: - Managing a Graphics Context

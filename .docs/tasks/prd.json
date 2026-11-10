@@ -105,8 +105,8 @@
         "Build e testes passam"
       ],
       "priority": 7,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "A pilha de snapshots foi implementada em CGContext e CGWindowContext. Testes cobrem três níveis de aninhamento, preservação do caminho atual e restore sem save."
     },
     {
       "id": "US-008",

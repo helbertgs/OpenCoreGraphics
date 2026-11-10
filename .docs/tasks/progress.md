@@ -72,3 +72,13 @@
   - Para incluir uma fonte em estados transferíveis, capture seu identificador de valor; `CGFont` é uma classe mutável e não `Sendable`.
   - `CGLineCap` e `CGLineJoin` já estão definidos em `Enumerations/`; confira tipos existentes antes de duplicá-los.
 ---
+
+## 2026-11-09 - US-007
+- Implementados snapshots empilhados e restauração dos parâmetros gráficos em `CGContext` e `CGWindowContext`.
+- O caminho atual permanece fora do estado; `restoreGState()` vazio não altera o contexto.
+- Testes cobrem três níveis de aninhamento, CTM, caminho preservado e restauração sem `saveGState()`.
+- Files changed: `Sources/OpenCoreGraphics/Services/Window Services/CGContext.swift`, `Sources/OpenCoreGraphics/Services/Window Services/CGWindowContext.swift`, `Tests/OpenCoreGraphicsTests/2D Drawing/CGContextTests.swift`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
+- **Learnings for future iterations:**
+  - `CGContext` e `CGWindowContext` ainda duplicam a implementação da API; mudanças de estado devem manter ambos sincronizados até a unificação prevista na US-014.
+  - O current path não é parte de `CGGraphicsState` e não deve ser copiado nem restaurado.
+---
