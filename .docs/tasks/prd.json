@@ -221,8 +221,8 @@
         "Typecheck passes"
       ],
       "priority": 13,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Convenção de baseline, atlas e máscara assimétrica 2×3 especificada em .docs/GlyphOrientation.md; fixture atual simétrica não decide orientação."
     },
     {
       "id": "US-014",

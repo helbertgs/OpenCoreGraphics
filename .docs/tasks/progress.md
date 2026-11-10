@@ -145,3 +145,12 @@
 - **Learnings for future iterations:**
   - No macOS testado, o host síncrono deve manter `NSApplication.run()` ativo antes de criar janelas em tarefas; `async main` puro não é equivalente e pode terminar sem resumo.
 ---
+
+## 2026-11-10 - US-013
+- Especificada orientação stb, atlas, baseline, quad e UV, com máscara assimétrica 2×3 e posições exatas acima e abaixo da baseline; definidos casos de transformação e espaçamento.
+- Comparação GL real existente passou com diferença zero, mas o fixture rasteriza máscaras uniformes e não permite decidir orientação; nenhuma correção de backend foi presumida.
+- Validação: build e suíte padrão com 239 testes; comparação de glifos em GL real; `git diff --check` passou. A comprovação com máscara assimétrica permanece nas US-014/015.
+- Files changed: `.docs/GlyphOrientation.md`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`.
+- **Learnings for future iterations:**
+  - Média global e glifos uniformes não detectam inversão vertical; conferir coordenadas e valores localizados de máscara assimétrica.
+---
