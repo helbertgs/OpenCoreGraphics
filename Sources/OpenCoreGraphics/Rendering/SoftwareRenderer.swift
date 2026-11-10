@@ -652,14 +652,14 @@ final class SoftwareRenderer: CGRenderBackend {
                 let maskCoverage = sampleGlyphCoverage(
                     atlas,
                     x: u * Double(glyph.width),
-                    y: v * Double(glyph.height),
+                    y: (1 - v) * Double(glyph.height),
                     atlasWidth: atlasWidth,
                     atlasOriginX: atlasOriginX,
                     atlasOriginY: atlasOriginY,
                     width: glyph.width,
                     height: glyph.height
                 )
-                let combinedCoverage = maskCoverage * Double(clipCoverage) / 255
+                let combinedCoverage = maskCoverage * Double(clipCoverage) / (255 * 255)
                 guard combinedCoverage > 0 else { continue }
                 composite(source, coverage: combinedCoverage, blendMode: blendMode, x: x, y: y)
             }

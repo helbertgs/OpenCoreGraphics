@@ -238,8 +238,8 @@
         "Typecheck passes"
       ],
       "priority": 14,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Corrigidas inversão vertical e normalização de cobertura no software; máscara 2×3 valida baseline, transformações, espaçamento e clipping por pixels."
     },
     {
       "id": "US-015",

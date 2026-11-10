@@ -154,3 +154,12 @@
 - **Learnings for future iterations:**
   - Média global e glifos uniformes não detectam inversão vertical; conferir coordenadas e valores localizados de máscara assimétrica.
 ---
+
+## 2026-11-10 - US-014
+- Corrigidas orientação vertical e normalização de cobertura parcial de máscaras de glifos no renderer software, conforme a convenção documentada.
+- Testes sintéticos verificam pixels exatos acima e abaixo da baseline, transformações, espaçamento, rotações, reflexões e clipping.
+- Validação: 247 testes na suíte padrão com concorrência estrita; build estrito; executor GL concluiu duas suítes com sete cenas aprovadas; `git diff --check` passou. A comparação GL assimétrica permanece na US-015.
+- Files changed: `Sources/OpenCoreGraphics/Rendering/SoftwareRenderer.swift`, `Tests/OpenCoreGraphicsTests/Rendering/SoftwareGlyphOrientationTests.swift`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`.
+- **Learnings for future iterations:**
+  - A cobertura do glifo e do clip são bytes independentes; ambos devem ser normalizados antes da composição.
+---
