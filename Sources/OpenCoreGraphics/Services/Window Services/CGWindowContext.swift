@@ -23,10 +23,8 @@ open class CGWindowContext {
         self.height = height
         self.buffer = CGBuffer()
 
-        // 1. Create the VAO
         glad_glGenVertexArrays(1, &buffer.vao)
 
-        // 2. Create and configure the VBO
         glad_glGenBuffers(1, &buffer.vbo)
         glad_glBindVertexArray(buffer.vao)
         glad_glBindBuffer(GLenum(GL_ARRAY_BUFFER), buffer.vbo)
@@ -34,18 +32,15 @@ open class CGWindowContext {
             glad_glBufferData(GLenum(GL_ARRAY_BUFFER), GLsizeiptr($0.count), $0.baseAddress, GLenum(GL_STATIC_DRAW))
         }
         
-        // Configure vertex attributes
         glad_glVertexAttribPointer(0, 2, GLenum(GL_FLOAT), GLboolean(GL_FALSE), 2 * GLsizei(MemoryLayout<Float>.stride), nil)
         glad_glEnableVertexAttribArray(0)
 
-        // 3. Create and configure the EBO
         glad_glGenBuffers(1, &buffer.ebo)
         glad_glBindBuffer(GLenum(GL_ELEMENT_ARRAY_BUFFER), buffer.ebo)
         buffer.indices.withUnsafeBytes {
             glad_glBufferData(GLenum(GL_ELEMENT_ARRAY_BUFFER), GLsizeiptr($0.count), $0.baseAddress, GLenum(GL_STATIC_DRAW))
         }
 
-        // Unbind everything
         glad_glBindBuffer(GLenum(GL_ARRAY_BUFFER), 0)
         glad_glBindVertexArray(0)
     }
@@ -62,7 +57,6 @@ open class CGWindowContext {
         let width = Double(self.width)
         let height = Double(self.height)
 
-        // Convert from pixel coordinates to normalized device coordinates (-1 to 1)
         let x = (point.x / width) * 2.0 - 1.0
         let y = (point.y / height) * 2.0 - 1.0
 
@@ -76,7 +70,6 @@ open class CGWindowContext {
         let width = Double(self.width)
         let height = Double(self.height)
 
-        // Convert from normalized device coordinates (-1 to 1) to pixel coordinates
         let x = (point.x + 1.0) * width / 2.0
         let y = (point.y + 1.0) * height / 2.0
 
@@ -93,7 +86,6 @@ open class CGWindowContext {
         let width = Double(self.width)
         let height = Double(self.height)
 
-        // Convert from pixel coordinates to normalized device coordinates (-1 to 1)
         let x = (rect.origin.x / width) * 2.0 - 1.0
         let y = (rect.origin.y / height) * 2.0 - 1.0
         let w = (rect.size.width / width) * 2.0
@@ -112,7 +104,6 @@ open class CGWindowContext {
         let width = Double(self.width)
         let height = Double(self.height)
 
-        // Convert from normalized device coordinates (-1 to 1) to pixel coordinates
         let x = (rect.origin.x + 1.0) * width / 2.0
         let y = (rect.origin.y + 1.0) * height / 2.0
         let w = rect.size.width * width / 2.0
@@ -128,7 +119,6 @@ open class CGWindowContext {
         let width = Double(self.width)
         let height = Double(self.height)
 
-        // Convert from pixel coordinates to normalized device coordinates
         let w = (size.width / width) * 2.0
         let h = (size.height / height) * 2.0
 
@@ -142,7 +132,6 @@ open class CGWindowContext {
         let width = Double(self.width)
         let height = Double(self.height)
 
-        // Convert from normalized device coordinates to pixel coordinates
         let w = size.width * width / 2.0
         let h = size.height * height / 2.0
 
@@ -364,40 +353,32 @@ open class CGWindowContext {
     open func fillPath(using rule: CGPath.CGPathFillRule = .winding) {
         guard let path = self.path else { return }
         
-        // Get all points from the path (already in device coordinates)
         let allPoints = path.subpath.flatMap { $0.points }
         
-        // Convert points to UV coordinates (0-1 range) for the shader
         let normalizedPoints = allPoints.map { point in
             CGPoint(
-                x: (point.x + 1.0) / 2.0,  // Convert from NDC (-1,1) to UV (0,1)
-                y: 1.0 - (point.y + 1.0) / 2.0   // Convert and flip Y for OpenGL
+                x: (point.x + 1.0) / 2.0,
+                y: 1.0 - (point.y + 1.0) / 2.0
             )
         }
 
-        // Enable blending for transparency
         glad_glEnable(GLenum(GL_BLEND))
         glad_glBlendFunc(GLenum(GL_SRC_ALPHA), GLenum(GL_ONE_MINUS_SRC_ALPHA))
 
-        // Use the fill shader
         CGShading.fillShader.use()
         CGShading.fillShader.setUniform1i(name: "uPointCount", value: normalizedPoints.count)
 
-        // Set the points in the shader
         for (index, point) in normalizedPoints.enumerated() {
             let param = "uPoints[\(index)]"
             CGShading.fillShader.setUniform2f(name: param, value: point)
         }
 
-        // Set the fill color
         CGShading.fillShader.setUniform4f(name: "uColor", value: fillColor)
 
-        // Bind VAO and draw
         glad_glBindVertexArray(buffer.vao)
         glad_glDrawElements(GLenum(GL_TRIANGLES), GLsizei(buffer.indices.count), GLenum(GL_UNSIGNED_INT), nil)
         glad_glBindVertexArray(0)
 
-        // Disable blending
         glad_glDisable(GLenum(GL_BLEND))
 
         self.path = nil
@@ -410,40 +391,32 @@ open class CGWindowContext {
     open func strokePath() {
         guard let path = self.path else { return }
         
-        // Get all points from the path (already in device coordinates)
         let allPoints = path.subpath.flatMap { $0.points }
         
-        // Convert points to UV coordinates (0-1 range) for the shader
         let normalizedPoints = allPoints.map { point in
             CGPoint(
-                x: (point.x + 1.0) / 2.0,  // Convert from NDC (-1,1) to UV (0,1)
-                y: 1.0 - (point.y + 1.0) / 2.0   // Convert and flip Y for OpenGL
+                x: (point.x + 1.0) / 2.0,
+                y: 1.0 - (point.y + 1.0) / 2.0
             )
         }
 
-        // Enable blending for transparency
         glad_glEnable(GLenum(GL_BLEND))
         glad_glBlendFunc(GLenum(GL_SRC_ALPHA), GLenum(GL_ONE_MINUS_SRC_ALPHA))
 
-        // Use the fill shader
         CGShading.strokeShader.use()
         CGShading.strokeShader.setUniform1i(name: "uPointCount", value: normalizedPoints.count)
 
-        // Set the points in the shader
         for (index, point) in normalizedPoints.enumerated() {
             let param = "uPoints[\(index)]"
             CGShading.strokeShader.setUniform2f(name: param, value: point)
         }
 
-        // Set the stroke color
         CGShading.strokeShader.setUniform4f(name: "uColor", value: strokeColor)
 
-        // Bind VAO and draw
         glad_glBindVertexArray(buffer.vao)
         glad_glDrawElements(GLenum(GL_TRIANGLES), GLsizei(buffer.indices.count), GLenum(GL_UNSIGNED_INT), nil)
         glad_glBindVertexArray(0)
 
-        // Disable blending
         glad_glDisable(GLenum(GL_BLEND))
 
         self.path = nil
@@ -536,20 +509,12 @@ open class CGWindowContext {
     ///   - byTiling: If true, this method fills the context’s entire clipping region by tiling many copies of the image, and the rect parameter defines the origin and size of the tiling pattern.
     ///               If false (the default), this method draws a single copy of the image in the area defined by the rect parameter.
     open func draw(_ image: CGImage, in rect: CGRect, byTiling: Bool = false) {        
-        // let rect = convertToDeviceSpace(rect)
-        // let vertices: [Float] = [
-        //     Float(rect.maxX), Float(rect.maxY),  1.0, 1.0, // topRight
-        //     Float(rect.maxX), Float(rect.minY),  1.0, 0.0, // bottomRight
-        //     Float(rect.minX), Float(rect.minY),  0.0, 0.0, // bottomLeft
-        //     Float(rect.minX), Float(rect.maxY),  0.0, 1.0  // topLeft
-        // ]
 
         let shader = CGShading(.image)
         shader.use()
         glad_glActiveTexture(GLenum(GL_TEXTURE0))
         glad_glBindTexture(GLenum(GL_TEXTURE_2D), image.id)
         shader.setUniform1i(name: "uImage", value: 0)
-
 
         glad_glBindVertexArray(buffer.vao)
         glad_glDrawArrays(GLenum(GL_TRIANGLE_FAN), 0, 4)

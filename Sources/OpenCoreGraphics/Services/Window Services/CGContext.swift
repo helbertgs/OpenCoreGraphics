@@ -538,13 +538,11 @@ open class CGContext {
 
         let rect = convertToDeviceSpace(rect)
         let vertices: [Float] = [
-            Float(rect.maxX), Float(rect.maxY),  1.0, 1.0, // topRight
-            Float(rect.maxX), Float(rect.minY),  1.0, 0.0, // bottomRight
-            Float(rect.minX), Float(rect.minY),  0.0, 0.0, // bottomLeft
-            Float(rect.minX), Float(rect.maxY),  0.0, 1.0  // topLeft
+            Float(rect.maxX), Float(rect.maxY),  1.0, 1.0,
+            Float(rect.maxX), Float(rect.minY),  1.0, 0.0,
+            Float(rect.minX), Float(rect.minY),  0.0, 0.0,
+            Float(rect.minX), Float(rect.maxY),  0.0, 1.0
         ]
-
-        // Load buffers
 
         var vao = UInt32(0)
         glad_glGenVertexArrays(1, &vao)
@@ -569,8 +567,6 @@ open class CGContext {
 
         let format = image.colorSpace == CGColorSpace.sRGB ? GL_RGBA : GL_RGB
 
-        // Load texture
-
         var id = UInt32(0)
         glad_glGenTextures(1, &id)
         defer { glad_glDeleteTextures(1, &id) }
@@ -593,7 +589,6 @@ open class CGContext {
         glad_glActiveTexture(GLenum(GL_TEXTURE0))
         glad_glBindTexture(GLenum(GL_TEXTURE_2D), id)
         shader.setUniform1i(name: "uImage", value: 0)
-
 
         glad_glBindVertexArray(vao)
         glad_glDrawArrays(GLenum(GL_TRIANGLE_FAN), 0, 4)

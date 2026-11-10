@@ -19,10 +19,10 @@ public struct CGBuffer : Sendable {
 
     /// The vertices stored in the buffer.
     public var vertices: [Float] = [
-        -1.0, -1.0, // bottomLeft
-         1.0, -1.0, // bottomRight
-         1.0,  1.0, // topRight
-        -1.0,  1.0  // topLeft
+        -1.0, -1.0,
+         1.0, -1.0,
+         1.0,  1.0,
+        -1.0,  1.0
     ]
 
     /// The indices stored in the buffer.

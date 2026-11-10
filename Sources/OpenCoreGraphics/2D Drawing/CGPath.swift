@@ -216,7 +216,6 @@ public struct CGPath : Codable, Equatable, Hashable, Sendable {
     ///   - rect: A rectangle that defines the area for the ellipse to fit in.
     ///   - transform: An affine transform to apply to the ellipse before adding to the path.
     mutating public func addEllipse(in rect: CGRect, transform: CGAffineTransform = .identity) {
-        // Aproximação da elipse com 4 curvas de Bézier
         let rx = rect.width / 2.0
         let ry = rect.height / 2.0
         let cx = rect.midX
@@ -313,7 +312,6 @@ public struct CGPath : Codable, Equatable, Hashable, Sendable {
     ///   - clockwise: true to make a clockwise arc; false to make a counterclockwise arc.
     ///   - transform: An affine transform to apply to the arc before adding to the path.
     mutating public func addArc(center: CGPoint, radius: Double, startAngle: Double, endAngle: Double, clockwise: Bool, transform: CGAffineTransform = .identity) {
-        // Aproximação do arco com segmentos de linha (pode ser melhorado para Bézier)
         let steps = 8
         let delta = (endAngle - startAngle) / Double(steps)
         var angle = startAngle
@@ -341,7 +339,6 @@ public struct CGPath : Codable, Equatable, Hashable, Sendable {
     ///   - radius: The radius of the arc, in user space coordinates.
     ///   - transform: An affine transform to apply to the arc before adding to the path.
     mutating public func addArc(tangent1End: CGPoint, tangent2End: CGPoint, radius: Double,transform: CGAffineTransform = .identity) {
-        // Implementação simplificada: conecta os pontos com linhas
         addLine(to: tangent1End, transform: transform)
         addLine(to: tangent2End, transform: transform)
     }

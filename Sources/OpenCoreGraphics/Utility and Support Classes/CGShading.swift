@@ -30,40 +30,14 @@ public class CGShading {
         }
 
         glad_glCompileShader(shader)
-        debugShader(shader)
         
         return shader
-    }
-
-    func debugShader(_ shader: UInt32) {
-        var success: Int32 = 0
-        var infoLog = [CChar](repeating: 0, count: 1024)
-
-        glad_glGetShaderiv(shader, UInt32(GL_COMPILE_STATUS), &success)
-
-        if success == GL_FALSE {
-            glad_glGetShaderInfoLog(shader, 1024, nil, &infoLog)
-            print("Shader compilation failed:\n\(String(utf8String: infoLog) ?? "")")
-        }
-    }
-
-    func debugProgram(_ program: UInt32) {
-        var success: Int32 = 0
-        var infoLog = [CChar](repeating: 0, count: 1024)
-
-        glad_glGetProgramiv(program, UInt32(GL_LINK_STATUS), &success)
-
-        if success == GL_FALSE {
-            glad_glGetProgramInfoLog(program, 1024, nil, &infoLog)
-            print("Program linking failed:\n\(String(utf8String: infoLog) ?? "")")
-        }
     }
 
     func createProgram(_ vs: UInt32, _ fs: UInt32) {
         program = glad_glCreateProgram()
         
         linkProgram(vs, fs)
-        debugProgram(program)
     }
 
     func linkProgram(_ vs: UInt32, _ fs: UInt32) {
@@ -184,7 +158,6 @@ extension CGShading {
         }
     }
 }
-
 
 extension CGShading {
     @MainActor public static let fillShader: CGShading = CGShading(

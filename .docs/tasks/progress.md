@@ -39,3 +39,15 @@
   - `CGWindow.cgContext` ainda é `CGWindowContext` (vira typealias de `CGContext` na US-014).
   - Não rode o Sample dentro do loop automatizado: `makeKeyAndOrderFront()` bloqueia até a janela fechar. Verificação visual fica para o usuário.
 ---
+
+## 2026-11-09 - US-004
+- Removidos: bloco comentado `cgContext` e `// open func display()` em `CGWindow`; código comentado de `CGWindowContext.draw` e `CGFont`; todos os comentários `//` explicativos em `CGContext`, `CGWindowContext`, `CGPath`, `CGBuffer`; `print` de `CGShading` (junto com `debugShader`/`debugProgram`) e de `CGFont`.
+- `// Return a rectangle that represents infinity.` em `CGRect.infinite` virou `///` (a declaração precisa de documentação).
+- `CGFont.init?` não guarda mais o `Data` lido (só valida que o arquivo existe), para evitar aviso de variável não usada.
+- Files changed: `CGBuffer`, `CGShading`, `CGRect`, `CGWindowContext`, `CGWindow`, `CGContext`, `CGPath`, `CGFont` (+ `prd.json`, `progress.md`)
+- **Learnings for future iterations:**
+  - `// MARK:` foi mantido de propósito (estilo de documentação existente). Se o `AGENTS.md` quiser proibir também, é uma limpeza separada e grande.
+  - Os `//` que restam em `CGShading.swift` estão dentro de strings GLSL, não são comentários Swift.
+  - Sem `debugShader`, erros de compilação de shader ficam silenciosos até a US-022 (`GLProgram` com erro tipado).
+  - Script de limpeza usado: regex `^[ \t]*//(?!/)(?![ \t]*MARK:).*\n` por arquivo; revise o diff depois (comentário doc `///` de um item comentado precisa sair junto).
+---

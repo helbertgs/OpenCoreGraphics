@@ -19,35 +19,9 @@ public class CGFont {
     public init?(_ name: String) {
         self.fullName = name
 
-        guard let data = try? Data(contentsOf: .init(fileURLWithPath: name)) else {
+        guard (try? Data(contentsOf: .init(fileURLWithPath: name))) != nil else {
             return nil
         }
-
-        print("Font data: \(data)")
-
-        // var info = stbtt_fontinfo()
-        // var charData = Array<stbtt_bakedchar>.init(repeating: stbtt_bakedchar(), count: 96)
-
-        // data.withUnsafeBytes { pointer in
-        //     guard let rawPointer = pointer.bindMemory(to: UInt8.self).baseAddress else { return }
-
-        //     // Initialize font info for metrics if needed
-        //     stbtt_InitFont(&info, rawPointer, 0)
-
-        //     // Bake glyph bitmap into CPU memory
-        //     stbtt_BakeFontBitmap(rawPointer, 0, Float(32), &tableTags, Int32(width), Int32(height), Int32(firstChar), Int32(numberOfGlyphs), &charData)
-        // }
-
-        // // Creates and uploads the baked glyph atlas as an OpenGL texture
-        // glad_glGenTextures(1, &id)
-        // glad_glBindTexture(GLenum(GL_TEXTURE_2D), id)
-        // glad_glPixelStorei(GLenum(GL_UNPACK_ALIGNMENT), 1)
-
-        // glad_glTexImage2D(GLenum(GL_TEXTURE_2D), 0,  GL_RED,  GLsizei(width),  GLsizei(height),  0,  GLenum(GL_RED),  GLenum(GL_UNSIGNED_BYTE), &tableTags)
-
-        // glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_MIN_FILTER), GLint(GL_LINEAR))
-        // glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_MAG_FILTER), GLint(GL_LINEAR))
-
     }
 
     // MARK: - Examining Font Metadata
@@ -62,12 +36,6 @@ public class CGFont {
         repeating: 0, 
         count: width * height
     )
-
-    /// Accessor for the baked character data
-    // private(set) lazy var charData: Array<stbtt_bakedchar> = .init(
-    //     repeating: stbtt_bakedchar(), 
-    //     count: Int(numberOfGlyphs)
-    // )
 
     /// Returns the font table that corresponds to the provided tag.
     /// - Parameter tag: The tag for the table you want to obtain.

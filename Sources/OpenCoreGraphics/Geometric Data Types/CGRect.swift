@@ -106,7 +106,7 @@ public struct CGRect : Codable, Equatable, Hashable, Sendable {
 
     // MARK: - Type Properties
 
-    // Return a rectangle that represents infinity.
+    /// Returns a rectangle that represents infinity.
     public static var infinite: CGRect {
         .init(x: .infinity, y: .infinity, width: .infinity, height: .infinity)
     }
