@@ -817,8 +817,8 @@
         "Build e testes passam"
       ],
       "priority": 54,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "A janela solicita quatro amostras com `GLFW_SAMPLES` e habilita `GL_MULTISAMPLE` somente quando o framebuffer informa buffers multisample. Se a criação com a dica falhar, tenta novamente com zero amostras; se o framebuffer não oferecer MSAA, a janela segue sem multisampling. `swift test` passou (143 testes em 27 suítes), `swift build --target OpenCoreGraphicsSample` e `git diff --check` passaram; a comparação GL continua opt-in."
     },
     {
       "id": "US-055",

@@ -189,11 +189,32 @@ extension CGWindow {
         glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3)
         glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE)
         glfwWindowHint(GLFW_STENCIL_BITS, 8)
+        glfwWindowHint(GLFW_SAMPLES, 4)
         glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE)
 
-        guard let windowRef = glfwCreateWindow(Int32(frame.size.width), Int32(frame.size.height), storedTitle, nil, nil) else {
-            destroy()
-            throw CGWindowError.windowCreationFailed
+        let requestedWindow = glfwCreateWindow(
+            Int32(frame.size.width),
+            Int32(frame.size.height),
+            storedTitle,
+            nil,
+            nil
+        )
+        let windowRef: OpaquePointer
+        if let requestedWindow {
+            windowRef = requestedWindow
+        } else {
+            glfwWindowHint(GLFW_SAMPLES, 0)
+            guard let fallbackWindow = glfwCreateWindow(
+                Int32(frame.size.width),
+                Int32(frame.size.height),
+                storedTitle,
+                nil,
+                nil
+            ) else {
+                destroy()
+                throw CGWindowError.windowCreationFailed
+            }
+            windowRef = fallbackWindow
         }
 
         self.windowRef = windowRef
@@ -203,6 +224,14 @@ extension CGWindow {
             glfwMakeContextCurrent(nil)
             destroy()
             throw CGWindowError.gladLoadFailed
+        }
+
+        var sampleBufferCount: Int32 = 0
+        glad_glGetIntegerv(GLenum(GL_SAMPLE_BUFFERS), &sampleBufferCount)
+        if sampleBufferCount > 0 {
+            glad_glEnable(GLenum(GL_MULTISAMPLE))
+        } else {
+            glad_glDisable(GLenum(GL_MULTISAMPLE))
         }
 
         var framebufferWidth: Int32 = 0

@@ -10,6 +10,7 @@
 - Mudanças no clip do bitmap descarregam os comandos pendentes antes de substituir a máscara; isso mantém a ordem de desenho quando estados são salvos e restaurados.
 - O alvo OpenGL mantém o clip entre lotes; descarregue desenhos pendentes antes de alterar o estado e reaplique a lista ordenada de regiões após `resetClip` ao restaurar o estado salvo.
 - `CGWindow.clear()` desativa scissoring antes de limpar a janela; o renderer reaplica o clip persistente ao iniciar o próximo lote.
+- Ao pedir MSAA, mantenha fallback sem amostras: tente criar com `GLFW_SAMPLES=4`, repita com `0` se necessário e consulte `GL_SAMPLE_BUFFERS` antes de ativar `GL_MULTISAMPLE`.
 - O `SoftwareRenderer` interpreta imagens usando metadados do snapshot, amostra o quad pela transformação afim inversa e interpola canais de cor em espaço pré-multiplicado.
 - A exportação BMP lê pixels pelo `PixelSurface.pixel(x:y:)`, converte alpha pré-multiplicado para reto e escreve linhas top-down em BGRA.
 - A apresentação direta de um `PixelSurface` no OpenGL usa identidade estável por alvo e `GLTextureCache.updateTexture`; atualize a imagem existente com `glTexSubImage2D` e realoque o armazenamento somente quando as dimensões mudarem.
@@ -519,4 +520,14 @@
   - O stencil alterna dois bits altos ao intersectar caminhos: um mantém o clip anterior enquanto o outro recebe a nova interseção; os bits baixos continuam disponíveis para o preenchimento corrente.
   - Como o scissor também restringe `glClear`, desative-o durante a limpeza do framebuffer e reaplique o estado de clip antes do próximo desenho.
   - A comparação GL opcional pode encerrar sem emitir o relatório do Swift Testing neste ambiente; confirme o resumo final antes de tratá-la como executada.
+---
+
+## 2026-11-10 - US-054
+- A criação da janela solicita MSAA 4× com `GLFW_SAMPLES`; se a criação falhar, tenta novamente sem amostras.
+- Após inicializar o GLAD, consulta `GL_SAMPLE_BUFFERS` e habilita `GL_MULTISAMPLE` somente quando o framebuffer oferece multisampling; caso contrário, segue normalmente sem MSAA.
+- O Sample já exibe uma elipse no modo OpenGL, agora renderizada pelo framebuffer multisample quando disponível.
+- `swift test` passou (143 testes em 27 suítes), `swift build --target OpenCoreGraphicsSample` e `git diff --check` passaram. A comparação GL permanece opt-in.
+- Files changed: `Sources/OpenCoreGraphics/Services/Window Services/CGWindow.swift`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
+- **Learnings for future iterations:**
+  - A criação com um hint opcional pode falhar antes da consulta das capacidades GL; faça fallback na criação e também verifique a capacidade no framebuffer criado.
 ---
