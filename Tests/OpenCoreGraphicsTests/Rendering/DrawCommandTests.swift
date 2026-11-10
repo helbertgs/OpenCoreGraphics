@@ -5,10 +5,18 @@ import Testing
 struct DrawCommandTests {
     /// Verifies construction and value equality for every drawing command.
     @Test
-    func commandsCaptureTheirRenderingState() {
+    func commandsCaptureTheirRenderingState() throws {
         var path = CGPath()
         path.move(to: CGPoint(x: 2, y: 3))
         let color = CGColor(red: 0.2, green: 0.4, blue: 0.6, alpha: 1)
+        let glyphBitmap = CGGlyphBitmap(
+            width: 1,
+            height: 1,
+            xOffset: 0,
+            yOffset: 0,
+            coverage: Data([255])
+        )
+        let glyphAtlas = try #require(CGGlyphAtlas(bitmaps: [glyphBitmap, glyphBitmap]))
         let style = StrokeStyle(width: 2, cap: .round, join: .bevel, miterLimit: 4, dashPhase: 1, dashLengths: [3, 2])
         let image = CGImage(
             width: 1,
@@ -46,7 +54,7 @@ struct DrawCommandTests {
                 positions: [CGPoint(x: 4, y: 5), CGPoint(x: 6, y: 7)],
                 fontName: "Test",
                 fontSize: 12,
-                glyphBitmaps: [nil, nil],
+                glyphAtlas: glyphAtlas,
                 characterSpacing: 0,
                 textMatrix: .identity,
                 textPosition: .zero,
@@ -74,7 +82,7 @@ struct DrawCommandTests {
             positions: [CGPoint(x: 4, y: 5), CGPoint(x: 6, y: 7)],
             fontName: "Test",
             fontSize: 12,
-            glyphBitmaps: [nil, nil],
+            glyphAtlas: glyphAtlas,
             characterSpacing: 0,
             textMatrix: .identity,
             textPosition: .zero,

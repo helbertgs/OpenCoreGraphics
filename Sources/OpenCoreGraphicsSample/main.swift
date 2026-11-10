@@ -1,3 +1,4 @@
+import class Foundation.FileManager
 import Foundation
 import OpenCoreGraphics
 
@@ -175,14 +176,7 @@ window.display = {
         return
     }
 
-    cgContext.setFillColor(CGColor(red: 0.2, green: 0.5, blue: 0.8, alpha: 1))
-    cgContext.fill(CGRect(x: 20, y: 20, width: 150, height: 200))
-
-    cgContext.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
-    cgContext.fill(CGRect(x: 200, y: 100, width: 150, height: 200))
-
-    cgContext.setFillColor(CGColor(red: 0.2, green: 0.8, blue: 0.4, alpha: 1))
-    cgContext.fillEllipse(in: CGRect(x: 180, y: 340, width: 150, height: 100))
+    drawTextSample(in: cgContext)
 }
 
 window.makeKeyAndOrderFront()
@@ -228,4 +222,71 @@ private func drawGradientSample(in context: CGContext) {
         options: options
     )
     context.restoreGState()
+}
+
+/// Draws the requested phrase with a system-installed TrueType font.
+/// - Parameter context: The context used to render the text demonstration.
+private func drawTextSample(in context: CGContext) {
+    let font = sampleFont()
+    let phrase = "OpenCoreGraphics"
+    let fontSize = 24.0
+    guard font.unitsPerEm > 0 else {
+        preconditionFailure("The sample font has invalid units-per-em metrics.")
+    }
+
+    var glyphs: [CGGlyph] = []
+    for character in phrase {
+        guard let glyph = font.glyph(for: character) else {
+            preconditionFailure("The sample font does not contain every character in \(phrase).")
+        }
+        glyphs.append(glyph)
+    }
+
+    var positions: [OpenCoreGraphics.CGPoint] = []
+    var penX = 0.0
+    for glyph in glyphs {
+        positions.append(CGPoint(x: penX, y: 0))
+        guard let advance = font.advance(for: glyph) else {
+            preconditionFailure("The sample font does not provide an advance for a rendered glyph.")
+        }
+        penX += advance * fontSize / Double(font.unitsPerEm)
+    }
+
+    context.setFont(font)
+    context.setFontSize(fontSize)
+    context.setCharacterSpacing(0)
+    context.textPosition = CGPoint(x: (Double(context.width) - penX) / 2, y: 256)
+    context.setFillColor(CGColor(red: 0.95, green: 0.95, blue: 1, alpha: 1))
+    context.showGlyphs(glyphs, at: positions)
+}
+
+/// Finds a locally installed font suitable for the sample phrase.
+/// - Returns: The loaded font, or terminates with an actionable error.
+private func sampleFont() -> CGFont {
+    let fontPaths: [String]
+    if let fontArgument = CommandLine.arguments.firstIndex(of: "--font") {
+        guard fontArgument + 1 < CommandLine.arguments.count else {
+            preconditionFailure("Pass a TrueType font path after --font.")
+        }
+        fontPaths = [CommandLine.arguments[fontArgument + 1]]
+    } else {
+        fontPaths = [
+            "/System/Library/Fonts/Supplemental/Arial.ttf",
+            "/System/Library/Fonts/Supplemental/Verdana.ttf",
+            "/Library/Fonts/Arial.ttf",
+            "C:/Windows/Fonts/arial.ttf",
+            "C:/Windows/Fonts/segoeui.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"
+        ]
+    }
+
+    guard let path = fontPaths.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
+        preconditionFailure("No sample font was found. Install a system font or pass its path with --font.")
+    }
+    guard let font = CGFont(path) else {
+        preconditionFailure("The sample font could not be loaded from \(path).")
+    }
+    return font
 }

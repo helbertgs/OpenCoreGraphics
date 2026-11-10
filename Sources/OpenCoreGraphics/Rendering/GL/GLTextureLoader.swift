@@ -80,6 +80,27 @@ struct OpenGLTextureLoader: GLTextureLoader {
         return GLTexture(identifier: identifier, width: image.width, height: image.height)
     }
 
+    /// Creates a single-channel texture for a glyph coverage atlas.
+    /// - Parameter glyphAtlas: The packed 8-bit coverage pixels to upload.
+    /// - Returns: A texture that owns the allocated OpenGL identifier.
+    /// - Throws: `GLTextureError` when the atlas layout or allocation is invalid.
+    func makeTexture(from glyphAtlas: CGGlyphAtlas) throws -> GLTexture {
+        let prepared = try uploadData(for: glyphAtlas)
+
+        var identifier: GLuint = 0
+        glad_glGenTextures(1, &identifier)
+        guard identifier != 0 else { throw GLTextureError.allocationFailed }
+        glad_glBindTexture(GLenum(GL_TEXTURE_2D), identifier)
+        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_WRAP_S), GLint(GL_CLAMP_TO_EDGE))
+        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_WRAP_T), GLint(GL_CLAMP_TO_EDGE))
+        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_MIN_FILTER), GLint(GL_LINEAR))
+        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_MAG_FILTER), GLint(GL_LINEAR))
+
+        upload(prepared.data, width: glyphAtlas.width, height: glyphAtlas.height, pixelFormat: prepared.pixelFormat)
+
+        return GLTexture(identifier: identifier, width: glyphAtlas.width, height: glyphAtlas.height)
+    }
+
     /// Replaces the pixels in an existing texture, reallocating storage only when dimensions change.
     /// - Parameters:
     ///   - texture: The texture whose contents should be replaced.
@@ -165,6 +186,24 @@ struct OpenGLTextureLoader: GLTextureLoader {
             ),
             pixelFormat
         )
+    }
+
+    /// Validates the atlas and prepares its bytes for a red-channel texture upload.
+    /// - Parameter glyphAtlas: The packed glyph coverage atlas.
+    /// - Returns: The unchanged coverage bytes and their single-channel OpenGL format.
+    /// - Throws: `GLTextureError.invalidBitmapLayout` when dimensions or coverage bytes are invalid.
+    func uploadData(for glyphAtlas: CGGlyphAtlas) throws -> (data: Data, pixelFormat: GLTexturePixelFormat) {
+        let (byteCount, byteCountOverflow) = glyphAtlas.width.multipliedReportingOverflow(by: glyphAtlas.height)
+        guard glyphAtlas.width > 0,
+              glyphAtlas.height > 0,
+              glyphAtlas.width <= Int(Int32.max),
+              glyphAtlas.height <= Int(Int32.max),
+              byteCountOverflow == false,
+              glyphAtlas.coverage.count == byteCount else {
+            throw GLTextureError.invalidBitmapLayout
+        }
+
+        return (glyphAtlas.coverage, .red)
     }
 
     /// Uploads bytes and initializes the texture's storage.

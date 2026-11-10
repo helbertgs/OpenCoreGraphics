@@ -19,6 +19,7 @@
 - A apresentação direta de um `PixelSurface` no OpenGL usa identidade estável por alvo e `GLTextureCache.updateTexture`; atualize a imagem existente com `glTexSubImage2D` e realoque o armazenamento somente quando as dimensões mudarem.
 - Imagens usam linhas top-down no `CGImage`; ao comparar renderizadores, mantenha coerentes a coordenada `v` do shader GL e a amostragem vertical do software, validando com um bitmap assimétrico.
 - O pipeline GL recebe cores e texturas RGBA pré-multiplicadas; converta alpha direto no ponto de upload e preserve componentes já pré-multiplicados antes de usar `GL_ONE, GL_ONE_MINUS_SRC_ALPHA`.
+- Atlases de glifos usam `GL_RED` com `GL_UNPACK_ALIGNMENT=1`; as coordenadas UV mapeiam as linhas de bitmap descendentes do stb para a orientação ascendente do framebuffer OpenGL.
 - Ao agregar a cobertura de `swift test --enable-code-coverage`, filtre o JSON exportado pelo diretório do target; o arquivo inclui linhas de dependências e testes que não pertencem ao denominador do módulo.
 - O working tree tem trabalho em andamento do usuário (arquivos novos/movidos ainda não commitados). Os commits das stories incluem **apenas** os arquivos tocados pela story, mais `.docs/tasks/prd.json` e `progress.md`.
 - Valores `struct` que controlam memória alocada usam um proprietário por referência com `deinit`; cópias do valor compartilham a alocação sem duplicar nem liberar o ponteiro prematuramente.
@@ -606,4 +607,15 @@
 - Files changed: `Sources/OpenCoreGraphics/2D Drawing/CGContext.swift`, `Sources/OpenCoreGraphics/Colors and Fonts/CGFont.swift`, `Sources/OpenCoreGraphics/Colors and Fonts/CGGlyphBitmap.swift`, `Sources/OpenCoreGraphics/Colors and Fonts/CGTextDrawingMode.swift`, `Sources/OpenCoreGraphics/Rendering/DrawCommand.swift`, `Sources/OpenCoreGraphics/Rendering/SoftwareRenderer.swift`, `Sources/OpenCoreGraphicsSTB/include/OpenCoreGraphicsSTB.h`, `Sources/OpenCoreGraphicsSTB/stb_truetype.c`, `Tests/OpenCoreGraphicsTests/Rendering/DrawCommandTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/SoftwareRendererTests.swift`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
 - **Learnings for future iterations:**
   - Preserve the glyph bitmaps in the draw command so later backends can consume the same rasterized coverage and avoid reopening font files.
+---
+
+## 2026-11-10 - US-062
+- O `GLTextureCache` passou a criar, reutilizar e descartar texturas de atlas; o `OpenGLTextureLoader` valida as dimensões, envia os bytes 8-bit no canal vermelho e restaura o alinhamento de linhas após upload.
+- Adicionado o shader `text/` e renderização de quads com um append por comando, mantendo ordem, clip, blend mode, baseline, spacing e transformações tipográficas.
+- O Sample demonstra “OpenCoreGraphics” em 24 px, centralizado com baseline em y=256; usa fonte local do sistema ou aceita um caminho explícito com `--font`, sem redistribuir fontes proprietárias.
+- Testes validam empacotamento/upload/cache, recursos do shader, orientação e geometria dos quads; há também comparação GL/software opt-in para ambientes com contexto gráfico.
+- `swift test` e `swift test --enable-code-coverage` passaram com 167 testes em 31 suítes; a cobertura elegível ficou em 4.167/4.659 (89,44%). `swift build --target OpenCoreGraphicsSample`, validação do JSON e `git diff --check` passaram.
+- Files changed: `.docs/tasks/coverage.md`, `.docs/tasks/prd.json`, `Sources/OpenCoreGraphics/2D Drawing/CGContext.swift`, `Sources/OpenCoreGraphics/Colors and Fonts/CGGlyphAtlas.swift`, `Sources/OpenCoreGraphics/Rendering/DrawCommand.swift`, `Sources/OpenCoreGraphics/Rendering/SoftwareRenderer.swift`, `Sources/OpenCoreGraphics/Rendering/GL/GLRenderer.swift`, `Sources/OpenCoreGraphics/Rendering/GL/GLShaderCache.swift`, `Sources/OpenCoreGraphics/Rendering/GL/GLTextureCache.swift`, `Sources/OpenCoreGraphics/Rendering/GL/GLTextureLoader.swift`, `Sources/OpenCoreGraphics/Resources/text/`, `Sources/OpenCoreGraphicsSample/main.swift`, `Tests/OpenCoreGraphicsTests/Rendering/CGShaderSourceTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/DrawCommandTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/GLGlyphComparisonTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/GLRendererTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/GLTextureCacheTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/SoftwareRendererTests.swift`
+- **Learnings for future iterations:**
+  - O Sample deve localizar fontes instaladas em cada plataforma e aceitar caminho customizado; não copie fontes proprietárias para o repositório.
 ---

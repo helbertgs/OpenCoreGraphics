@@ -964,6 +964,8 @@ open class CGContext {
               characterSpacing.isFinite else {
             return
         }
+        let glyphBitmaps = glyphs.map { font.rasterizedGlyph($0, at: fontSize) }
+        guard let glyphAtlas = CGGlyphAtlas(bitmaps: glyphBitmaps) else { return }
 
         pendingDrawCommands.append(
             .glyphs(
@@ -971,7 +973,7 @@ open class CGContext {
                 positions: positions,
                 fontName: font.fullName,
                 fontSize: fontSize,
-                glyphBitmaps: glyphs.map { font.rasterizedGlyph($0, at: fontSize) },
+                glyphAtlas: glyphAtlas,
                 characterSpacing: characterSpacing,
                 textMatrix: textMatrix,
                 textPosition: textPosition,

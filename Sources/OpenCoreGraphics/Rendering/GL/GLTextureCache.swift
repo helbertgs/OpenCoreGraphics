@@ -9,6 +9,12 @@ protocol GLTextureLoader {
     /// - Throws: A `GLTextureError` when the image cannot be uploaded.
     func makeTexture(from image: CGImageSnapshot) throws -> GLTexture
 
+    /// Loads a glyph coverage atlas into a newly owned single-channel texture.
+    /// - Parameter glyphAtlas: The packed 8-bit coverage pixels to upload.
+    /// - Returns: The texture that owns the uploaded OpenGL resource.
+    /// - Throws: A `GLTextureError` when the atlas dimensions or pixels are invalid.
+    func makeTexture(from glyphAtlas: CGGlyphAtlas) throws -> GLTexture
+
     /// Replaces the pixel data of an existing texture without changing its identifier.
     /// - Parameters:
     ///   - texture: The texture whose image data should be replaced.
@@ -25,6 +31,9 @@ final class GLTextureCache {
 
     /// Textures indexed by stable identity tokens from their source images.
     private var textures: [UUID: GLTexture] = [:]
+
+    /// Textures indexed by stable identity tokens from their glyph atlases.
+    private var glyphTextures: [UUID: GLTexture] = [:]
 
     /// Creates an empty cache with the specified texture loader.
     /// - Parameter loader: The implementation used to upload new textures.
@@ -54,6 +63,20 @@ final class GLTextureCache {
         return texture
     }
 
+    /// Returns the cached texture or creates one for a glyph coverage atlas.
+    /// - Parameter glyphAtlas: The immutable coverage state captured by a draw command.
+    /// - Returns: The texture associated with this atlas identity.
+    /// - Throws: A `GLTextureError` when the atlas cannot be uploaded.
+    func texture(for glyphAtlas: CGGlyphAtlas) throws -> GLTexture {
+        if let texture = glyphTextures[glyphAtlas.identity] {
+            return texture
+        }
+
+        let texture = try loader.makeTexture(from: glyphAtlas)
+        glyphTextures[glyphAtlas.identity] = texture
+        return texture
+    }
+
     /// Updates the cached texture for this image identity, creating it on first use.
     /// - Parameter image: The latest immutable pixel state for the image identity.
     /// - Returns: The texture associated with this image identity.
@@ -73,5 +96,11 @@ final class GLTextureCache {
     /// - Parameter image: The image whose cached texture should be evicted.
     func evict(_ image: CGImage) {
         textures.removeValue(forKey: image.textureCacheIdentity)
+    }
+
+    /// Removes a glyph atlas and its texture from the cache.
+    /// - Parameter glyphAtlas: The atlas whose cached texture should be evicted.
+    func evict(_ glyphAtlas: CGGlyphAtlas) {
+        glyphTextures.removeValue(forKey: glyphAtlas.identity)
     }
 }

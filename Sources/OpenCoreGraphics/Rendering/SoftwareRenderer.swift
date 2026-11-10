@@ -67,7 +67,7 @@ final class SoftwareRenderer: CGRenderBackend {
                 positions,
                 _,
                 _,
-                glyphBitmaps,
+                glyphAtlas,
                 characterSpacing,
                 textMatrix,
                 textPosition,
@@ -78,7 +78,7 @@ final class SoftwareRenderer: CGRenderBackend {
                 drawGlyphs(
                     glyphs,
                     positions: positions,
-                    glyphBitmaps: glyphBitmaps,
+                    glyphAtlas: glyphAtlas,
                     characterSpacing: characterSpacing,
                     textMatrix: textMatrix,
                     textPosition: textPosition,
@@ -510,17 +510,17 @@ final class SoftwareRenderer: CGRenderBackend {
     /// - Parameters:
     ///   - glyphs: The glyph indices to render.
     ///   - positions: The corresponding text-space glyph origins.
-    ///   - glyphBitmaps: The glyph masks captured with the draw command.
+    ///   - glyphAtlas: The packed coverage masks captured with the draw command.
     ///   - characterSpacing: The additional horizontal distance between glyphs.
     ///   - textMatrix: The transform from text space to user space.
-    ///   - textPosition: The text-space origin offset.
+    ///   - textPosition: The text origin offset in user space.
     ///   - ctm: The transform from user space to device space.
     ///   - color: The fill color used to paint glyph coverage.
     ///   - blendMode: The compositing operation applied to the glyphs.
     private func drawGlyphs(
         _ glyphs: [CGGlyph],
         positions: [CGPoint],
-        glyphBitmaps: [CGGlyphBitmap?],
+        glyphAtlas: CGGlyphAtlas,
         characterSpacing: Double,
         textMatrix: CGAffineTransform,
         textPosition: CGPoint,
@@ -529,7 +529,7 @@ final class SoftwareRenderer: CGRenderBackend {
         blendMode: CGBlendMode
     ) {
         guard glyphs.count == positions.count,
-              glyphs.count == glyphBitmaps.count else {
+              glyphs.count == glyphAtlas.glyphs.count else {
             return
         }
 
@@ -541,60 +541,19 @@ final class SoftwareRenderer: CGRenderBackend {
             source = components
         }
 
-        var visibleGlyphBitmaps: [(index: Int, bitmap: CGGlyphBitmap)] = []
-        for (index, optionalBitmap) in glyphBitmaps.enumerated() {
-            guard let bitmap = optionalBitmap,
-                  bitmap.width > 0,
-                  bitmap.height > 0 else {
-                continue
-            }
-            visibleGlyphBitmaps.append((index, bitmap))
-        }
-        guard visibleGlyphBitmaps.isEmpty == false else { return }
-
-        var atlasWidth = 1
-        var atlasHeight = 1
-        for entry in visibleGlyphBitmaps {
-            let (glyphWidth, widthOverflow) = entry.bitmap.width.addingReportingOverflow(2)
-            let (nextWidth, atlasWidthOverflow) = atlasWidth.addingReportingOverflow(glyphWidth)
-            let (glyphHeight, heightOverflow) = entry.bitmap.height.addingReportingOverflow(2)
-            guard widthOverflow == false,
-                  atlasWidthOverflow == false,
-                  heightOverflow == false else {
-                return
-            }
-            atlasWidth = nextWidth
-            atlasHeight = max(atlasHeight, glyphHeight)
-        }
-        let (atlasByteCount, byteCountOverflow) = atlasWidth.multipliedReportingOverflow(by: atlasHeight)
-        guard byteCountOverflow == false else { return }
-
-        var atlas = [UInt8](repeating: 0, count: atlasByteCount)
-        var packedGlyphs: [(index: Int, bitmap: CGGlyphBitmap, atlasX: Int)] = []
-        var atlasX = 1
-        for entry in visibleGlyphBitmaps {
-            for row in 0..<entry.bitmap.height {
-                let sourceStart = row * entry.bitmap.width
-                let destinationStart = (row + 1) * atlasWidth + atlasX
-                let sourceRange = sourceStart..<(sourceStart + entry.bitmap.width)
-                let destinationRange = destinationStart..<(destinationStart + entry.bitmap.width)
-                atlas.replaceSubrange(destinationRange, with: entry.bitmap.coverage[sourceRange])
-            }
-            packedGlyphs.append((entry.index, entry.bitmap, atlasX))
-            atlasX += entry.bitmap.width + 2
-        }
-
-        for entry in packedGlyphs {
+        let atlas = [UInt8](glyphAtlas.coverage)
+        for (index, optionalGlyph) in glyphAtlas.glyphs.enumerated() {
+            guard let glyph = optionalGlyph else { continue }
             drawGlyphBitmap(
-                entry.bitmap,
+                glyph,
                 atlas: atlas,
-                atlasWidth: atlasWidth,
-                atlasHeight: atlasHeight,
-                atlasOriginX: entry.atlasX,
-                atlasOriginY: 1,
+                atlasWidth: glyphAtlas.width,
+                atlasHeight: glyphAtlas.height,
+                atlasOriginX: glyph.atlasX,
+                atlasOriginY: glyph.atlasY,
                 at: CGPoint(
-                    x: positions[entry.index].x + Double(entry.index) * characterSpacing,
-                    y: positions[entry.index].y
+                    x: positions[index].x + Double(index) * characterSpacing,
+                    y: positions[index].y
                 ),
                 textMatrix: textMatrix,
                 textPosition: textPosition,
@@ -607,7 +566,7 @@ final class SoftwareRenderer: CGRenderBackend {
 
     /// Maps a glyph coverage bitmap through the text and current transforms.
     /// - Parameters:
-    ///   - bitmap: The 8-bit glyph mask.
+    ///   - glyph: The glyph's atlas region and text-space bearings.
     ///   - atlas: The shared row-major 8-bit glyph atlas.
     ///   - atlasWidth: The number of atlas columns.
     ///   - atlasHeight: The number of atlas rows.
@@ -620,7 +579,7 @@ final class SoftwareRenderer: CGRenderBackend {
     ///   - source: The normalized fill color.
     ///   - blendMode: The compositing operation.
     private func drawGlyphBitmap(
-        _ bitmap: CGGlyphBitmap,
+        _ glyph: CGGlyphAtlas.Glyph,
         atlas: [UInt8],
         atlasWidth: Int,
         atlasHeight: Int,
@@ -634,8 +593,8 @@ final class SoftwareRenderer: CGRenderBackend {
         blendMode: CGBlendMode
     ) {
         let (requiredByteCount, overflow) = atlasWidth.multipliedReportingOverflow(by: atlasHeight)
-        let (glyphMaxX, xOverflow) = atlasOriginX.addingReportingOverflow(bitmap.width)
-        let (glyphMaxY, yOverflow) = atlasOriginY.addingReportingOverflow(bitmap.height)
+        let (glyphMaxX, xOverflow) = atlasOriginX.addingReportingOverflow(glyph.width)
+        let (glyphMaxY, yOverflow) = atlasOriginY.addingReportingOverflow(glyph.height)
         guard overflow == false,
               xOverflow == false,
               yOverflow == false,
@@ -647,13 +606,13 @@ final class SoftwareRenderer: CGRenderBackend {
             return
         }
 
-        let originX = position.x + Double(bitmap.xOffset)
-        let originY = position.y + Double(bitmap.yOffset)
+        let originX = position.x + Double(glyph.xOffset)
+        let originY = position.y - Double(glyph.yOffset + glyph.height)
         let textPoints = [
             CGPoint(x: originX, y: originY),
-            CGPoint(x: originX + Double(bitmap.width), y: originY),
-            CGPoint(x: originX + Double(bitmap.width), y: originY + Double(bitmap.height)),
-            CGPoint(x: originX, y: originY + Double(bitmap.height))
+            CGPoint(x: originX + Double(glyph.width), y: originY),
+            CGPoint(x: originX + Double(glyph.width), y: originY + Double(glyph.height)),
+            CGPoint(x: originX, y: originY + Double(glyph.height))
         ]
         let points = textPoints.map { point in
             let userPoint = point.applying(textMatrix)
@@ -692,13 +651,13 @@ final class SoftwareRenderer: CGRenderBackend {
 
                 let maskCoverage = sampleGlyphCoverage(
                     atlas,
-                    x: u * Double(bitmap.width),
-                    y: v * Double(bitmap.height),
+                    x: u * Double(glyph.width),
+                    y: v * Double(glyph.height),
                     atlasWidth: atlasWidth,
                     atlasOriginX: atlasOriginX,
                     atlasOriginY: atlasOriginY,
-                    width: bitmap.width,
-                    height: bitmap.height
+                    width: glyph.width,
+                    height: glyph.height
                 )
                 let combinedCoverage = maskCoverage * Double(clipCoverage) / 255
                 guard combinedCoverage > 0 else { continue }

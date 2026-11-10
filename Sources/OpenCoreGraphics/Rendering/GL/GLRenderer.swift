@@ -151,6 +151,83 @@ enum GLRendererGeometry {
         }
     }
 
+    /// Transforms glyph bitmap quads through the captured text and graphics state.
+    /// - Parameters:
+    ///   - glyphs: The glyph indices to render.
+    ///   - positions: The corresponding text-space glyph baselines.
+    ///   - glyphAtlas: The packed coverage masks captured by the draw command.
+    ///   - characterSpacing: The additional horizontal distance between glyphs.
+    ///   - textMatrix: The transform from text space to user space.
+    ///   - textPosition: The text origin offset in user space.
+    ///   - ctm: The transform from user space to device space.
+    /// - Returns: Six textured vertices for each visible, valid glyph.
+    static func glyphVertices(
+        _ glyphs: [CGGlyph],
+        positions: [CGPoint],
+        glyphAtlas: CGGlyphAtlas,
+        characterSpacing: Double,
+        textMatrix: CGAffineTransform,
+        textPosition: CGPoint,
+        ctm: CGAffineTransform
+    ) -> [GLBatchVertex] {
+        guard glyphs.count == positions.count,
+              glyphs.count == glyphAtlas.glyphs.count,
+              glyphAtlas.width > 0,
+              glyphAtlas.height > 0 else {
+            return []
+        }
+
+        var vertices: [GLBatchVertex] = []
+        for (index, optionalGlyph) in glyphAtlas.glyphs.enumerated() {
+            guard let glyph = optionalGlyph else { continue }
+            let originX = positions[index].x + Double(index) * characterSpacing + Double(glyph.xOffset)
+            let originY = positions[index].y - Double(glyph.yOffset + glyph.height)
+            let textPoints = [
+                CGPoint(x: originX, y: originY),
+                CGPoint(x: originX + Double(glyph.width), y: originY),
+                CGPoint(x: originX + Double(glyph.width), y: originY + Double(glyph.height)),
+                CGPoint(x: originX, y: originY + Double(glyph.height))
+            ]
+            let points = textPoints.map { point in
+                let userPoint = point.applying(textMatrix)
+                return CGPoint(
+                    x: userPoint.x + textPosition.x,
+                    y: userPoint.y + textPosition.y
+                ).applying(ctm)
+            }
+            guard points.allSatisfy({
+                $0.x.isFinite
+                    && $0.y.isFinite
+                    && abs($0.x) <= Double(Float.greatestFiniteMagnitude)
+                    && abs($0.y) <= Double(Float.greatestFiniteMagnitude)
+            }) else {
+                continue
+            }
+
+            let left = Double(glyph.atlasX) / Double(glyphAtlas.width)
+            let right = Double(glyph.atlasX + glyph.width) / Double(glyphAtlas.width)
+            let top = Double(glyph.atlasY) / Double(glyphAtlas.height)
+            let bottom = Double(glyph.atlasY + glyph.height) / Double(glyphAtlas.height)
+            let textureCoordinates = [
+                CGPoint(x: left, y: bottom),
+                CGPoint(x: right, y: bottom),
+                CGPoint(x: right, y: top),
+                CGPoint(x: left, y: top)
+            ]
+            for corner in [0, 1, 2, 0, 2, 3] {
+                vertices.append(
+                    GLBatchVertex(
+                        positionX: Float(points[corner].x),
+                        positionY: Float(points[corner].y),
+                        textureX: Float(textureCoordinates[corner].x),
+                        textureY: Float(textureCoordinates[corner].y)
+                    )
+                )
+            }
+        }
+        return vertices
+    }
+
     /// Triangulates four points that form an affine-transformed rectangle.
     /// - Parameter points: The rectangle corners in path order.
     /// - Returns: Six vertices, or nil when the points do not form a parallelogram.
@@ -343,6 +420,9 @@ final class GLRenderer: CGRenderBackend, CGPixelSurfaceRenderer, CGPixelReadback
     /// The program used to interpolate linear and radial gradients.
     private let gradientProgram: GLProgram
 
+    /// The program used to draw glyphs from single-channel coverage atlases.
+    private let textProgram: GLProgram
+
     /// The reusable vertex batch buffer.
     private let batchBuffer: GLBatchBuffer
 
@@ -358,7 +438,7 @@ final class GLRenderer: CGRenderBackend, CGPixelSurfaceRenderer, CGPixelReadback
     /// The current intersection of rectangular clip regions in device pixels.
     private var clipScissorRect: CGRect?
 
-    /// Creates the shader program and reusable geometry buffers.
+    /// Creates the shader programs and reusable geometry buffers.
     /// - Parameters:
     ///   - shaderCache: The cache from which the solid-color program is loaded.
     ///   - batchBufferDriver: The driver used to allocate and draw vertex buffers.
@@ -371,6 +451,7 @@ final class GLRenderer: CGRenderBackend, CGPixelSurfaceRenderer, CGPixelReadback
         program = try shaderCache.program(for: .solidColor)
         imageProgram = try shaderCache.program(for: .image)
         gradientProgram = try shaderCache.program(for: .gradient)
+        textProgram = try shaderCache.program(for: .text)
         batchBuffer = try GLBatchBuffer(driver: batchBufferDriver)
         textureCache = GLTextureCache()
     }
@@ -532,6 +613,32 @@ final class GLRenderer: CGRenderBackend, CGPixelSurfaceRenderer, CGPixelReadback
                     projection: projection
                 )
                 currentColor = nil
+            case let .glyphs(
+                glyphs,
+                positions,
+                _,
+                _,
+                glyphAtlas,
+                characterSpacing,
+                textMatrix,
+                textPosition,
+                ctm,
+                color,
+                blendMode
+            ):
+                renderGlyphs(
+                    glyphs,
+                    positions: positions,
+                    glyphAtlas: glyphAtlas,
+                    characterSpacing: characterSpacing,
+                    textMatrix: textMatrix,
+                    textPosition: textPosition,
+                    ctm: ctm,
+                    color: color,
+                    blendMode: blendMode,
+                    projection: projection
+                )
+                currentColor = nil
             case let .clip(path, rule):
                 applyClipPath(path, rule: rule, size: size)
                 currentColor = nil
@@ -540,8 +647,6 @@ final class GLRenderer: CGRenderBackend, CGPixelSurfaceRenderer, CGPixelReadback
             case .resetClip:
                 resetClip()
                 currentColor = nil
-            default:
-                continue
             }
         }
 
@@ -694,6 +799,73 @@ final class GLRenderer: CGRenderBackend, CGPixelSurfaceRenderer, CGPixelReadback
             preconditionFailure("Image quad produced incomplete vertex data: \(error)")
         }
         batchBuffer.flush()
+    }
+
+    /// Draws positioned glyphs from one cached single-channel coverage texture.
+    /// - Parameters:
+    ///   - glyphs: The glyph indices to render.
+    ///   - positions: The corresponding text-space glyph baselines.
+    ///   - glyphAtlas: The packed coverage masks captured by the draw command.
+    ///   - characterSpacing: The additional horizontal distance between glyphs.
+    ///   - textMatrix: The transform from text space to user space.
+    ///   - textPosition: The text origin offset in user space.
+    ///   - ctm: The transform from user space to device space.
+    ///   - color: The fill color used to paint glyph coverage.
+    ///   - blendMode: The compositing operation for the glyphs.
+    ///   - projection: The destination's pixel-to-clip-space projection matrix.
+    private func renderGlyphs(
+        _ glyphs: [CGGlyph],
+        positions: [CGPoint],
+        glyphAtlas: CGGlyphAtlas,
+        characterSpacing: Double,
+        textMatrix: CGAffineTransform,
+        textPosition: CGPoint,
+        ctm: CGAffineTransform,
+        color: CGColor,
+        blendMode: CGBlendMode,
+        projection: [Float]
+    ) {
+        guard let rgba = GLRendererGeometry.rgbaComponents(for: color) else { return }
+        let vertices = GLRendererGeometry.glyphVertices(
+            glyphs,
+            positions: positions,
+            glyphAtlas: glyphAtlas,
+            characterSpacing: characterSpacing,
+            textMatrix: textMatrix,
+            textPosition: textPosition,
+            ctm: ctm
+        )
+        guard vertices.isEmpty == false else { return }
+
+        batchBuffer.flush()
+        applyClipState()
+        let texture: GLTexture
+        do {
+            texture = try textureCache.texture(for: glyphAtlas)
+        } catch {
+            preconditionFailure("Could not create texture for glyph draw command: \(error)")
+        }
+
+        textProgram.use()
+        setProjection(projection, for: textProgram)
+        glad_glUniform1i(textProgram.uniformLocation(named: "uGlyphAtlas"), 0)
+        let colorLocation = textProgram.uniformLocation(named: "uGlyphColor")
+        glad_glUniform4f(colorLocation, rgba[0], rgba[1], rgba[2], rgba[3])
+        let vertexData = vertices.flatMap { [$0.positionX, $0.positionY, $0.textureX, $0.textureY] }
+        do {
+            try batchBuffer.append(
+                vertices: vertexData,
+                state: GLBatchState(
+                    program: textProgram.identifier,
+                    texture: texture.identifier,
+                    blendMode: blendMode
+                )
+            )
+        } catch {
+            preconditionFailure("Glyph quads produced incomplete vertex data: \(error)")
+        }
+        batchBuffer.flush()
+        textureCache.evict(glyphAtlas)
     }
 
     /// Draws a fill command directly for simple geometry or through the stencil buffer for complex paths.

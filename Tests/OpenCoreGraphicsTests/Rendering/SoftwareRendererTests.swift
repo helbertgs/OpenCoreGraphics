@@ -48,7 +48,7 @@ struct SoftwareRendererTests {
         context.setFontSize(20)
         context.setTextDrawingMode(.stroke)
         context.setFillColor(.white)
-        context.textPosition = CGPoint(x: 6, y: 24)
+        context.textPosition = CGPoint(x: 6, y: 8)
         context.showGlyphs([glyph], at: [.zero])
         context.flush()
 
@@ -60,7 +60,7 @@ struct SoftwareRendererTests {
         }
 
         #expect(painted.isEmpty == false)
-        #expect(painted.allSatisfy { (8..<15).contains($0.0) && (9..<25).contains($0.1) })
+        #expect(painted.allSatisfy { (8..<15).contains($0.0) && (7..<23).contains($0.1) })
     }
 
     /// Verifies glyph origins account for character spacing and both text and context transforms.
@@ -95,8 +95,8 @@ struct SoftwareRendererTests {
         #expect((paintedX.min() ?? 0) >= 10)
         #expect((paintedX.max() ?? 0) >= 18)
         #expect((paintedX.max() ?? 40) < 30)
-        #expect((paintedY.min() ?? 0) >= 15)
-        #expect((paintedY.max() ?? 64) < 40)
+        #expect((paintedY.min() ?? 0) >= 37)
+        #expect((paintedY.max() ?? 64) < 60)
     }
 
     /// Verifies a black-to-white linear gradient produces evenly spaced pixel values.

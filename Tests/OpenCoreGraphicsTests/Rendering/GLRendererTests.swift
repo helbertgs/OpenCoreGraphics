@@ -1,3 +1,4 @@
+import struct Foundation.Data
 import Testing
 @testable import OpenCoreGraphics
 
@@ -160,6 +161,59 @@ struct GLRendererTests {
 
         #expect(vertices.map(\.textureX) == [0, 2, 2, 0, 2, 0])
         #expect(vertices.map(\.textureY) == [1, 1, 0, 1, 0, 0])
+    }
+
+    /// Verifies glyph quads preserve baseline, character spacing, and flipped atlas coordinates.
+    @Test
+    func mapsGlyphBitmapsToTransformedAtlasQuads() throws {
+        let bitmap = CGGlyphBitmap(
+            width: 2,
+            height: 3,
+            xOffset: 1,
+            yOffset: 2,
+            coverage: Data([0, 64, 128, 192, 224, 255])
+        )
+        let atlas = try #require(CGGlyphAtlas(bitmaps: [bitmap, bitmap]))
+        let vertices = GLRendererGeometry.glyphVertices(
+            [1, 2],
+            positions: [CGPoint(x: 3, y: 20), CGPoint(x: 10, y: 30)],
+            glyphAtlas: atlas,
+            characterSpacing: 2,
+            textMatrix: .identity,
+            textPosition: .zero,
+            ctm: .identity
+        )
+
+        #expect(vertices.count == 12)
+        #expect(vertices.map { CGPoint(x: Double($0.positionX), y: Double($0.positionY)) } == [
+            CGPoint(x: 4, y: 15),
+            CGPoint(x: 6, y: 15),
+            CGPoint(x: 6, y: 18),
+            CGPoint(x: 4, y: 15),
+            CGPoint(x: 6, y: 18),
+            CGPoint(x: 4, y: 18),
+            CGPoint(x: 13, y: 25),
+            CGPoint(x: 15, y: 25),
+            CGPoint(x: 15, y: 28),
+            CGPoint(x: 13, y: 25),
+            CGPoint(x: 15, y: 28),
+            CGPoint(x: 13, y: 28)
+        ])
+        #expect(abs(Double(vertices[0].textureX) - 1.0 / 9) < 0.000001)
+        #expect(abs(Double(vertices[0].textureY) - 4.0 / 5) < 0.000001)
+        #expect(abs(Double(vertices[2].textureX) - 3.0 / 9) < 0.000001)
+        #expect(abs(Double(vertices[2].textureY) - 1.0 / 5) < 0.000001)
+
+        let transformed = GLRendererGeometry.glyphVertices(
+            [1],
+            positions: [CGPoint(x: 3, y: 20)],
+            glyphAtlas: try #require(CGGlyphAtlas(bitmaps: [bitmap])),
+            characterSpacing: 0,
+            textMatrix: CGAffineTransform(a: 2, b: 0, c: 0, d: 3, tx: 1, ty: 4),
+            textPosition: CGPoint(x: 5, y: 6),
+            ctm: CGAffineTransform(a: 1, b: 0, c: 0, d: 1, tx: 7, ty: 8)
+        )
+        #expect(CGPoint(x: Double(transformed[0].positionX), y: Double(transformed[0].positionY)) == CGPoint(x: 21, y: 63))
     }
 
     /// Verifies pixel coordinates map to the expected column-major clip matrix.

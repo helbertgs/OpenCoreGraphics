@@ -10,7 +10,9 @@ struct CGShaderSourceTests {
         (directory: "image", fileName: "vertex"),
         (directory: "image", fileName: "fragment"),
         (directory: "gradient", fileName: "vertex"),
-        (directory: "gradient", fileName: "fragment")
+        (directory: "gradient", fileName: "fragment"),
+        (directory: "text", fileName: "vertex"),
+        (directory: "text", fileName: "fragment")
     ])
     func packagedShaderContainsVersion(directory: String, fileName: String) throws {
         let source = try CGShaderSource.load(directory: directory, fileName: fileName)

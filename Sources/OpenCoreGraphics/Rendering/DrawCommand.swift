@@ -64,7 +64,7 @@ enum DrawCommand: Equatable, Sendable {
         positions: [CGPoint],
         fontName: String?,
         fontSize: Double,
-        glyphBitmaps: [CGGlyphBitmap?],
+        glyphAtlas: CGGlyphAtlas,
         characterSpacing: Double,
         textMatrix: CGAffineTransform,
         textPosition: CGPoint,

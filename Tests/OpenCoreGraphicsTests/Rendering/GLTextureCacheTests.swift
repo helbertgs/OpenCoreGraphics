@@ -28,6 +28,17 @@ struct GLTextureCacheTests {
         #expect(prepared.data == Data([100, 50, 25, 128]))
     }
 
+    /// Verifies glyph coverage remains a tightly packed red-channel texture source.
+    @Test
+    func preparesGlyphAtlasForRedChannelUpload() throws {
+        let atlas = try makeGlyphAtlas()
+        let prepared = try OpenGLTextureLoader().uploadData(for: atlas)
+
+        #expect(prepared.pixelFormat == .red)
+        #expect(prepared.data == atlas.coverage)
+        #expect(prepared.data.count == atlas.width * atlas.height)
+    }
+
     /// Verifies sRGB image channels are converted to linear values before texture upload.
     @Test
     func convertsSRGBPixelsToLinearTextureChannels() throws {
@@ -115,6 +126,26 @@ struct GLTextureCacheTests {
         #expect(loader.updatedImageData == Data([5, 6, 7, 8]))
     }
 
+    /// Verifies glyph atlas texture requests reuse and evict by atlas identity.
+    @Test
+    func reusesAndEvictsTextureForGlyphAtlas() throws {
+        let loader = RecordingGLTextureLoader()
+        let cache = GLTextureCache(loader: loader)
+        let atlas = try makeGlyphAtlas()
+
+        let first = try cache.texture(for: atlas)
+        let second = try cache.texture(for: atlas)
+
+        #expect(first === second)
+        #expect(loader.loadCount == 1)
+
+        cache.evict(atlas)
+        let recreated = try cache.texture(for: atlas)
+
+        #expect(recreated !== first)
+        #expect(loader.loadCount == 2)
+    }
+
     /// Verifies releasing a texture wrapper invokes its resource cleanup handler.
     @Test
     func releasesTextureIdentifierOnDeinitialization() {
@@ -144,6 +175,19 @@ struct GLTextureCacheTests {
             shouldInterpolate: false,
             intent: .defaultIntent
         )
+    }
+
+    /// Creates a small atlas containing one two-by-two glyph.
+    /// - Returns: The packed coverage mask.
+    private func makeGlyphAtlas() throws -> CGGlyphAtlas {
+        let bitmap = CGGlyphBitmap(
+            width: 2,
+            height: 2,
+            xOffset: 0,
+            yOffset: 0,
+            coverage: Data([0, 64, 128, 255])
+        )
+        return try #require(CGGlyphAtlas(bitmaps: [bitmap]))
     }
 
     /// Creates a one-pixel snapshot with a caller-provided stable identity and color.
@@ -212,6 +256,19 @@ private final class RecordingGLTextureLoader: GLTextureLoader {
     func makeTexture(from image: CGImageSnapshot) throws -> GLTexture {
         loadCount += 1
         return GLTexture(identifier: UInt32(loadCount), width: image.width, height: image.height, release: { _ in })
+    }
+
+    /// Returns a fake texture identifier and records the glyph atlas request.
+    /// - Parameter glyphAtlas: The atlas requested from the loader.
+    /// - Returns: A fake texture with no OpenGL release side effect.
+    func makeTexture(from glyphAtlas: CGGlyphAtlas) throws -> GLTexture {
+        loadCount += 1
+        return GLTexture(
+            identifier: UInt32(loadCount),
+            width: glyphAtlas.width,
+            height: glyphAtlas.height,
+            release: { _ in }
+        )
     }
 
     /// Records a content update without allocating a new fake texture.

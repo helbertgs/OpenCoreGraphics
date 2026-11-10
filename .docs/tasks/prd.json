@@ -893,7 +893,7 @@
       ],
       "priority": 59,
       "passes": true,
-      "notes": "A cobertura de linhas medida por `swift test --enable-code-coverage` foi de 3.766/4.278 (88,03%) no target `OpenCoreGraphics`, excluindo somente `Rendering/GL/` e `CGWindow.swift`. O relatório por arquivo, com data e escopo, está em `.docs/tasks/coverage.md`. O teste instrumentado passou com 159 testes em 29 suítes."
+      "notes": "A cobertura de linhas medida por `swift test --enable-code-coverage` foi de 4.167/4.659 (89,44%) no target `OpenCoreGraphics`, excluindo somente `Rendering/GL/` e `CGWindow.swift`. O relatório por arquivo, com data e escopo, está em `.docs/tasks/coverage.md`. O teste instrumentado passou com 167 testes em 31 suítes."
     },
     {
       "id": "US-060",
@@ -935,8 +935,8 @@
         "Build e testes passam"
       ],
       "priority": 62,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "O renderer GL envia o atlas de cobertura como textura GL_RED, desenha todos os glifos de cada comando em um único lote e aplica baseline, espaçamento, textMatrix, textPosition e CTM. O Sample demonstra \"OpenCoreGraphics\" em 24 px com uma fonte instalada no sistema (ou informada por --font), sem incluir fontes proprietárias. Testes validam upload/cache do atlas, shader, orientação e geometria dos quads. `swift test` e `swift test --enable-code-coverage` passaram com 167 testes em 31 suítes; a cobertura elegível ficou em 4.167/4.659 (89,44%)."
     }
   ]
 }

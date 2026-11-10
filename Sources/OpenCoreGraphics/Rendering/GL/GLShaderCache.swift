@@ -9,6 +9,9 @@ enum ShaderKind: Hashable, Sendable {
     /// The linear and radial gradient program.
     case gradient
 
+    /// The single-channel glyph coverage program.
+    case text
+
     /// The packaged resource directory for this shader kind.
     var resourceDirectory: String {
         switch self {
@@ -18,6 +21,8 @@ enum ShaderKind: Hashable, Sendable {
             "image"
         case .gradient:
             "gradient"
+        case .text:
+            "text"
         }
     }
 }
