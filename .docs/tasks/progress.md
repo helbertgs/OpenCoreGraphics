@@ -92,3 +92,13 @@
   - Com a convenção de `CGPoint.applying` e do operador `CGAffineTransform *`, a sequência translação seguida de escala requer CTM `translation * scaling` para preservar a translação.
   - Ainda há contextos duplicados; mantenha ambos alinhados até a US-014.
 ---
+
+## 2026-11-09 - US-009
+- Os métodos `addArc(center:)`, `addArc(tangent1End:)`, `addCurve` e `addQuadCurve` agora encaminham `ctm` ao `CGPath` em `CGContext` e `CGWindowContext`.
+- Adicionado teste verificando a transformação por escala de pontos de arco, endpoints e pontos de controle de curvas.
+- Build e testes passaram (25 testes).
+- Files changed: `Sources/OpenCoreGraphics/Services/Window Services/CGContext.swift`, `Sources/OpenCoreGraphics/Services/Window Services/CGWindowContext.swift`, `Tests/OpenCoreGraphicsTests/2D Drawing/CGContextTests.swift`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
+- **Learnings for future iterations:**
+  - Os métodos equivalentes do `CGPath` já aceitam `transform:`; encaminhe a CTM do contexto em vez de duplicar a matemática.
+  - Pontos produzidos por `sin`/`cos` precisam de tolerância em testes por causa de resíduos de ponto flutuante.
+---

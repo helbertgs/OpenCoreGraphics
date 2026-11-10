@@ -73,6 +73,48 @@ struct CGContextTests {
         #expect(context.ctm == translation * scaling * rotation * concatenated)
     }
 
+    /// Verifies that every curve and arc method applies the context transform.
+    @Test
+    func pathCurvesAndArcsApplyCurrentTransform() throws {
+        let context = makeContext()
+        context.beginPath()
+        context.scaleBy(x: 2, y: 2)
+
+        context.addArc(center: .zero, radius: 5, startAngle: 0, endAngle: .pi / 2, clockwise: false)
+        let arcPath = try #require(context.path)
+        #expect(arcPath.subpath.first?.points == [CGPoint(x: 10, y: 0)])
+        #expect(abs(arcPath.currentPoint.x) < 1e-10)
+        #expect(abs(arcPath.currentPoint.y - 10) < 1e-10)
+
+        context.beginPath()
+        context.move(to: CGPoint(x: 1, y: 1))
+        context.addArc(tangent1End: CGPoint(x: 3, y: 1), tangent2End: CGPoint(x: 3, y: 4), radius: 1)
+        #expect(context.path?.currentPoint == CGPoint(x: 6, y: 8))
+
+        context.beginPath()
+        context.move(to: CGPoint(x: 1, y: 1))
+        context.addCurve(
+            to: CGPoint(x: 4, y: 5),
+            control1: CGPoint(x: 2, y: 3),
+            control2: CGPoint(x: 3, y: 4)
+        )
+        #expect(context.path?.subpath.last?.points == [
+            CGPoint(x: 2, y: 2),
+            CGPoint(x: 4, y: 6),
+            CGPoint(x: 6, y: 8),
+            CGPoint(x: 8, y: 10)
+        ])
+
+        context.beginPath()
+        context.move(to: CGPoint(x: 1, y: 1))
+        context.addQuadCurve(to: CGPoint(x: 4, y: 5), control: CGPoint(x: 2, y: 3))
+        #expect(context.path?.subpath.last?.points == [
+            CGPoint(x: 2, y: 2),
+            CGPoint(x: 4, y: 6),
+            CGPoint(x: 8, y: 10)
+        ])
+    }
+
     /// Verifies the initial values for every graphics-state parameter.
     @Test
     func defaultGraphicsStateMatchesCoreGraphicsValues() {

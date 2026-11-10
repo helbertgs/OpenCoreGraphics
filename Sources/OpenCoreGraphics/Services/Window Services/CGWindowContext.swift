@@ -243,7 +243,7 @@ open class CGWindowContext {
     ///   - endAngle: The angle to the end point of the arc, measured in radians from the positive x-axis.
     ///   - clockwise: true to make a clockwise arc; false to make a counterclockwise arc.
     public func addArc(center: CGPoint, radius: Double, startAngle: Double, endAngle: Double, clockwise: Bool) {
-        path?.addArc(center: center, radius: radius, startAngle: startAngle, endAngle: endAngle, clockwise: clockwise)
+        path?.addArc(center: center, radius: radius, startAngle: startAngle, endAngle: endAngle, clockwise: clockwise, transform: ctm)
     }
     
     /// Adds an arc of a circle to the current path, specified with a radius and two tangent lines.
@@ -258,7 +258,7 @@ open class CGWindowContext {
     ///   - tangent2End: The end point, in user space coordinates, for the second tangent line to be used in constructing the arc. (The start point for this tangent line is the tangent1End point.)
     ///   - radius: The radius of the arc, in user space coordinates.
     public func addArc(tangent1End: CGPoint, tangent2End: CGPoint, radius: Double) {
-        path?.addArc(tangent1End: tangent1End, tangent2End: tangent2End, radius: radius)
+        path?.addArc(tangent1End: tangent1End, tangent2End: tangent2End, radius: radius, transform: ctm)
     }
 
     /// Adds a cubic Bézier curve to the current path, with the specified end point and control points.
@@ -270,7 +270,7 @@ open class CGWindowContext {
     ///   - control1: The first control point of the curve, in user space coordinates.
     ///   - control2: The second control point of the curve, in user space coordinates.
     public func addCurve(to end: CGPoint, control1: CGPoint, control2: CGPoint) {
-        path?.addCurve(to: end, control1: control1, control2: control2)
+        path?.addCurve(to: end, control1: control1, control2: control2, transform: ctm)
     }
 
     /// Adds a quadratic Bézier curve to the current path, with the specified end point and control point.
@@ -281,7 +281,7 @@ open class CGWindowContext {
     ///   - end: The point, in user space coordinates, at which to end the curve.
     ///   - control: The control point of the curve, in user space coordinates.
     public func addQuadCurve(to end: CGPoint, control: CGPoint) {
-        path?.addQuadCurve(to: end, control: control)
+        path?.addQuadCurve(to: end, control: control, transform: ctm)
     }
 
     /// Adds a previously created path object to the current path in a graphics context.

@@ -132,8 +132,8 @@
         "Build e testes passam"
       ],
       "priority": 9,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "CGContext e CGWindowContext agora passam ctm para os quatro métodos de arco/curva. Teste cobre pontos e pontos de controle transformados; arco trigonométrico verificado com tolerância para erro de ponto flutuante."
     },
     {
       "id": "US-010",
