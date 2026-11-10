@@ -249,7 +249,7 @@ Ordem recomendada: Fases 0 → 1 → 2 (OpenGL, prioridade do projeto) → 3 (ge
 ## 7. Testes (`/swift-testing-pro`)
 
 - **Pixel a pixel** em superfícies pequenas (ex.: 8×8, 16×16) para retângulos, alfa e blends: resultados exatos.
-- **Tolerância** para curvas e anti-aliasing (ex.: erro médio por canal ≤ 2/255).
+- **Tolerância** da comparação GL × software: erro médio absoluto ≤ 2/255 para formas sólidas e imagens, e ≤ 4/255 para cenas com curvas, estrelas `evenOdd` ou traços com joins arredondados. O teste opcional é habilitado por `OPENCOREGRAPHICS_RUN_GL_COMPARISON=1` e não roda em CI.
 - **Parametrizados** com `@Test(arguments:)` para cada `CGBlendMode`, regra de preenchimento e formato de bitmap.
 - **Imagens de referência** em BMP (seção 3.7), lidas com `stb_image`; para casos mínimos, *arrays* de bytes embutidos no teste.
 - Esses testes **não precisam de GPU** e contam para a meta de 80 %.
@@ -283,5 +283,6 @@ Ordem recomendada: Fases 0 → 1 → 2 (OpenGL, prioridade do projeto) → 3 (ge
 | **Q8** (ADR 0001) | Como exportar imagem? | **BMP**, com codificador mínimo no pacote. Sem PNG e sem alterar o `OpenSTB` |
 | **Q9** | Formatos de bitmap da primeira versão | Escolha técnica: RGBA8 `premultipliedLast`, BGRA8 `premultipliedFirst` e as variantes opacas (seção 3.4) |
 | **Q10** | Exibir o bitmap na janela | Entra na Fase 5 (passo 5.7) |
+| **Q-3** (PRD) | Diferença GL × software para curvas antialiasing | Erro médio absoluto ≤ 4/255 para curvas, estrelas `evenOdd` e joins arredondados; ≤ 2/255 para formas sólidas e imagens. Teste manual opt-in, sem CI |
 
 Sem perguntas em aberto nesta ADR.

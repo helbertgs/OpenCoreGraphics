@@ -79,10 +79,10 @@ struct SoftwareRendererTests {
         context.flush()
 
         let pixels = Array(context.data)
-        #expect(pixel(at: 0, y: 0, in: pixels, width: 4) == [255, 0, 0, 255])
-        #expect(pixel(at: 3, y: 1, in: pixels, width: 4) == [0, 255, 0, 255])
-        #expect(pixel(at: 1, y: 2, in: pixels, width: 4) == [0, 0, 255, 255])
-        #expect(pixel(at: 3, y: 3, in: pixels, width: 4) == [255, 255, 255, 255])
+        #expect(pixel(at: 0, y: 0, in: pixels, width: 4) == [0, 0, 255, 255])
+        #expect(pixel(at: 3, y: 1, in: pixels, width: 4) == [255, 255, 255, 255])
+        #expect(pixel(at: 1, y: 2, in: pixels, width: 4) == [255, 0, 0, 255])
+        #expect(pixel(at: 3, y: 3, in: pixels, width: 4) == [0, 255, 0, 255])
     }
 
     /// Verifies image samples follow the inverse of a sheared current transform.
@@ -105,8 +105,8 @@ struct SoftwareRendererTests {
 
         let pixels = Array(context.data)
         #expect(pixel(at: 0, y: 1, in: pixels, width: 4) == [0, 0, 0, 0])
-        #expect(pixel(at: 1, y: 1, in: pixels, width: 4) == [0, 0, 255, 255])
-        #expect(pixel(at: 2, y: 1, in: pixels, width: 4) == [255, 255, 255, 255])
+        #expect(pixel(at: 1, y: 1, in: pixels, width: 4) == [255, 0, 0, 255])
+        #expect(pixel(at: 2, y: 1, in: pixels, width: 4) == [0, 255, 0, 255])
     }
 
     /// Verifies bilinear sampling combines neighboring pixels during enlargement.
@@ -126,7 +126,7 @@ struct SoftwareRendererTests {
         context.draw(image, in: CGRect(x: 0, y: 0, width: 4, height: 4))
         context.flush()
 
-        #expect(pixel(at: 1, y: 1, in: Array(context.data), width: 4) == [159, 64, 64, 255])
+        #expect(pixel(at: 1, y: 1, in: Array(context.data), width: 4) == [96, 64, 191, 255])
     }
 
     /// Verifies bilinear interpolation avoids color fringes from transparent source pixels.
@@ -164,12 +164,12 @@ struct SoftwareRendererTests {
         context.flush()
 
         let pixels = Array(context.data)
-        #expect(pixel(at: 0, y: 0, in: pixels, width: 4) == [255, 0, 0, 255])
-        #expect(pixel(at: 2, y: 0, in: pixels, width: 4) == [255, 0, 0, 255])
-        #expect(pixel(at: 3, y: 0, in: pixels, width: 4) == [0, 255, 0, 255])
-        #expect(pixel(at: 0, y: 1, in: pixels, width: 4) == [0, 0, 255, 255])
-        #expect(pixel(at: 0, y: 2, in: pixels, width: 4) == [255, 0, 0, 255])
-        #expect(pixel(at: 1, y: 3, in: pixels, width: 4) == [255, 255, 255, 255])
+        #expect(pixel(at: 0, y: 0, in: pixels, width: 4) == [0, 0, 255, 255])
+        #expect(pixel(at: 2, y: 0, in: pixels, width: 4) == [0, 0, 255, 255])
+        #expect(pixel(at: 3, y: 0, in: pixels, width: 4) == [255, 255, 255, 255])
+        #expect(pixel(at: 0, y: 1, in: pixels, width: 4) == [255, 0, 0, 255])
+        #expect(pixel(at: 0, y: 2, in: pixels, width: 4) == [0, 0, 255, 255])
+        #expect(pixel(at: 1, y: 3, in: pixels, width: 4) == [0, 255, 0, 255])
     }
 
     /// Verifies a curved outline produces full and fractional sample coverage.

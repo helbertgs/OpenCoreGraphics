@@ -48,6 +48,14 @@ protocol CGPixelSurfaceRenderer: AnyObject {
     func renderSoftwareSurface(_ image: CGImageSnapshot, size: CGSize)
 }
 
+/// Reads rendered pixels from an OpenGL framebuffer.
+protocol CGPixelReadbackRenderer: AnyObject {
+    /// Copies the framebuffer into bottom-up RGBA bytes.
+    /// - Parameter size: The framebuffer dimensions in pixels.
+    /// - Returns: RGBA bytes, or nil when the dimensions cannot be read safely.
+    func readPixels(size: CGSize) -> [UInt8]?
+}
+
 /// A test target that records submitted commands without rendering pixels.
 final class RecordingRenderTarget: CGRenderTarget {
     /// The dimensions of this target in pixels.

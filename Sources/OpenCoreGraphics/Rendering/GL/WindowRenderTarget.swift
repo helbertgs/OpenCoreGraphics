@@ -69,10 +69,14 @@ final class WindowRenderTarget: CGRenderTarget {
         }
     }
 
-    /// Returns nil because the window target does not expose pixel readback yet.
-    /// - Returns: Always nil for the window destination.
+    /// Reads the current framebuffer when its renderer supports pixel readback.
+    /// - Returns: Bottom-up RGBA bytes, or nil when the renderer is unavailable.
     nonisolated func readPixels() -> Data? {
-        nil
+        MainActor.assumeIsolated {
+            guard let renderer = renderer as? any CGPixelReadbackRenderer else { return nil }
+            guard let pixels = renderer.readPixels(size: windowSize) else { return nil }
+            return Data(pixels)
+        }
     }
 
     /// Renders all commands queued for the current frame.

@@ -11,6 +11,7 @@
 - O `SoftwareRenderer` interpreta imagens usando metadados do snapshot, amostra o quad pela transformação afim inversa e interpola canais de cor em espaço pré-multiplicado.
 - A exportação BMP lê pixels pelo `PixelSurface.pixel(x:y:)`, converte alpha pré-multiplicado para reto e escreve linhas top-down em BGRA.
 - A apresentação direta de um `PixelSurface` no OpenGL usa identidade estável por alvo e `GLTextureCache.updateTexture`; atualize a imagem existente com `glTexSubImage2D` e realoque o armazenamento somente quando as dimensões mudarem.
+- Imagens usam linhas top-down no `CGImage`; ao comparar renderizadores, mantenha coerentes a coordenada `v` do shader GL e a amostragem vertical do software, validando com um bitmap assimétrico.
 - O working tree tem trabalho em andamento do usuário (arquivos novos/movidos ainda não commitados). Os commits das stories incluem **apenas** os arquivos tocados pela story, mais `.docs/tasks/prd.json` e `progress.md`.
 - Valores `struct` que controlam memória alocada usam um proprietário por referência com `deinit`; cópias do valor compartilham a alocação sem duplicar nem liberar o ponteiro prematuramente.
 
@@ -493,4 +494,15 @@
 - **Learnings for future iterations:**
   - Snapshots de uma superfície mutável devem conservar a identidade da textura entre frames, mas receber cópias imutáveis dos bytes de cada frame.
   - O buffer de `PixelSurface` segue coordenadas lógicas de baixo para cima; para o quad de imagem do OpenGL, empacote as linhas na ordem top-down esperada pelo shader.
+---
+
+## 2026-11-10 - US-052
+- Criado `GLSoftwareComparisonTests`, opt-in por `OPENCOREGRAPHICS_RUN_GL_COMPARISON=1`, cobrindo retângulo, elipse, estrela `evenOdd`, stroke com join arredondado e imagem; o readback do framebuffer retorna RGBA bottom-up para comparação direta com o bitmap.
+- A análise da coordenada vertical identificou divergência entre `CGImage` top-down e o shader GL; `SoftwareRenderer` agora inverte a coordenada vertical da amostragem. Testes nearest, shear, bilinear e tiling verificam a orientação corrigida.
+- Limites registrados na ADR 0002: diferença média absoluta ≤ 2/255 para formas sólidas/imagens e ≤ 4/255 para curvas, `evenOdd` e joins arredondados. A comparação GL não roda em CI e foi desativada no `swift test` padrão.
+- `swift test` passou (140 testes em 27 suítes), `swift build --target OpenCoreGraphicsSample` e `git diff --check` passaram.
+- Files changed: `Sources/OpenCoreGraphics/Rendering/CGRenderTarget.swift`, `Sources/OpenCoreGraphics/Rendering/GL/GLRenderer.swift`, `Sources/OpenCoreGraphics/Rendering/GL/WindowRenderTarget.swift`, `Sources/OpenCoreGraphics/Rendering/SoftwareRenderer.swift`, `Tests/OpenCoreGraphicsTests/Rendering/GLSoftwareComparisonTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/SoftwareRendererTests.swift`, `.docs/ADRs/0002-backend-de-renderizacao-em-software.md`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
+- **Learnings for future iterations:**
+  - O readback do framebuffer com `glReadPixels` já retorna linhas bottom-up compatíveis com o buffer lógico do `SoftwareRenderer`; não inverta o resultado da comparação.
+  - O teste comparativo depende de uma sessão com GLFW/OpenGL e permanece opt-in, evitando dependência de GPU ou display em CI.
 ---

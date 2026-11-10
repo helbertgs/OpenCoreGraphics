@@ -787,8 +787,8 @@
         "Build e testes passam"
       ],
       "priority": 52,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Adicionado teste Swift Testing opcional, habilitado por `OPENCOREGRAPHICS_RUN_GL_COMPARISON=1`, que renderiza retângulo, elipse, estrela evenOdd, stroke round-join e imagem nos dois backends, lendo o framebuffer GL em RGBA. A amostragem de imagem do software agora respeita a orientação vertical top-down usada pelo shader GL; testes de nearest, bilinear, tiling e shear foram atualizados para cobrir a orientação. Limites registrados na ADR 0002: formas sólidas/imagens ≤ 2/255 e cenas curvas/stroke ≤ 4/255. O teste GL fica desativado no suite padrão e fora de CI. `swift test` passou (140 testes em 27 suítes, com a comparação GL desativada), `swift build --target OpenCoreGraphicsSample` e `git diff --check` passaram."
     },
     {
       "id": "US-053",

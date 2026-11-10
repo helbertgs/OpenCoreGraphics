@@ -293,7 +293,7 @@ enum GLRendererGeometry {
 
 /// Renders supported path commands with a cached solid-color OpenGL program.
 @MainActor
-final class GLRenderer: CGRenderBackend, CGPixelSurfaceRenderer {
+final class GLRenderer: CGRenderBackend, CGPixelSurfaceRenderer, CGPixelReadbackRenderer {
     /// Keeps the compiled programs alive for the lifetime of the renderer.
     private let shaderCache: GLShaderCache
 
@@ -356,6 +356,47 @@ final class GLRenderer: CGRenderBackend, CGPixelSurfaceRenderer {
                 projection: projection,
                 updateTexture: true
             )
+        }
+    }
+
+    /// Reads the current framebuffer as bottom-up RGBA pixel data.
+    /// - Parameter size: The framebuffer dimensions in pixels.
+    /// - Returns: The framebuffer bytes, or nil when the requested size is invalid.
+    nonisolated func readPixels(size: CGSize) -> [UInt8]? {
+        MainActor.assumeIsolated {
+            guard size.width.isFinite,
+                  size.height.isFinite,
+                  size.width > 0,
+                  size.height > 0,
+                  size.width <= Double(Int32.max),
+                  size.height <= Double(Int32.max),
+                  size.width.rounded(.towardZero) == size.width,
+                  size.height.rounded(.towardZero) == size.height else {
+                return nil
+            }
+
+            let width = Int(size.width)
+            let height = Int(size.height)
+            let (bytesPerRow, rowOverflow) = width.multipliedReportingOverflow(by: 4)
+            let (byteCount, sizeOverflow) = bytesPerRow.multipliedReportingOverflow(by: height)
+            guard rowOverflow == false, sizeOverflow == false else { return nil }
+
+            var pixels = [UInt8](repeating: 0, count: byteCount)
+            var didReadPixels = false
+            pixels.withUnsafeMutableBytes { bytes in
+                guard let baseAddress = bytes.baseAddress else { return }
+                glad_glReadPixels(
+                    0,
+                    0,
+                    GLsizei(width),
+                    GLsizei(height),
+                    GLenum(GL_RGBA),
+                    GLenum(GL_UNSIGNED_BYTE),
+                    baseAddress
+                )
+                didReadPixels = true
+            }
+            return didReadPixels ? pixels : nil
         }
     }
 

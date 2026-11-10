@@ -216,7 +216,9 @@ final class SoftwareRenderer: CGRenderBackend {
                 guard u >= 0, u < 1, v >= 0, v < 1 else { continue }
 
                 let sourceX = byTiling ? u * horizontalLength : u * Double(image.width)
-                let sourceY = byTiling ? v * verticalLength : v * Double(image.height)
+                let sourceY = byTiling
+                    ? (1 - v) * verticalLength
+                    : (1 - v) * Double(image.height)
                 guard let source = sampleImage(
                     image,
                     x: sourceX,
