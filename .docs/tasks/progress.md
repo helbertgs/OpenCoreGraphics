@@ -17,3 +17,14 @@
   - O erro reportado no início era só o primeiro; havia um segundo escondido em `CGWindow.swift:248`.
   - `swift test` ainda falha por `CGPathTests` (`let` em struct com métodos `mutating`): é a US-002.
 ---
+
+## 2026-11-09 - US-002
+- Em `CGPathTests.swift`, `let` virou `var` onde o `CGPath` (struct) é mutado; `initEmptyPath`, `initRect`, `initEllipse`, `initRoundedRect` e `containsAlwaysFalse` continuam `let`.
+- O arquivo antigo `Tests/OpenCoreGraphicsTests/CGPathTests.swift` já não existe.
+- `swift test`: 20 testes passam. Nenhum precisou de `withKnownIssue`.
+- Files changed: `Tests/OpenCoreGraphicsTests/2D Drawing/CGPathTests.swift`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
+- **Learnings for future iterations:**
+  - O compilador avisa "never mutated" quando `var` é desnecessário; use isso para achar os `let` corretos.
+  - `containsAlwaysFalse` testa o comportamento **errado** de `CGPath.contains`; a US-031 precisa reescrevê-lo.
+  - A saída do Swift Testing é `✔ Test run with N tests ... passed`; a linha "Executed 0 tests" é do XCTest e pode ser ignorada.
+---

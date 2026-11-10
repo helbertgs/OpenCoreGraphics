@@ -27,8 +27,8 @@
         "Build e testes passam"
       ],
       "priority": 2,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "20 testes de CGPath passam; nenhum precisou de withKnownIssue. O teste containsAlwaysFalse documenta o comportamento atual (contains sempre false) e deve ser reescrito na US-031."
     },
     {
       "id": "US-003",
