@@ -89,8 +89,8 @@
         "Build e testes passam"
       ],
       "priority": 6,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "CGLineCap e CGLineJoin já existiam com os casos esperados. Para manter CGGraphicsState Sendable sem compartilhar a classe mutável CGFont, font armazena um snapshot imutável do nome da fonte."
     },
     {
       "id": "US-007",

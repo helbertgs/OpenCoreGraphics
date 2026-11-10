@@ -62,3 +62,13 @@
   - `swift package dump-package` mostra o que o manifesto realmente declara (requisitos, plataformas, recursos).
   - Os arquivos em `Resources/` são `.copy`: o acesso em código será por `Bundle.module` (US-021).
 ---
+
+## 2026-11-09 - US-006
+- Criado `CGGraphicsState: Sendable` com os 18 parâmetros do estado gráfico e defaults cobertos por Swift Testing.
+- `CGLineCap` e `CGLineJoin` já existiam com os casos da API Apple; foram reutilizados.
+- `font` guarda o nome imutável da fonte, evitando inserir a classe mutável `CGFont` em um valor `Sendable`.
+- Files changed: `Sources/OpenCoreGraphics/Services/Window Services/CGGraphicsState.swift`, `Tests/OpenCoreGraphicsTests/2D Drawing/CGContextTests.swift`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
+- **Learnings for future iterations:**
+  - Para incluir uma fonte em estados transferíveis, capture seu identificador de valor; `CGFont` é uma classe mutável e não `Sendable`.
+  - `CGLineCap` e `CGLineJoin` já estão definidos em `Enumerations/`; confira tipos existentes antes de duplicá-los.
+---
