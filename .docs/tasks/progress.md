@@ -210,4 +210,12 @@
 - Criado `CGShaderSource` para carregar GLSL por `Bundle.module`; arquivo ausente lança `CGShaderSourceError.resourceNotFound`.
 - Testes carregam os quatro recursos empacotados, verificam conteúdo e `#version 330 core`, e cobrem recurso ausente.
 - `swift test` passou (58 testes em 15 suítes).
+
+---
+
+## 2026-11-10 - US-022
+- Criados `GLProgram` e `GLShaderCache`, ambos isolados em `MainActor`; programas compilados são reutilizados por `ShaderKind`, e cada uniform é consultado uma única vez.
+- `OpenGLProgramDriver` usa chamadas `glad_*`, confere estados de compilação/link e lança erros tipados contendo o log do OpenGL. `GLProgram` remove o programa em `isolated deinit`.
+- Driver falso testa compilação única após três solicitações, programas por kind, propagação de erros, cache de uniforms e liberação, sem contexto GL.
+- `swift test` passou (63 testes em 16 suítes).
 ---

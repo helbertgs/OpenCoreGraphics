@@ -329,8 +329,8 @@
         "Build e testes passam"
       ],
       "priority": 22,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "GLProgram é MainActor/final, compila e linka via glad_*, memoiza uniform locations e libera em isolated deinit. OpenGLProgramDriver retorna erros tipados com os logs de compilação/link; GLShaderCache reutiliza o programa por ShaderKind. Driver falso verifica cache (3 solicitações, 1 compilação), kinds distintos, erros, uniforms e deleção. swift test passou com 63 testes em 16 suítes."
     },
     {
       "id": "US-023",
