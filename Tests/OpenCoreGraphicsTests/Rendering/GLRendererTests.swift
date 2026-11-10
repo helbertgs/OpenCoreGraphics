@@ -184,11 +184,11 @@ struct GLRendererTests {
         #expect(
             GLRendererGeometry.rgbaComponents(
                 for: CGColor(red: 0.1, green: 0.2, blue: 0.3, alpha: 0.4)
-            ) == [0.1, 0.2, 0.3, 0.4]
+            ) == [0.04, 0.08, 0.12, 0.4]
         )
         #expect(
             GLRendererGeometry.rgbaComponents(for: CGColor(gray: 0.5, alpha: 0.6))
-                == [0.5, 0.5, 0.5, 0.6]
+                == [0.3, 0.3, 0.3, 0.6]
         )
         #expect(
             GLRendererGeometry.rgbaComponents(

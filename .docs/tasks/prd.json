@@ -832,8 +832,8 @@
         "Build e testes passam"
       ],
       "priority": 55,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "O renderer GL agora premultiplica cores antes de enviá-las ao shader e normaliza as texturas RGBA, convertendo alpha direto e preservando pixels já pré-multiplicados. Cada lote configura equações e fatores de blend separados; 13 modos têm mapeamento direto e os demais recaem em `normal`, com tabela em `.docs/GLBlendModeMapping.md`. O Sample inclui `--test-blend-modes` com vermelho semitransparente sobre azul em `normal` e `multiply` (fallback documentado). `swift test` passou (147 testes em 28 suítes), `swift build --target OpenCoreGraphicsSample`, validação do JSON e `git diff --check` passaram."
     },
     {
       "id": "US-056",

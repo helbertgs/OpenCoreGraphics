@@ -26,6 +26,14 @@ if CommandLine.arguments.contains("--software") {
         softwareContext.setFillColor(CGColor(red: 0.9, green: 0.2, blue: 0.4, alpha: 1))
         softwareContext.fill(CGRect(x: 50, y: 50, width: 400, height: 400))
         softwareContext.restoreGState()
+    } else if CommandLine.arguments.contains("--test-blend-modes") {
+        softwareContext.setFillColor(CGColor(red: 0.1, green: 0.3, blue: 0.8, alpha: 1))
+        softwareContext.fill(CGRect(x: 70, y: 80, width: 370, height: 350))
+        softwareContext.setFillColor(CGColor(red: 1, green: 0.1, blue: 0.1, alpha: 0.5))
+        softwareContext.setBlendMode(.normal)
+        softwareContext.fill(CGRect(x: 90, y: 120, width: 160, height: 230))
+        softwareContext.setBlendMode(.multiply)
+        softwareContext.fill(CGRect(x: 270, y: 120, width: 160, height: 230))
     } else {
         softwareContext.setFillColor(CGColor(red: 0.2, green: 0.5, blue: 0.8, alpha: 1))
         softwareContext.fill(CGRect(x: 20, y: 20, width: 150, height: 200))
@@ -71,6 +79,17 @@ window.display = {
         cgContext.setFillColor(CGColor(red: 0.9, green: 0.2, blue: 0.4, alpha: 1))
         cgContext.fill(CGRect(x: 50, y: 50, width: 400, height: 400))
         cgContext.restoreGState()
+        return
+    }
+
+    if CommandLine.arguments.contains("--test-blend-modes") {
+        cgContext.setFillColor(CGColor(red: 0.1, green: 0.3, blue: 0.8, alpha: 1))
+        cgContext.fill(CGRect(x: 70, y: 80, width: 370, height: 350))
+        cgContext.setFillColor(CGColor(red: 1, green: 0.1, blue: 0.1, alpha: 0.5))
+        cgContext.setBlendMode(.normal)
+        cgContext.fill(CGRect(x: 90, y: 120, width: 160, height: 230))
+        cgContext.setBlendMode(.multiply)
+        cgContext.fill(CGRect(x: 270, y: 120, width: 160, height: 230))
         return
     }
 

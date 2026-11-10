@@ -14,6 +14,38 @@ struct GLTextureCacheTests {
         #expect(GLTexturePixelFormat.forChannelCount(5) == nil)
     }
 
+    /// Verifies straight-alpha texture bytes are converted to premultiplied RGBA.
+    @Test
+    func premultipliesStraightAlphaForTextureUploads() throws {
+        let snapshot = makeSnapshot(
+            data: [200, 100, 50, 128],
+            alphaInfo: .last,
+            bitmapInfo: .byteOrder32Big
+        )
+        let prepared = try OpenGLTextureLoader().uploadData(for: snapshot)
+
+        #expect(prepared.pixelFormat == .rgba)
+        #expect(prepared.data == Data([100, 50, 25, 128]))
+    }
+
+    /// Verifies already-premultiplied pixels are preserved and alpha-first bytes become RGBA.
+    @Test
+    func preservesPremultipliedTextureBytesAndNormalizesAlphaFirst() throws {
+        let premultiplied = makeSnapshot(
+            data: [100, 50, 25, 128],
+            alphaInfo: .premultipliedLast,
+            bitmapInfo: .byteOrder32Big
+        )
+        let alphaFirst = makeSnapshot(
+            data: [128, 200, 100, 50],
+            alphaInfo: .first,
+            bitmapInfo: .byteOrder32Big
+        )
+
+        #expect(try OpenGLTextureLoader().uploadData(for: premultiplied).data == Data([100, 50, 25, 128]))
+        #expect(try OpenGLTextureLoader().uploadData(for: alphaFirst).data == Data([100, 50, 25, 128]))
+    }
+
     /// Verifies only `.none` selects nearest filtering.
     @Test
     func mapsInterpolationQualityToTextureFilter() {
@@ -117,6 +149,31 @@ struct GLTextureCacheTests {
             alphaInfo: .premultipliedLast,
             colorSpace: .sRGB,
             bitmapInfo: .byteOrder32Big
+        )
+    }
+
+    /// Creates a one-pixel image snapshot with an explicit alpha and byte-order layout.
+    /// - Parameters:
+    ///   - data: The source pixel bytes.
+    ///   - alphaInfo: The alpha layout associated with the bytes.
+    ///   - bitmapInfo: The byte order associated with the bytes.
+    /// - Returns: A complete one-pixel image snapshot.
+    private func makeSnapshot(
+        data: [UInt8],
+        alphaInfo: CGImageAlphaInfo,
+        bitmapInfo: CGBitmapInfo
+    ) -> CGImageSnapshot {
+        CGImageSnapshot(
+            identity: UUID(),
+            data: Data(data),
+            width: 1,
+            height: 1,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: 4,
+            alphaInfo: alphaInfo,
+            colorSpace: .sRGB,
+            bitmapInfo: bitmapInfo
         )
     }
 }

@@ -134,6 +134,15 @@ struct OpenGLBatchBufferDriver: GLBatchBufferDriver {
     ///   - vertexCount: The number of vertices to draw.
     ///   - state: The program, texture, and blend mode for this batch.
     func draw(vertexCount: Int, state: GLBatchState) {
+        let blendConfiguration = GLBlendModeMapper.configuration(for: state.blendMode)
+        glad_glEnable(GLenum(GL_BLEND))
+        glad_glBlendEquationSeparate(GLenum(GL_FUNC_ADD), GLenum(GL_FUNC_ADD))
+        glad_glBlendFuncSeparate(
+            blendConfiguration.sourceRGB.openGLValue,
+            blendConfiguration.destinationRGB.openGLValue,
+            blendConfiguration.sourceAlpha.openGLValue,
+            blendConfiguration.destinationAlpha.openGLValue
+        )
         glad_glUseProgram(state.program)
         glad_glActiveTexture(GLenum(GL_TEXTURE0))
         glad_glBindTexture(GLenum(GL_TEXTURE_2D), state.texture ?? 0)

@@ -267,27 +267,56 @@ enum GLRendererGeometry {
         switch colorSpace.model {
         case .rgb:
             guard color.components.count == 4 else { return nil }
-            return color.components.map(Float.init)
+            return premultipliedRGBA(
+                red: color.components[0],
+                green: color.components[1],
+                blue: color.components[2],
+                alpha: color.components[3]
+            )
         case .gray:
             guard color.components.count == 2 else { return nil }
-            let gray = Float(color.components[0])
-            return [gray, gray, gray, Float(color.components[1])]
+            return premultipliedRGBA(
+                red: color.components[0],
+                green: color.components[0],
+                blue: color.components[0],
+                alpha: color.components[1]
+            )
         case .cmyk:
             guard color.components.count == 5 else { return nil }
             let cyan = color.components[0]
             let magenta = color.components[1]
             let yellow = color.components[2]
             let black = color.components[3]
-            let alpha = color.components[4]
-            return [
-                Float((1 - cyan) * (1 - black)),
-                Float((1 - magenta) * (1 - black)),
-                Float((1 - yellow) * (1 - black)),
-                Float(alpha)
-            ]
+            return premultipliedRGBA(
+                red: (1 - cyan) * (1 - black),
+                green: (1 - magenta) * (1 - black),
+                blue: (1 - yellow) * (1 - black),
+                alpha: color.components[4]
+            )
         case .deviceN, .lab:
             return nil
         }
+    }
+
+    /// Converts straight-alpha color components to the shader's premultiplied RGBA input.
+    /// - Parameters:
+    ///   - red: The unpremultiplied red channel.
+    ///   - green: The unpremultiplied green channel.
+    ///   - blue: The unpremultiplied blue channel.
+    ///   - alpha: The source alpha channel.
+    /// - Returns: The premultiplied RGBA components.
+    private static func premultipliedRGBA(
+        red: Double,
+        green: Double,
+        blue: Double,
+        alpha: Double
+    ) -> [Float] {
+        [
+            Float(red * alpha),
+            Float(green * alpha),
+            Float(blue * alpha),
+            Float(alpha)
+        ]
     }
 }
 

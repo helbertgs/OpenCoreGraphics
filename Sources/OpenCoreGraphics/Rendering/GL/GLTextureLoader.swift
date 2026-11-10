@@ -114,11 +114,11 @@ struct OpenGLTextureLoader: GLTextureLoader {
         }
     }
 
-    /// Packs supported source pixels into tightly packed upload bytes.
+    /// Packs supported source pixels into tightly packed premultiplied upload bytes.
     /// - Parameter image: The immutable bitmap snapshot to prepare.
     /// - Returns: Packed bytes and their matching OpenGL format.
     /// - Throws: `GLTextureError` when the bitmap layout or pixel data is invalid.
-    private func uploadData(for image: CGImageSnapshot) throws -> (data: Data, pixelFormat: GLTexturePixelFormat) {
+    func uploadData(for image: CGImageSnapshot) throws -> (data: Data, pixelFormat: GLTexturePixelFormat) {
         guard let data = image.data else {
             throw GLTextureError.missingPixelData
         }
@@ -152,13 +152,14 @@ struct OpenGLTextureLoader: GLTextureLoader {
         }
 
         return (
-            tightlyPackedData(
+            try tightlyPackedData(
                 from: data,
                 width: image.width,
                 height: image.height,
                 sourceRowBytes: image.bytesPerRow,
                 sourcePixelBytes: channelCount,
                 alphaInfo: image.alphaInfo,
+                bitmapInfo: image.bitmapInfo,
                 outputByteCount: outputByteCount
             ),
             pixelFormat
@@ -197,7 +198,17 @@ struct OpenGLTextureLoader: GLTextureLoader {
         }
     }
 
-    /// Removes row padding and expands grayscale-alpha pixels to RGBA.
+    /// Removes row padding, normalizes alpha layouts, and premultiplies color channels.
+    /// - Parameters:
+    ///   - data: The validated source pixel bytes.
+    ///   - width: The image width in pixels.
+    ///   - height: The image height in pixels.
+    ///   - sourceRowBytes: The byte distance between source row starts.
+    ///   - sourcePixelBytes: The number of bytes occupied by each source pixel.
+    ///   - alphaInfo: The alpha layout used by each pixel.
+    ///   - bitmapInfo: The byte order used by each pixel.
+    ///   - outputByteCount: The number of packed bytes to reserve.
+    /// - Throws: `GLTextureError.invalidBitmapLayout` for unsupported alpha-only pixels.
     private func tightlyPackedData(
         from data: Data,
         width: Int,
@@ -205,8 +216,9 @@ struct OpenGLTextureLoader: GLTextureLoader {
         sourceRowBytes: Int,
         sourcePixelBytes: Int,
         alphaInfo: CGImageAlphaInfo,
+        bitmapInfo: CGBitmapInfo,
         outputByteCount: Int
-    ) -> Data {
+    ) throws -> Data {
         var packedData = Data()
         packedData.reserveCapacity(outputByteCount)
         let sourcePixelRowBytes = width * sourcePixelBytes
@@ -216,13 +228,55 @@ struct OpenGLTextureLoader: GLTextureLoader {
             let rowData = data.subdata(in: rowStart..<(rowStart + sourcePixelRowBytes))
             if sourcePixelBytes == 2 {
                 for pixelIndex in stride(from: 0, to: rowData.count, by: 2) {
-                    let alphaIndex = alphaInfo == .first || alphaInfo == .premultipliedFirst
-                        ? pixelIndex
-                        : pixelIndex + 1
-                    let grayIndex = alphaIndex == pixelIndex ? pixelIndex + 1 : pixelIndex
+                    let grayIndex: Int
+                    let alphaIndex: Int?
+                    switch alphaInfo {
+                    case .first, .premultipliedFirst:
+                        grayIndex = pixelIndex + 1
+                        alphaIndex = pixelIndex
+                    case .last, .premultipliedLast:
+                        grayIndex = pixelIndex
+                        alphaIndex = pixelIndex + 1
+                    case .noneSkipFirst:
+                        grayIndex = pixelIndex + 1
+                        alphaIndex = nil
+                    case .none, .noneSkipLast:
+                        grayIndex = pixelIndex
+                        alphaIndex = nil
+                    case .alphaOnly:
+                        throw GLTextureError.invalidBitmapLayout
+                    }
                     let gray = rowData[grayIndex]
-                    let alpha = rowData[alphaIndex]
-                    packedData.append(contentsOf: [gray, gray, gray, alpha])
+                    let alpha = alphaIndex.map { rowData[$0] } ?? 255
+                    let premultipliedGray = isPremultiplied(alphaInfo)
+                        ? gray
+                        : premultiply(gray, alpha: alpha)
+                    packedData.append(contentsOf: [
+                        premultipliedGray,
+                        premultipliedGray,
+                        premultipliedGray,
+                        alpha
+                    ])
+                }
+            } else if sourcePixelBytes == 4 {
+                guard let indices = rgbaComponentIndices(alphaInfo: alphaInfo, bitmapInfo: bitmapInfo) else {
+                    throw GLTextureError.invalidBitmapLayout
+                }
+                for pixelIndex in stride(from: 0, to: rowData.count, by: 4) {
+                    let alpha = indices.alpha.map { rowData[pixelIndex + $0] } ?? 255
+                    let red = rowData[pixelIndex + indices.red]
+                    let green = rowData[pixelIndex + indices.green]
+                    let blue = rowData[pixelIndex + indices.blue]
+                    if isPremultiplied(alphaInfo) || indices.alpha == nil {
+                        packedData.append(contentsOf: [red, green, blue, alpha])
+                    } else {
+                        packedData.append(contentsOf: [
+                            premultiply(red, alpha: alpha),
+                            premultiply(green, alpha: alpha),
+                            premultiply(blue, alpha: alpha),
+                            alpha
+                        ])
+                    }
                 }
             } else {
                 packedData.append(rowData)
@@ -230,5 +284,47 @@ struct OpenGLTextureLoader: GLTextureLoader {
         }
 
         return packedData
+    }
+
+    /// Resolves the red, green, blue, and optional alpha byte positions for a 32-bit pixel.
+    /// - Parameters:
+    ///   - alphaInfo: The source alpha placement and premultiplication state.
+    ///   - bitmapInfo: The source pixel byte order.
+    /// - Returns: The channel positions, or nil for alpha-only data.
+    private func rgbaComponentIndices(
+        alphaInfo: CGImageAlphaInfo,
+        bitmapInfo: CGBitmapInfo
+    ) -> (red: Int, green: Int, blue: Int, alpha: Int?)? {
+        let isLittleEndian = bitmapInfo == .byteOrder32Little
+        return switch alphaInfo {
+        case .first, .premultipliedFirst:
+            isLittleEndian ? (2, 1, 0, 3) : (1, 2, 3, 0)
+        case .last, .premultipliedLast:
+            isLittleEndian ? (3, 2, 1, 0) : (0, 1, 2, 3)
+        case .noneSkipFirst:
+            isLittleEndian ? (2, 1, 0, nil) : (1, 2, 3, nil)
+        case .noneSkipLast:
+            isLittleEndian ? (3, 2, 1, nil) : (0, 1, 2, nil)
+        case .none:
+            isLittleEndian ? (2, 1, 0, nil) : (0, 1, 2, nil)
+        case .alphaOnly:
+            nil
+        }
+    }
+
+    /// Returns whether the source alpha layout already stores premultiplied color channels.
+    /// - Parameter alphaInfo: The source alpha placement and premultiplication state.
+    /// - Returns: True when RGB values already include alpha.
+    private func isPremultiplied(_ alphaInfo: CGImageAlphaInfo) -> Bool {
+        alphaInfo == .premultipliedFirst || alphaInfo == .premultipliedLast
+    }
+
+    /// Multiplies an 8-bit straight-alpha color channel by its alpha.
+    /// - Parameters:
+    ///   - component: The unpremultiplied channel value.
+    ///   - alpha: The alpha channel value.
+    /// - Returns: The rounded premultiplied channel.
+    private func premultiply(_ component: UInt8, alpha: UInt8) -> UInt8 {
+        UInt8((UInt16(component) * UInt16(alpha) + 127) / 255)
     }
 }

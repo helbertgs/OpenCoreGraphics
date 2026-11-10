@@ -15,6 +15,7 @@
 - A exportação BMP lê pixels pelo `PixelSurface.pixel(x:y:)`, converte alpha pré-multiplicado para reto e escreve linhas top-down em BGRA.
 - A apresentação direta de um `PixelSurface` no OpenGL usa identidade estável por alvo e `GLTextureCache.updateTexture`; atualize a imagem existente com `glTexSubImage2D` e realoque o armazenamento somente quando as dimensões mudarem.
 - Imagens usam linhas top-down no `CGImage`; ao comparar renderizadores, mantenha coerentes a coordenada `v` do shader GL e a amostragem vertical do software, validando com um bitmap assimétrico.
+- O pipeline GL recebe cores e texturas RGBA pré-multiplicadas; converta alpha direto no ponto de upload e preserve componentes já pré-multiplicados antes de usar `GL_ONE, GL_ONE_MINUS_SRC_ALPHA`.
 - O working tree tem trabalho em andamento do usuário (arquivos novos/movidos ainda não commitados). Os commits das stories incluem **apenas** os arquivos tocados pela story, mais `.docs/tasks/prd.json` e `progress.md`.
 - Valores `struct` que controlam memória alocada usam um proprietário por referência com `deinit`; cópias do valor compartilham a alocação sem duplicar nem liberar o ponteiro prematuramente.
 
@@ -530,4 +531,14 @@
 - Files changed: `Sources/OpenCoreGraphics/Services/Window Services/CGWindow.swift`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
 - **Learnings for future iterations:**
   - A criação com um hint opcional pode falhar antes da consulta das capacidades GL; faça fallback na criação e também verifique a capacidade no framebuffer criado.
+---
+
+## 2026-11-10 - US-055
+- O blending do OpenGL agora usa configurações separadas de RGB e alpha por lote, com mapeamentos diretos para `normal`, `screen`, `clear`, `copy`, modos Porter-Duff e `plusLighter`; os outros modos estão documentados como fallback para `normal`.
+- Cores sólidas são pré-multiplicadas antes do shader; texturas têm canais convertidos para RGBA pré-multiplicado, considerando posição do alpha e byte order.
+- O Sample inclui `--test-blend-modes`, com retângulos semitransparentes usando `normal` e `multiply`; o segundo usa o fallback documentado no backend GL.
+- `swift test` passou (147 testes em 28 suítes), `swift build --target OpenCoreGraphicsSample`, validação de `.docs/tasks/prd.json` e `git diff --check` passaram.
+- Files changed: `Sources/OpenCoreGraphics/Rendering/GL/GLBlendMode.swift`, `Sources/OpenCoreGraphics/Rendering/GL/GLBatchBuffer.swift`, `Sources/OpenCoreGraphics/Rendering/GL/GLRenderer.swift`, `Sources/OpenCoreGraphics/Rendering/GL/GLTextureLoader.swift`, `Sources/OpenCoreGraphicsSample/main.swift`, `Tests/OpenCoreGraphicsTests/Rendering/GLBlendModeTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/GLRendererTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/GLTextureCacheTests.swift`, `.docs/GLBlendModeMapping.md`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
+- **Learnings for future iterations:**
+  - `CGImageAlphaInfo` e `CGBitmapInfo` determinam tanto a posição dos canais quanto se os valores RGB já incluem alpha; normalize esses casos para RGBA pré-multiplicado antes do upload, sem multiplicar duas vezes os dados premultiplicados.
 ---
