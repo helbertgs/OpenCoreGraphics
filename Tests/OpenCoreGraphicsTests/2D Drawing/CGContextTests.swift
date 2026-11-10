@@ -73,6 +73,54 @@ struct CGContextTests {
         #expect(context.ctm == translation * scaling * rotation * concatenated)
     }
 
+    /// Verifies pixel-space coordinate conversions and inverse CTM behavior.
+    @Test
+    func coordinateConversionsUsePixelsAndRoundTrip() {
+        let context = CGContext(
+            data: nil,
+            width: 200,
+            height: 100,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: .genericRGBLinear,
+            bitmapInfo: 0
+        )
+        let points = [
+            CGPoint.zero,
+            CGPoint(x: 200, y: 100),
+            CGPoint(x: 12, y: 37),
+            CGPoint(x: -5, y: 8),
+            CGPoint(x: 72.5, y: 41.25)
+        ]
+        let transforms = [
+            CGAffineTransform.identity,
+            .translate(10, -5),
+            .scale(2, 3),
+            .rotate(.pi / 4)
+        ]
+
+        context.ctm = .identity
+        #expect(context.convertToDeviceSpace(CGPoint(x: 200, y: 100)) == CGPoint(x: 200, y: 100))
+
+        for transform in transforms {
+            context.ctm = transform
+            #expect(context.userSpaceToDeviceSpaceTransform == transform)
+
+            for point in points {
+                let devicePoint = context.convertToDeviceSpace(point)
+                let userPoint = context.convertToUserSpace(devicePoint)
+                #expect(abs(userPoint.x - point.x) < 1e-10)
+                #expect(abs(userPoint.y - point.y) < 1e-10)
+            }
+        }
+
+        context.ctm = .init(1) * .scale(2, 3) * .translate(10, -5)
+        let userRect = CGRect(x: 2, y: 4, width: 8, height: 6)
+        #expect(context.convertToUserSpace(context.convertToDeviceSpace(userRect)) == userRect)
+        let userSize = CGSize(width: 8, height: 6)
+        #expect(context.convertToUserSpace(context.convertToDeviceSpace(userSize)) == userSize)
+    }
+
     /// Verifies that every curve and arc method applies the context transform.
     @Test
     func pathCurvesAndArcsApplyCurrentTransform() throws {

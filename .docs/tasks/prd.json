@@ -148,8 +148,8 @@
         "Build e testes passam"
       ],
       "priority": 10,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "As conversões de pontos, retângulos e tamanhos agora usam a CTM como transformação em pixels, e a conversão de retângulos calcula os limites dos quatro cantos. Um teste identificou que CGAffineTransform.inverse não reverte translação; as conversões usam a inversa 2D calculada localmente."
     },
     {
       "id": "US-011",

@@ -47,33 +47,37 @@ open class CGWindowContext {
 
     /// Returns an affine transform that maps user space coordinates to device space coordinates.
     open var userSpaceToDeviceSpaceTransform: CGAffineTransform {
-        CGAffineTransform.orthographic(0, Double(width), 0, Double(height), -1, 1)
+        ctm
+    }
+
+    /// Returns the inverse affine transform used for device-to-user conversions.
+    private var deviceSpaceToUserSpaceTransform: CGAffineTransform {
+        let transform = userSpaceToDeviceSpaceTransform
+        let determinant = transform.m11 * transform.m22 - transform.m21 * transform.m12
+        guard determinant != 0 else { return .identity }
+
+        var inverse = CGAffineTransform.identity
+        inverse.m11 = transform.m22 / determinant
+        inverse.m12 = -transform.m12 / determinant
+        inverse.m21 = -transform.m21 / determinant
+        inverse.m22 = transform.m11 / determinant
+        inverse.m41 = (transform.m21 * transform.m42 - transform.m22 * transform.m41) / determinant
+        inverse.m42 = (transform.m12 * transform.m41 - transform.m11 * transform.m42) / determinant
+        return inverse
     }
 
     /// Returns a point that is transformed from user space coordinates to device space coordinates.
     /// - Parameter point: The point, in user space coordinates, to transform.
     /// - Returns: The coordinates of the point in device space coordinates.
     public func convertToDeviceSpace(_ point: CGPoint) -> CGPoint {
-        let width = Double(self.width)
-        let height = Double(self.height)
-
-        let x = (point.x / width) * 2.0 - 1.0
-        let y = (point.y / height) * 2.0 - 1.0
-
-        return .init(x: x, y: y)
+        point.applying(userSpaceToDeviceSpaceTransform)
     }
 
     /// Returns a point that is transformed from device space coordinates to user space coordinates.
     /// - Parameter point: The point, in device space coordinates, to transform.
     /// - Returns: The coordinates of the point in user space coordinates.
     public func convertToUserSpace(_ point: CGPoint) -> CGPoint {
-        let width = Double(self.width)
-        let height = Double(self.height)
-
-        let x = (point.x + 1.0) * width / 2.0
-        let y = (point.y + 1.0) * height / 2.0
-
-        return .init(x: x, y: y)
+        point.applying(deviceSpaceToUserSpaceTransform)
     }
 
     /// Returns a rectangle that is transformed from user space coordinate to device space coordinates.
@@ -83,15 +87,21 @@ open class CGWindowContext {
     /// - Parameter rect: The rectangle, in user space coordinates, to transform.
     /// - Returns: The rectangle in device space coordinates.
     open func convertToDeviceSpace(_ rect: CGRect) -> CGRect {
-        let width = Double(self.width)
-        let height = Double(self.height)
-
-        let x = (rect.origin.x / width) * 2.0 - 1.0
-        let y = (rect.origin.y / height) * 2.0 - 1.0
-        let w = (rect.size.width / width) * 2.0
-        let h = (rect.size.height / height) * 2.0
-
-        return .init(x: x, y: y, width: w, height: h)
+        let transform = userSpaceToDeviceSpaceTransform
+        let corners = [
+            CGPoint(x: rect.minX, y: rect.minY),
+            CGPoint(x: rect.maxX, y: rect.minY),
+            CGPoint(x: rect.minX, y: rect.maxY),
+            CGPoint(x: rect.maxX, y: rect.maxY)
+        ].map { $0.applying(transform) }
+        let first = corners[0]
+        return corners.dropFirst().reduce(CGRect(x: first.x, y: first.y, width: 0, height: 0)) { rect, point in
+            let minX = min(rect.minX, point.x)
+            let minY = min(rect.minY, point.y)
+            let maxX = max(rect.maxX, point.x)
+            let maxY = max(rect.maxY, point.y)
+            return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+        }
     }
 
     /// Returns a rectangle that is transformed from device space coordinate to user space coordinates.
@@ -101,41 +111,35 @@ open class CGWindowContext {
     /// - Parameter rect: The rectangle, in device space coordinates, to transform.
     /// - Returns: The rectangle in user space coordinates.
     open func convertToUserSpace(_ rect: CGRect) -> CGRect {
-        let width = Double(self.width)
-        let height = Double(self.height)
-
-        let x = (rect.origin.x + 1.0) * width / 2.0
-        let y = (rect.origin.y + 1.0) * height / 2.0
-        let w = rect.size.width * width / 2.0
-        let h = rect.size.height * height / 2.0
-
-        return .init(x: x, y: y, width: w, height: h)
+        let transform = deviceSpaceToUserSpaceTransform
+        let corners = [
+            CGPoint(x: rect.minX, y: rect.minY),
+            CGPoint(x: rect.maxX, y: rect.minY),
+            CGPoint(x: rect.minX, y: rect.maxY),
+            CGPoint(x: rect.maxX, y: rect.maxY)
+        ].map { $0.applying(transform) }
+        let first = corners[0]
+        return corners.dropFirst().reduce(CGRect(x: first.x, y: first.y, width: 0, height: 0)) { rect, point in
+            let minX = min(rect.minX, point.x)
+            let minY = min(rect.minY, point.y)
+            let maxX = max(rect.maxX, point.x)
+            let maxY = max(rect.maxY, point.y)
+            return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+        }
     }
 
     /// Returns a size that is transformed from user space coordinates to device space coordinates.
     /// - Parameter size: The size, in user space coordinates, to transform.
     /// - Returns: The size in device space coordinates.
     open func convertToDeviceSpace(_ size: CGSize) -> CGSize {
-        let width = Double(self.width)
-        let height = Double(self.height)
-
-        let w = (size.width / width) * 2.0
-        let h = (size.height / height) * 2.0
-
-        return .init(width: w, height: h)
+        size.applying(userSpaceToDeviceSpaceTransform)
     }
 
     /// Returns a size that is transformed from device space coordinates to user space coordinates.
     /// - Parameter size: The size, in device space coordinates, to transform.
     /// - Returns: The size in user space coordinates.
     open func convertToUserSpace(_ size: CGSize) -> CGSize {
-        let width = Double(self.width)
-        let height = Double(self.height)
-
-        let w = size.width * width / 2.0
-        let h = size.height * height / 2.0
-
-        return .init(width: w, height: h)
+        size.applying(deviceSpaceToUserSpaceTransform)
     }
 
     // MARK: - Constructing a Current Graphics Path

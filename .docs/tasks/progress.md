@@ -4,6 +4,7 @@
 - Para ver só os erros de build: `swift build 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -E "error:|Build complete"`. O Swift para no primeiro arquivo com erro, então **depois de corrigir um erro, rode o build de novo**: outros erros podem estar escondidos.
 - O build usa o sistema do Xcode (`.build/out/...`); o aviso "found 2 file(s) which are unhandled" é o `Resources/default/*.glsl` ainda não declarado em `Package.swift` (resolvido na US-005).
 - `CGColor.components` é `[Double]`; qualquer chamada `glad_*` que recebe `GLfloat` precisa de `Float(...)`.
+- As conversões entre espaço de usuário e pixels usam `ctm`; `CGAffineTransform.inverse` não reverte corretamente translações 2D, então o contexto calcula a inversa 2D localmente.
 - O working tree tem trabalho em andamento do usuário (arquivos novos/movidos ainda não commitados). Os commits das stories incluem **apenas** os arquivos tocados pela story, mais `.docs/tasks/prd.json` e `progress.md`.
 
 ---
@@ -101,4 +102,14 @@
 - **Learnings for future iterations:**
   - Os métodos equivalentes do `CGPath` já aceitam `transform:`; encaminhe a CTM do contexto em vez de duplicar a matemática.
   - Pontos produzidos por `sin`/`cos` precisam de tolerância em testes por causa de resíduos de ponto flutuante.
+---
+
+## 2026-11-09 - US-010
+- Conversões de pontos, retângulos e tamanhos agora usam a CTM e preservam coordenadas em pixels, sem mapear para NDC.
+- Conversões de retângulos transformam os quatro cantos para obter a caixa delimitadora; conversões inversas usam a inversa 2D da CTM.
+- Testes cobrem cinco pontos sob quatro CTMs, a borda superior direita de um contexto 200×100, e a ida e volta de retângulos/tamanhos com escala e translação.
+- `swift test --filter CGContextTests` passou (6 testes); `swift test` passou (26 testes).
+- **Learnings for future iterations:**
+  - `CGAffineTransform.inverse` não reverte corretamente a translação em matrizes 2D; as conversões do contexto precisam da inversa 2D calculada explicitamente até a implementação geral ser corrigida.
+  - `CGWindowContext` mantém a API duplicada de `CGContext` até a US-014; alterações em conversões de coordenadas precisam permanecer alinhadas nos dois tipos.
 ---
