@@ -1,26 +1,39 @@
 # Core line coverage
 
-Measured on 2026-11-10 with:
-
-```sh
-swift test --enable-code-coverage
-```
+Measured on 2026-11-10 with `swift test --enable-code-coverage`.
 
 The generated LLVM coverage report is available at
 `.build/out/Products/Debug/codecov/OpenCoreGraphics.json`.
 
-| Type | Lines covered | Line coverage |
+| Source file | Lines covered | Line coverage |
 |---|---:|---:|
-| `CGContext` | 342 / 408 | 83.82% |
-| `CGGraphicsState` | 16 / 16 | 100% |
-| `CGPath` | 201 / 214 | 93.93% |
-| `CGColor` | 49 / 50 | 98.00% |
-| `CGColorSpace` | 26 / 29 | 89.66% |
-| `CGAffineTransform` | 378 / 400 | 94.50% |
-| `CGPoint` | 41 / 43 | 95.35% |
-| `CGRect` | 69 / 72 | 95.83% |
-| `CGSize` | 16 / 20 | 80.00% |
-| `CGVector` | 96 / 104 | 92.31% |
-| `DrawCommand` | N/A | Declaration-only source; tests construct and compare all five cases. |
+| `CGBitmapInfo.swift` | 0 / 15 | 0.00% |
+| `CGContext.swift` | 771 / 844 | 91.35% |
+| `CGImage.swift` | 102 / 102 | 100.00% |
+| `CGLayer.swift` | 0 / 4 | 0.00% |
+| `CGPath.swift` | 540 / 600 | 90.00% |
+| `CGColor.swift` | 85 / 87 | 97.70% |
+| `CGColorSpace.swift` | 26 / 29 | 89.66% |
+| `CGFont.swift` | 0 / 29 | 0.00% |
+| `CGGradient.swift` | 18 / 18 | 100.00% |
+| `CGAffineTransform.swift` | 378 / 400 | 94.50% |
+| `CGPoint.swift` | 41 / 43 | 95.35% |
+| `CGRect.swift` | 70 / 72 | 97.22% |
+| `CGSize.swift` | 16 / 20 | 80.00% |
+| `CGVector.swift` | 96 / 104 | 92.31% |
+| `BMPEncoder.swift` | 106 / 110 | 96.36% |
+| `BitmapRenderTarget.swift` | 15 / 18 | 83.33% |
+| `CGRenderTarget.swift` | 17 / 17 | 100.00% |
+| `DrawCommand.swift` | 14 / 14 | 100.00% |
+| `PathFlattener.swift` | 144 / 156 | 92.31% |
+| `PixelSurface.swift` | 102 / 102 | 100.00% |
+| `SoftwareRenderer.swift` | 849 / 1,009 | 84.14% |
+| `Stroker.swift` | 309 / 361 | 85.60% |
+| `CGEvent.swift` | 0 / 36 | 0.00% |
+| `CGGraphicsState.swift` | 37 / 39 | 94.87% |
+| `GLFWPlatform.swift` | 20 / 26 | 76.92% |
+| `CGBitmapParameters.swift` | 7 / 7 | 100.00% |
+| `CGDataProvider.swift` | 3 / 16 | 18.75% |
+| **Total** | **3,766 / 4,278** | **88.03%** |
 
-The full test run passed with 53 tests in 12 suites.
+The aggregation includes all Swift source files in the `OpenCoreGraphics` target, excluding only `Rendering/GL/` and `CGWindow.swift`. Dependency, test, and Sample files are not included. The full instrumented test run passed with 159 tests in 29 suites.

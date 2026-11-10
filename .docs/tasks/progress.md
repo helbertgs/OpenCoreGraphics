@@ -17,6 +17,7 @@
 - A apresentação direta de um `PixelSurface` no OpenGL usa identidade estável por alvo e `GLTextureCache.updateTexture`; atualize a imagem existente com `glTexSubImage2D` e realoque o armazenamento somente quando as dimensões mudarem.
 - Imagens usam linhas top-down no `CGImage`; ao comparar renderizadores, mantenha coerentes a coordenada `v` do shader GL e a amostragem vertical do software, validando com um bitmap assimétrico.
 - O pipeline GL recebe cores e texturas RGBA pré-multiplicadas; converta alpha direto no ponto de upload e preserve componentes já pré-multiplicados antes de usar `GL_ONE, GL_ONE_MINUS_SRC_ALPHA`.
+- Ao agregar a cobertura de `swift test --enable-code-coverage`, filtre o JSON exportado pelo diretório do target; o arquivo inclui linhas de dependências e testes que não pertencem ao denominador do módulo.
 - O working tree tem trabalho em andamento do usuário (arquivos novos/movidos ainda não commitados). Os commits das stories incluem **apenas** os arquivos tocados pela story, mais `.docs/tasks/prd.json` e `progress.md`.
 - Valores `struct` que controlam memória alocada usam um proprietário por referência com `deinit`; cópias do valor compartilham a alocação sem duplicar nem liberar o ponteiro prematuramente.
 
@@ -572,4 +573,14 @@
 - Files changed: `Sources/OpenCoreGraphics/Colors and Fonts/CGGradient.swift`, `Sources/OpenCoreGraphics/2D Drawing/CGContext.swift`, `Sources/OpenCoreGraphics/Rendering/DrawCommand.swift`, `Sources/OpenCoreGraphics/Rendering/SoftwareRenderer.swift`, `Sources/OpenCoreGraphics/Rendering/GL/GLRenderer.swift`, `Sources/OpenCoreGraphics/Rendering/GL/GLShaderCache.swift`, `Sources/OpenCoreGraphics/Resources/gradient/vertex.glsl`, `Sources/OpenCoreGraphics/Resources/gradient/fragment.glsl`, `Sources/OpenCoreGraphicsSample/main.swift`, `Tests/OpenCoreGraphicsTests/Colors and Fonts/CGGradientTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/CGContextCommandTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/CGShaderSourceTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/SoftwareRendererTests.swift`, `.docs/Gradients.md`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
 - **Learnings for future iterations:**
   - Test gradient stops and geometry in linear color space so numeric pixel assertions are independent of sRGB encoding; keep stop colors premultiplied consistently in both backends.
+---
+
+## 2026-11-10 - US-059
+- A execução instrumentada `swift test --enable-code-coverage` passou com 159 testes em 29 suítes.
+- A cobertura de linhas do target `OpenCoreGraphics`, excluindo somente `Rendering/GL/` e `CGWindow.swift`, ficou em 3.766/4.278 linhas (**88,03%**).
+- `.docs/tasks/coverage.md` registra o resultado por arquivo, a data, o escopo do cálculo e o caminho do JSON exportado pelo SwiftPM.
+- `swift build --target OpenCoreGraphicsSample`, validação do JSON e `git diff --check` passaram.
+- Files changed: `.docs/tasks/coverage.md`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
+- **Learnings for future iterations:**
+  - O JSON de cobertura do SwiftPM inclui dependências e fontes de teste; filtre pelos caminhos de `Sources/OpenCoreGraphics/` e aplique apenas as exclusões especificadas antes de somar `summary.lines`.
 ---

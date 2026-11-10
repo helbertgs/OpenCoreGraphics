@@ -892,8 +892,8 @@
         "Build e testes passam"
       ],
       "priority": 59,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "A cobertura de linhas medida por `swift test --enable-code-coverage` foi de 3.766/4.278 (88,03%) no target `OpenCoreGraphics`, excluindo somente `Rendering/GL/` e `CGWindow.swift`. O relatório por arquivo, com data e escopo, está em `.docs/tasks/coverage.md`. O teste instrumentado passou com 159 testes em 29 suítes."
     },
     {
       "id": "US-060",
