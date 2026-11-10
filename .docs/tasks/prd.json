@@ -113,14 +113,14 @@
       "title": "Unificar a composição da CTM",
       "description": "Como usuário da API, quero que `translateBy`, `scaleBy`, `rotate` e `concatenate` componham a CTM como no Core Graphics da Apple.",
       "acceptanceCriteria": [
-        "Os quatro métodos usam a **mesma** regra de composição (`ctm = transform × ctm`), hoje inconsistente (`CGContext.swift:818`, `:827`, `:837`)",
+        "Os quatro métodos usam a **mesma** regra de composição (`ctm = ctm × transform`), hoje inconsistente (`CGContext.swift:818`, `:827`, `:837`)",
         "Teste: após `translateBy(x: 10, y: 20)` seguido de `scaleBy(x: 2, y: 3)`, o ponto de usuário `(1, 1)` vai para `(12, 23)` no espaço de destino",
         "A documentação `///` de `concatenate` descreve a regra real",
         "Build e testes passam"
       ],
       "priority": 8,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Os critérios textuais divergiam: com a convenção atual de CGPoint.applying e CGAffineTransform.*, transform * ctm produziria (22, 63), enquanto o teste exige (12, 23). Seguindo a decisão do usuário, os quatro métodos compõem como ctm * transform; o critério e a documentação descrevem essa regra."
     },
     {
       "id": "US-009",

@@ -743,7 +743,8 @@ open class CGWindowContext {
     /// 
     /// - Parameter angle: The angle, in radians, by which to rotate the coordinate space of the specified context. Positive values rotate counterclockwise and negative values rotate clockwise.)
     public func rotate(by angle: Double) {
-        self.ctm = self.ctm.rotated(by: angle)
+        let rotation = CGAffineTransform.rotate(angle)
+        self.ctm = self.ctm * rotation
     }
 
     /// Changes the scale of the user coordinate system in a context.
@@ -752,7 +753,7 @@ open class CGWindowContext {
     ///   - sy: The factor by which to scale the y-axis of the coordinate space of the specified context.
     public func scaleBy(x sx: Double, y sy: Double) {
         let scaling = CGAffineTransform.scale(sx, sy)
-        self.ctm = scaling * self.ctm
+        self.ctm = self.ctm * scaling
     }
 
     /// Changes the origin of the user coordinate system in a context.
@@ -768,10 +769,10 @@ open class CGWindowContext {
     /// 
     /// When you call this function, it concatenates (that is, it combines) two matrices, by multiplying them together. 
     /// The order in which matrices are concatenated is important, as the operations are not commutative. 
-    /// The resulting CTM in the context is: CTMnew = transform * CTMcontext.
+    /// The resulting CTM in the context is: CTMnew = CTMcontext * transform.
     /// - Parameter transform: The transformation matrix to apply to the specified context’s current transformation matrix.
     public func concatenate(_ transform: CGAffineTransform) {
-        self.ctm = self.ctm.concatenating(transform)
+        self.ctm = self.ctm * transform
     }
 
     // MARK: - Setting Path Drawing Options

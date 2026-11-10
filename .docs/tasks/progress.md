@@ -82,3 +82,13 @@
   - `CGContext` e `CGWindowContext` ainda duplicam a implementação da API; mudanças de estado devem manter ambos sincronizados até a unificação prevista na US-014.
   - O current path não é parte de `CGGraphicsState` e não deve ser copiado nem restaurado.
 ---
+
+## 2026-11-09 - US-008
+- Unificada a composição de `rotate`, `scaleBy`, `translateBy` e `concatenate` para `ctm = ctm * transform` em `CGContext` e `CGWindowContext`.
+- Atualizada a documentação de `concatenate` e adicionados testes para verificar a ordem de composição e o ponto `(1, 1) -> (12, 23)` após translação e escala.
+- A fórmula textual original (`transform * ctm`) contradizia o resultado aceito no critério; o usuário escolheu priorizar o resultado `(12, 23)`.
+- Files changed: `Sources/OpenCoreGraphics/Services/Window Services/CGContext.swift`, `Sources/OpenCoreGraphics/Services/Window Services/CGWindowContext.swift`, `Tests/OpenCoreGraphicsTests/2D Drawing/CGContextTests.swift`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
+- **Learnings for future iterations:**
+  - Com a convenção de `CGPoint.applying` e do operador `CGAffineTransform *`, a sequência translação seguida de escala requer CTM `translation * scaling` para preservar a translação.
+  - Ainda há contextos duplicados; mantenha ambos alinhados até a US-014.
+---

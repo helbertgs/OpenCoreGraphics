@@ -51,6 +51,28 @@ struct CGContextTests {
         #expect(context.path == pathAfterChanges)
     }
 
+    /// Verifies that all context transforms compose in the same order.
+    @Test
+    func transformMethodsComposeOnTheRight() {
+        let context = makeContext()
+        let translation = CGAffineTransform.translate(10, 20)
+        let scaling = CGAffineTransform.scale(2, 3)
+        let rotation = CGAffineTransform.rotate(.pi / 2)
+        let concatenated = CGAffineTransform.translate(4, 5)
+
+        context.translateBy(x: 10, y: 20)
+        context.scaleBy(x: 2, y: 3)
+
+        #expect(context.ctm == translation * scaling)
+        #expect(CGPoint(x: 1, y: 1).applying(context.ctm) == CGPoint(x: 12, y: 23))
+
+        context.rotate(by: .pi / 2)
+        #expect(context.ctm == translation * scaling * rotation)
+
+        context.concatenate(concatenated)
+        #expect(context.ctm == translation * scaling * rotation * concatenated)
+    }
+
     /// Verifies the initial values for every graphics-state parameter.
     @Test
     func defaultGraphicsStateMatchesCoreGraphicsValues() {
