@@ -600,8 +600,8 @@
         "Build e testes passam"
       ],
       "priority": 40,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "fillEllipse e strokeEllipse usam ambas CGPath(ellipseIn:transform:ctm); teste grava seus caminhos e confirma a mesma transformação. strokeLineSegments cria um subpath separado para cada par, transforma os pontos e chama strokePath. Sample aceita --test-context-shapes para mostrar elipse preenchida, elipse contornada e duas linhas. swift test passou (99 testes em 21 suítes)."
     },
     {
       "id": "US-041",

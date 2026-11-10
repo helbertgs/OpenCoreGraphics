@@ -18,6 +18,24 @@ window.display = {
         return
     }
 
+    if CommandLine.arguments.contains("--test-context-shapes") {
+        cgContext.setFillColor(CGColor(red: 0.2, green: 0.5, blue: 0.8, alpha: 1))
+        cgContext.fillEllipse(in: CGRect(x: 40, y: 70, width: 160, height: 110))
+
+        cgContext.setStrokeColor(CGColor(red: 0.8, green: 0.3, blue: 0.2, alpha: 1))
+        cgContext.setLineWidth(8)
+        cgContext.strokeEllipse(in: CGRect(x: 300, y: 70, width: 160, height: 110))
+
+        cgContext.setStrokeColor(CGColor(red: 0.2, green: 0.2, blue: 0.2, alpha: 1))
+        cgContext.strokeLineSegments(between: [
+            CGPoint(x: 60, y: 300),
+            CGPoint(x: 220, y: 360),
+            CGPoint(x: 290, y: 360),
+            CGPoint(x: 450, y: 300)
+        ])
+        return
+    }
+
     if CommandLine.arguments.contains("--test-rendering") {
         var windingStar = CGPath()
         windingStar.move(to: CGPoint(x: 128, y: 38))

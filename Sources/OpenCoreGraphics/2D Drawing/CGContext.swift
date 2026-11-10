@@ -534,6 +534,17 @@ open class CGContext {
     /// - Parameter points: An array of points, organized as pairs—the starting point of a line segment followed by the ending point of a line segment. 
     ///                     For example, the first point in the array specifies the starting position of the first line, the second point specifies the ending position of the first line, the third point specifies the starting position of the second line, and so forth.
     public func strokeLineSegments(between points: [CGPoint]) {
+        beginPath()
+        guard points.count >= 2 else {
+            strokePath()
+            return
+        }
+
+        for index in stride(from: 0, to: points.count - 1, by: 2) {
+            move(to: points[index])
+            addLine(to: points[index + 1])
+        }
+        strokePath()
     }
 
     // MARK: - Drawing Images

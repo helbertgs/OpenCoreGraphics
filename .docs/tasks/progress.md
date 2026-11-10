@@ -374,3 +374,11 @@
 - **Learnings for future iterations:**
   - O contorno de um stroke fechado tem anéis com orientações opostas; acumular ambos pelo winding conserva o interior transparente.
 ---
+
+## 2026-11-10 - US-040
+- Confirmado que `fillEllipse` e `strokeEllipse` criam paths com a mesma CTM; novo teste valida ambos os comandos sob translação e escala.
+- `strokeLineSegments(between:)` abre um path novo, transforma cada par de pontos em um subpath independente e delega ao `strokePath`.
+- Teste com quatro pontos confirma dois segmentos transformados e um comando de stroke; o Sample aceita `--test-context-shapes` para mostrar elipses e segmentos. `swift test` passou (99 testes em 21 suítes).
+- **Learnings for future iterations:**
+  - Para garantir segmentos independentes, emita `move(to:)` antes de cada par; `addLine(to:)` sozinho conectaria os pares.
+---

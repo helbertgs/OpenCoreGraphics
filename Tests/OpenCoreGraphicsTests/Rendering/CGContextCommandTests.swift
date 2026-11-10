@@ -164,6 +164,68 @@ struct CGContextCommandTests {
         ))
     }
 
+    /// Verifies fill and stroke ellipse paths use the same current transformation.
+    @Test
+    func ellipseOperationsApplyCurrentTransformConsistently() {
+        let (context, target) = makeRecordingContext()
+        let rect = CGRect(x: 2, y: 3, width: 10, height: 8)
+        let transform = CGAffineTransform.translate(7, 11) * .scale(2, 3)
+        context.ctm = transform
+        context.setFillColor(.black)
+        context.setStrokeColor(.white)
+
+        context.fillEllipse(in: rect)
+        context.strokeEllipse(in: rect)
+        context.flush()
+
+        #expect(target.commands == [
+            .fillPath(
+                path: CGPath(ellipseIn: rect, transform: transform),
+                rule: .winding,
+                color: .black,
+                blendMode: .normal
+            ),
+            .strokePath(
+                path: CGPath(ellipseIn: rect, transform: transform),
+                color: .white,
+                style: StrokeStyle(width: 1, cap: .butt, join: .miter, miterLimit: 10, dashLengths: []),
+                blendMode: .normal
+            )
+        ])
+    }
+
+    /// Verifies four points create two independent transformed line segments.
+    @Test
+    func strokeLineSegmentsRecordsOneSubpathPerPointPair() throws {
+        let (context, target) = makeRecordingContext()
+        let transform = CGAffineTransform.translate(10, 20)
+        let points = [
+            CGPoint(x: 1, y: 2),
+            CGPoint(x: 3, y: 4),
+            CGPoint(x: 5, y: 6),
+            CGPoint(x: 7, y: 8)
+        ]
+        context.ctm = transform
+        context.setStrokeColor(.white)
+
+        context.strokeLineSegments(between: points)
+        context.flush()
+
+        var expectedPath = CGPath()
+        expectedPath.move(to: points[0].applying(transform))
+        expectedPath.addLine(to: points[1].applying(transform))
+        expectedPath.move(to: points[2].applying(transform))
+        expectedPath.addLine(to: points[3].applying(transform))
+        let command = try #require(target.commands.first)
+        #expect(target.commands.count == 1)
+        #expect(command == .strokePath(
+            path: expectedPath,
+            color: .white,
+            style: StrokeStyle(width: 1, cap: .butt, join: .miter, miterLimit: 10, dashLengths: []),
+            blendMode: .normal
+        ))
+    }
+
     /// Verifies fill and stroke color convenience methods capture their color spaces.
     @Test
     func colorConvenienceMethodsCaptureColorsAndBlendMode() {
