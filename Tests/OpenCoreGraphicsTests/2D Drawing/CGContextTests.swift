@@ -148,7 +148,9 @@ struct CGContextTests {
         context.beginPath()
         context.move(to: CGPoint(x: 1, y: 1))
         context.addArc(tangent1End: CGPoint(x: 3, y: 1), tangent2End: CGPoint(x: 3, y: 4), radius: 1)
-        #expect(context.path?.currentPoint == CGPoint(x: 6, y: 8))
+        #expect(abs((context.path?.currentPoint.x ?? 0) - 6) < 1e-6)
+        #expect(abs((context.path?.currentPoint.y ?? 0) - 4) < 1e-6)
+        #expect(context.path?.subpath.last?.type == .addCurveToPoint)
 
         context.beginPath()
         context.move(to: CGPoint(x: 1, y: 1))

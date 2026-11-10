@@ -479,8 +479,8 @@
         "Build e testes passam"
       ],
       "priority": 32,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Arcos angulares respeitam o sentido e são aproximados por curvas Bézier cúbicas em segmentos de até 90 graus; arcos tangentes calculam pontos de tangência e centro. CGContext converte o ponto corrente para espaço de usuário antes de gerar o arco e adiciona os elementos transformados ao caminho existente. swift test passou (81 testes em 19 suítes)."
     },
     {
       "id": "US-033",

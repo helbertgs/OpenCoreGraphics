@@ -1,3 +1,4 @@
+import Darwin
 import Testing
 @testable import OpenCoreGraphics
 
@@ -87,23 +88,80 @@ struct CGPathTests {
         #expect(path.subpath.count > 0)
     }
 
-    @Test func addArc() {
+    /// Verifies a quarter-circle uses a cubic curve and remains close to the circle.
+    @Test
+    func addArc() throws {
         var path = CGPath()
-        path.addArc(center: CGPoint(x: 0, y: 0), radius: 5, startAngle: 0, endAngle: .pi, clockwise: false)
-        #expect(path.subpath.count > 0)
+        path.addArc(center: .zero, radius: 10, startAngle: 0, endAngle: .pi / 2, clockwise: false)
+
+        #expect(path.subpath.map(\.type) == [.moveToPoint, .addCurveToPoint])
+        #expect(abs(path.currentPoint.x) < 1e-6)
+        #expect(abs(path.currentPoint.y - 10) < 1e-6)
+        let curve = try #require(path.subpath.last?.points)
+        let midpoint = CGPoint(
+            x: (curve[0].x + 3 * curve[1].x + 3 * curve[2].x + curve[3].x) / 8,
+            y: (curve[0].y + 3 * curve[1].y + 3 * curve[2].y + curve[3].y) / 8
+        )
+        #expect(abs(hypot(midpoint.x, midpoint.y) - 10) < 0.01)
     }
 
-    @Test func addArcTangent() {
+    /// Verifies clockwise and counterclockwise arcs follow their requested direction.
+    @Test
+    func addArcRespectsClockwiseDirection() {
+        var counterclockwisePath = CGPath()
+        counterclockwisePath.addArc(
+            center: .zero,
+            radius: 10,
+            startAngle: 0,
+            endAngle: .pi / 2,
+            clockwise: false
+        )
+        var clockwisePath = CGPath()
+        clockwisePath.addArc(
+            center: .zero,
+            radius: 10,
+            startAngle: 0,
+            endAngle: .pi / 2,
+            clockwise: true
+        )
+
+        #expect(counterclockwisePath.subpath.filter { $0.type == .addCurveToPoint }.count == 1)
+        #expect(clockwisePath.subpath.filter { $0.type == .addCurveToPoint }.count == 3)
+        #expect(abs(clockwisePath.currentPoint.x) < 1e-6)
+        #expect(abs(clockwisePath.currentPoint.y - 10) < 1e-6)
+    }
+
+    /// Verifies an arc added to an existing subpath connects with a line to its start.
+    @Test
+    func addArcConnectsToExistingSubpath() {
+        var path = CGPath()
+        path.move(to: CGPoint(x: -5, y: 0))
+        path.addArc(center: .zero, radius: 10, startAngle: 0, endAngle: .pi / 2, clockwise: false)
+
+        #expect(path.subpath.map(\.type) == [.moveToPoint, .addLineToPoint, .addCurveToPoint])
+        #expect(path.subpath[1].points.last == CGPoint(x: 10, y: 0))
+    }
+
+    /// Verifies tangent arcs connect to the first tangent point and end at the second.
+    @Test
+    func addArcTangent() throws {
         var path = CGPath()
         path.move(to: CGPoint(x: 0, y: 0))
-        path.addArc(tangent1End: CGPoint(x: 1, y: 0), tangent2End: CGPoint(x: 1, y: 1), radius: 1)
-        #expect(path.subpath.count > 1)
+        path.addArc(tangent1End: CGPoint(x: 10, y: 0), tangent2End: CGPoint(x: 10, y: 10), radius: 5)
+
+        #expect(path.subpath.map(\.type) == [.moveToPoint, .addLineToPoint, .addCurveToPoint])
+        #expect(abs(path.currentPoint.x - 10) < 1e-6)
+        #expect(abs(path.currentPoint.y - 5) < 1e-6)
+        let curveStart = try #require(path.subpath.last?.points.first)
+        #expect(abs(curveStart.x - 5) < 1e-6)
+        #expect(abs(curveStart.y) < 1e-6)
     }
 
     @Test func addRelativeArc() {
         var path = CGPath()
         path.addRelativeArc(center: CGPoint(x: 0, y: 0), radius: 5, startAngle: 0, delta: .pi / 2)
-        #expect(path.subpath.count > 0)
+        #expect(abs(path.currentPoint.x) < 1e-6)
+        #expect(abs(path.currentPoint.y - 5) < 1e-6)
     }
 
     @Test func addCurve() {

@@ -305,3 +305,12 @@
   - `CGRect.null` contém NaN; igualdade sintetizada baseada em bounds nulos não é reflexiva, então compare a geometria e o estado corrente no caminho.
   - Atualize bounds incrementando com os bounds do novo elemento para manter custo linear ao construir caminhos longos.
 ---
+
+## 2026-11-10 - US-032
+- `addArc` normaliza o sentido do sweep e aproxima o arco por curvas Bézier cúbicas com segmentos de no máximo 90 graus, conectando ao ponto corrente quando necessário.
+- `addArc(tangent1End:tangent2End:radius:)` calcula os pontos de tangência e o centro do arco; contextos convertem o ponto corrente de device space antes de criar a geometria transformada.
+- Testes cobrem endpoint e raio de um arco de 90 graus, conexão ao subpath atual, direção horária/anti-horária, tangência e transformações do contexto; `swift test` passou (81 testes em 19 suítes).
+- **Learnings for future iterations:**
+  - Para aproximar um arco circular com Béziers cúbicas, divida o sweep em segmentos de até 90 graus e use `4/3 * tan(delta/4)` para o controle tangente.
+  - O ponto corrente do `CGContext` já está em device space; operações de arco tangente precisam convertê-lo de volta ao espaço de usuário antes de calcular o raio e as tangentes.
+---

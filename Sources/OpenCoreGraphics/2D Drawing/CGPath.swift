@@ -371,17 +371,42 @@ public struct CGPath : Codable, Equatable, Hashable, Sendable {
     ///   - clockwise: true to make a clockwise arc; false to make a counterclockwise arc.
     ///   - transform: An affine transform to apply to the arc before adding to the path.
     mutating public func addArc(center: CGPoint, radius: Double, startAngle: Double, endAngle: Double, clockwise: Bool, transform: CGAffineTransform = .identity) {
-        let steps = 8
-        let delta = (endAngle - startAngle) / Double(steps)
-        var angle = startAngle
-        let r = CGFloat(radius)
-        let c = CGPoint(x: center.x, y: center.y)
-        let startPoint = CGPoint(x: c.x + cos(CGFloat(angle)) * r, y: c.y + sin(CGFloat(angle)) * r).applying(transform)
-        move(to: startPoint)
-        for _ in 1...steps {
-            angle += delta
-            let point = CGPoint(x: c.x + cos(CGFloat(angle)) * r, y: c.y + sin(CGFloat(angle)) * r).applying(transform)
-            addLine(to: point)
+        guard center.x.isFinite, center.y.isFinite, radius.isFinite,
+              startAngle.isFinite, endAngle.isFinite else {
+            return
+        }
+
+        let radius = abs(radius)
+        let sweep = normalizedArcSweep(from: startAngle, to: endAngle, clockwise: clockwise)
+        let startPoint = CGPoint(
+            x: center.x + cos(startAngle) * radius,
+            y: center.y + sin(startAngle) * radius
+        )
+        if subpath.isEmpty {
+            move(to: startPoint, transform: transform)
+        } else {
+            addLine(to: startPoint, transform: transform)
+        }
+        guard sweep != 0, radius != 0 else { return }
+
+        let segmentCount = max(1, Int(ceil(abs(sweep) / (.pi / 2) - 1e-12)))
+        let angleStep = sweep / Double(segmentCount)
+        var segmentStart = startAngle
+        for _ in 0..<segmentCount {
+            let segmentEnd = segmentStart + angleStep
+            let controlScale = 4.0 / 3.0 * tan(angleStep / 4.0)
+            let start = pointOnCircle(center: center, radius: radius, angle: segmentStart)
+            let end = pointOnCircle(center: center, radius: radius, angle: segmentEnd)
+            let control1 = CGPoint(
+                x: start.x - controlScale * radius * sin(segmentStart),
+                y: start.y + controlScale * radius * cos(segmentStart)
+            )
+            let control2 = CGPoint(
+                x: end.x + controlScale * radius * sin(segmentEnd),
+                y: end.y - controlScale * radius * cos(segmentEnd)
+            )
+            addCurve(to: end, control1: control1, control2: control2, transform: transform)
+            segmentStart = segmentEnd
         }
     }
 
@@ -398,8 +423,74 @@ public struct CGPath : Codable, Equatable, Hashable, Sendable {
     ///   - radius: The radius of the arc, in user space coordinates.
     ///   - transform: An affine transform to apply to the arc before adding to the path.
     mutating public func addArc(tangent1End: CGPoint, tangent2End: CGPoint, radius: Double,transform: CGAffineTransform = .identity) {
-        addLine(to: tangent1End, transform: transform)
-        addLine(to: tangent2End, transform: transform)
+        guard radius.isFinite, tangent1End.x.isFinite, tangent1End.y.isFinite,
+              tangent2End.x.isFinite, tangent2End.y.isFinite else {
+            return
+        }
+
+        guard subpath.isEmpty == false else {
+            move(to: tangent1End, transform: transform)
+            addLine(to: tangent2End, transform: transform)
+            return
+        }
+
+        let start = currentPoint
+        let incoming = CGPoint(x: tangent1End.x - start.x, y: tangent1End.y - start.y)
+        let outgoing = CGPoint(x: tangent2End.x - tangent1End.x, y: tangent2End.y - tangent1End.y)
+        let incomingLength = hypot(incoming.x, incoming.y)
+        let outgoingLength = hypot(outgoing.x, outgoing.y)
+        guard incomingLength > Double.ulpOfOne, outgoingLength > Double.ulpOfOne else {
+            addLine(to: tangent1End, transform: transform)
+            addLine(to: tangent2End, transform: transform)
+            return
+        }
+
+        let firstDirection = CGPoint(x: -incoming.x / incomingLength, y: -incoming.y / incomingLength)
+        let secondDirection = CGPoint(x: outgoing.x / outgoingLength, y: outgoing.y / outgoingLength)
+        let directionDot = firstDirection.x * secondDirection.x + firstDirection.y * secondDirection.y
+        let directionCross = firstDirection.x * secondDirection.y - firstDirection.y * secondDirection.x
+        let angle = atan2(abs(directionCross), directionDot)
+        let radius = abs(radius)
+        guard radius > 0, angle > 1e-10, abs(.pi - angle) > 1e-10 else {
+            addLine(to: tangent1End, transform: transform)
+            addLine(to: tangent2End, transform: transform)
+            return
+        }
+
+        let tangentDistance = radius / tan(angle / 2)
+        let tangentStart = CGPoint(
+            x: tangent1End.x + firstDirection.x * tangentDistance,
+            y: tangent1End.y + firstDirection.y * tangentDistance
+        )
+        let tangentEnd = CGPoint(
+            x: tangent1End.x + secondDirection.x * tangentDistance,
+            y: tangent1End.y + secondDirection.y * tangentDistance
+        )
+        let bisectorLength = hypot(
+            firstDirection.x + secondDirection.x,
+            firstDirection.y + secondDirection.y
+        )
+        guard bisectorLength > Double.ulpOfOne else {
+            addLine(to: tangent1End, transform: transform)
+            addLine(to: tangent2End, transform: transform)
+            return
+        }
+        let centerDistance = radius / sin(angle / 2)
+        let center = CGPoint(
+            x: tangent1End.x + (firstDirection.x + secondDirection.x) / bisectorLength * centerDistance,
+            y: tangent1End.y + (firstDirection.y + secondDirection.y) / bisectorLength * centerDistance
+        )
+        let startAngle = atan2(tangentStart.y - center.y, tangentStart.x - center.x)
+        let endAngle = atan2(tangentEnd.y - center.y, tangentEnd.x - center.x)
+        let clockwise = directionCross > 0
+        addArc(
+            center: center,
+            radius: radius,
+            startAngle: startAngle,
+            endAngle: endAngle,
+            clockwise: clockwise,
+            transform: transform
+        )
     }
 
     /// Adds an arc of a circle to the path, specified with a radius and a difference in angle.
@@ -419,7 +510,14 @@ public struct CGPath : Codable, Equatable, Hashable, Sendable {
     ///   - delta: The difference, measured in radians, between the starting angle and ending angle of the arc. A positive value creates a counter-clockwise arc (in user space coordinates), and vice versa.
     ///   - transform: An affine transform to apply to the arc before adding to the path.
     mutating public func addRelativeArc(center: CGPoint, radius: Double, startAngle: Double, delta: Double, transform: CGAffineTransform = .identity) {
-        addArc(center: center, radius: radius, startAngle: startAngle, endAngle: startAngle + delta, clockwise: delta < 0, transform: transform)
+        addArc(
+            center: center,
+            radius: radius,
+            startAngle: startAngle,
+            endAngle: startAngle + delta,
+            clockwise: delta < 0,
+            transform: transform
+        )
     }
 
     /// Adds a cubic Bézier curve to the path, with the specified end point and control points.
@@ -585,6 +683,29 @@ private extension CGPath {
         let maxX = max(lhs.maxX, rhs.maxX)
         let maxY = max(lhs.maxY, rhs.maxY)
         return CGRect(x: minX, y: minY, width: maxX - minX, height: maxY - minY)
+    }
+
+    /// Returns the signed sweep for a single directed revolution or less.
+    func normalizedArcSweep(from startAngle: Double, to endAngle: Double, clockwise: Bool) -> Double {
+        let rawSweep = endAngle - startAngle
+        guard rawSweep != 0 else { return 0 }
+        let fullRevolution = 2 * Double.pi
+        guard rawSweep.isFinite, abs(rawSweep) < fullRevolution else {
+            return clockwise ? -fullRevolution : fullRevolution
+        }
+
+        if clockwise {
+            return rawSweep > 0 ? rawSweep - fullRevolution : rawSweep
+        }
+        return rawSweep < 0 ? rawSweep + fullRevolution : rawSweep
+    }
+
+    /// Returns a point on a circle at the specified angle.
+    func pointOnCircle(center: CGPoint, radius: Double, angle: Double) -> CGPoint {
+        CGPoint(
+            x: center.x + cos(angle) * radius,
+            y: center.y + sin(angle) * radius
+        )
     }
 
     /// Converts each subpath to line segments suitable for point-in-path testing.

@@ -286,7 +286,40 @@ open class CGContext {
     ///   - tangent2End: The end point, in user space coordinates, for the second tangent line to be used in constructing the arc. (The start point for this tangent line is the tangent1End point.)
     ///   - radius: The radius of the arc, in user space coordinates.
     public func addArc(tangent1End: CGPoint, tangent2End: CGPoint, radius: Double) {
-        path?.addArc(tangent1End: tangent1End, tangent2End: tangent2End, radius: radius, transform: ctm)
+        guard let currentPath = path else { return }
+        guard currentPath.isEmpty == false else {
+            path?.addArc(tangent1End: tangent1End, tangent2End: tangent2End, radius: radius, transform: ctm)
+            return
+        }
+
+        var tangentArc = CGPath()
+        tangentArc.move(to: convertToUserSpace(currentPath.currentPoint))
+        tangentArc.addArc(tangent1End: tangent1End, tangent2End: tangent2End, radius: radius)
+        guard let transformedArc = tangentArc.copy(using: ctm) else { return }
+        appendArcElements(transformedArc.subpath.dropFirst())
+    }
+
+    /// Appends transformed arc elements to the current path without adding a separate subpath.
+    private func appendArcElements(_ elements: ArraySlice<CGPath.CGPathElement>) {
+        for element in elements {
+            switch element.type {
+            case .addLineToPoint:
+                guard let end = element.points.last else { continue }
+                path?.addLine(to: end)
+            case .addQuadCurveToPoint:
+                guard element.points.count == 3 else { continue }
+                path?.addQuadCurve(to: element.points[2], control: element.points[1])
+            case .addCurveToPoint:
+                guard element.points.count == 4 else { continue }
+                path?.addCurve(
+                    to: element.points[3],
+                    control1: element.points[1],
+                    control2: element.points[2]
+                )
+            case .none, .moveToPoint, .addRectToPoint, .closeSubpath:
+                continue
+            }
+        }
     }
 
     /// Adds a cubic Bézier curve to the current path, with the specified end point and control points.
