@@ -163,3 +163,12 @@
 - **Learnings for future iterations:**
   - A cobertura do glifo e do clip são bytes independentes; ambos devem ser normalizados antes da composição.
 ---
+
+## 2026-11-10 - US-015
+- Verificadas geometria e UV dos glifos assimétricos e comparação GL/software por pixels localizados para baseline, rotação, reflexões, transformações e espaçamento.
+- Runner exige métricas locais e testes negativos que impedem média global ou dois backends igualmente errados de mascarar falha. Máxima diferença observada foi 1/255, com tolerância 4/255; sem correção adicional de backend.
+- Validação: 257 testes na suíte padrão com concorrência estrita; build estrito; runner GL concluiu 5 testes em 3 suítes com cenas e métricas aprovadas; `git diff --check` passou. GL real testado em macOS, fundo opaco e MSAA desativado nas cenas sintéticas.
+- Files changed: `.docs/GlyphOrientation.md`, testes e relatórios GL em `Tests/OpenCoreGraphicsTests/Rendering/`, `scripts/run-gl-tests.rb`, arquivos de progresso.
+- **Learnings for future iterations:**
+  - Comparar ambos os backends com referência localizada independente evita que concordem em um resultado errado.
+---

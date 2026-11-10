@@ -52,8 +52,8 @@ struct GLComparisonReport {
     ///   - scene: A stable name for the scene.
     ///   - width: The framebuffer width in pixels.
     ///   - height: The framebuffer height in pixels.
-    ///   - difference: Mean normalized channel difference.
-    ///   - tolerance: Maximum permitted mean difference.
+    ///   - difference: Normalized comparison metric, usually mean or maximum channel difference.
+    ///   - tolerance: Maximum permitted value of the supplied comparison metric.
     ///   - glPixels: Bottom-up RGBA bytes read from the framebuffer.
     ///   - softwarePixels: Bitmap bytes produced by the software renderer.
     /// - Throws: An error when the OpenGL metadata or output files cannot be obtained.
@@ -113,8 +113,8 @@ struct GLComparisonReport {
     ///   - scene: A filename-safe scene identifier.
     ///   - width: The framebuffer width.
     ///   - height: The framebuffer height.
-    ///   - difference: Mean normalized channel difference.
-    ///   - tolerance: Maximum permitted mean difference.
+    ///   - difference: Normalized comparison metric, usually mean or maximum channel difference.
+    ///   - tolerance: Maximum permitted value of the supplied comparison metric.
     ///   - glPixels: Bytes read from OpenGL.
     ///   - softwarePixels: Bytes read from the software renderer.
     ///   - metadata: Driver and framebuffer information.

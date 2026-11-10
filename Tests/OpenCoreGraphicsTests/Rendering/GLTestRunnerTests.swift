@@ -39,13 +39,70 @@ struct GLTestRunnerTests {
         return Result(status: process.terminationStatus, output: String(decoding: data, as: UTF8.self))
     }
 
-    /// A valid Swift Testing report for the two opt-in GL tests.
+    /// A valid report for the opt-in GL tests and three synthetic metric tests.
     private var successOutput: String {
-        """
+        let reports = ["above", "below", "rotation", "horizontal", "vertical", "order", "spacing"]
+            .flatMap { scene in
+                ["mean", "local"].map { metric in
+                    "GL_COMPARISON: glyph_\(scene)_\(metric) PASSED difference=0.0 tolerance=0.015"
+                }
+            }.joined(separator: "\n")
+        return """
+        \(reports)
         ✔ Test comparesSharedScenesAcrossBackends() passed after 0.001 seconds.
         ✔ Test comparesGlyphRenderingAcrossBackends() passed after 0.001 seconds.
-        ✔ Test run with 2 tests in 2 suites passed after 0.001 seconds.
+        ✔ Test localFailureCannotHideInMean() passed after 0.001 seconds.
+        ✔ Test identicalWrongBackendsFailReference() passed after 0.001 seconds.
+        ✔ Test invalidBuffersAreRejected() passed after 0.001 seconds.
+        ✔ Test run with 5 tests in 3 suites passed after 0.001 seconds.
         """
+    }
+
+    /// Rejects an otherwise successful run that omits localized glyph evidence.
+    @Test
+    private func missingGlyphReportIsRejected() throws {
+        let incomplete = successOutput.replacing(
+            "GL_COMPARISON: glyph_above_local PASSED difference=0.0 tolerance=0.015\n", with: ""
+        )
+        let result = try run("puts \(String(reflecting: incomplete))")
+        #expect(result.status == 1)
+        #expect(result.output.contains("missing glyph reports"))
+    }
+
+    /// Rejects conflicting local outcomes even if a passing report and summary are present.
+    @Test
+    private func conflictingGlyphReportIsRejected() throws {
+        let report = """
+        \(successOutput)
+        GL_COMPARISON: glyph_above_local FAILED difference=1.0 tolerance=0.015
+        """
+        let result = try run("puts \(String(reflecting: report))")
+        #expect(result.status == 1)
+        #expect(result.output.contains("GL runner: FAILED"))
+    }
+
+    /// Rejects a passing label when the numeric localized difference exceeds its tolerance.
+    @Test
+    private func inconsistentGlyphReportIsRejected() throws {
+        let report = successOutput.replacing(
+            "glyph_above_local PASSED difference=0.0 tolerance=0.015",
+            with: "glyph_above_local PASSED difference=1.0 tolerance=0.015"
+        )
+        let result = try run("puts \(String(reflecting: report))")
+        #expect(result.status == 1)
+        #expect(result.output.contains("GL runner: FAILED"))
+    }
+
+    /// Rejects an artificially permissive local threshold even when the reported value passes.
+    @Test
+    private func excessiveGlyphToleranceIsRejected() throws {
+        let report = successOutput.replacing(
+            "glyph_above_local PASSED difference=0.0 tolerance=0.015",
+            with: "glyph_above_local PASSED difference=0.0 tolerance=1.0"
+        )
+        let result = try run("puts \(String(reflecting: report))")
+        #expect(result.status == 1)
+        #expect(result.output.contains("GL runner: FAILED"))
     }
 
     /// Accepts only a successful process with both test results and a final summary.
@@ -62,7 +119,7 @@ struct GLTestRunnerTests {
         let report = """
         ✘ Test comparesSharedScenesAcrossBackends() failed after 0.001 seconds with 1 issue.
         ✔ Test comparesGlyphRenderingAcrossBackends() passed after 0.001 seconds.
-        ✘ Test run with 2 tests in 2 suites failed after 0.001 seconds with 1 issue.
+        ✘ Test run with 5 tests in 3 suites failed after 0.001 seconds with 1 issue.
         """
         let result = try run("puts \(String(reflecting: report))")
         #expect(result.status == 1)
@@ -75,7 +132,7 @@ struct GLTestRunnerTests {
         let report = """
         ✘ Test comparesSharedScenesAcrossBackends() failed after 0.001 seconds with 5 issues.
         ✔ Test comparesGlyphRenderingAcrossBackends() passed after 0.001 seconds.
-        ✘ Test run with 2 tests in 2 suites failed after 0.001 seconds with 5 issues.
+        ✘ Test run with 5 tests in 3 suites failed after 0.001 seconds with 5 issues.
         """
         let result = try run("puts \(String(reflecting: report)); exit 1")
         #expect(result.status == 1)
@@ -106,7 +163,7 @@ struct GLTestRunnerTests {
         GL_RUNNER_GRAPHICS_UNAVAILABLE: glfwInitFailed
         ✘ Test comparesSharedScenesAcrossBackends() failed after 0.001 seconds with 1 issue.
         ✔ Test comparesGlyphRenderingAcrossBackends() passed after 0.001 seconds.
-        ✘ Test run with 2 tests in 2 suites failed after 0.001 seconds with 1 issue.
+        ✘ Test run with 5 tests in 3 suites failed after 0.001 seconds with 1 issue.
         """
         let result = try run("puts \(String(reflecting: report)); exit 1")
         #expect(result.status == 2)
@@ -140,9 +197,34 @@ struct GLTestRunnerTests {
         GL_RUNNER_GRAPHICS_UNAVAILABLE: glfwInitFailed
         ✘ Test comparesSharedScenesAcrossBackends() failed after 0.001 seconds.
         ✘ Test comparesGlyphRenderingAcrossBackends() failed after 0.001 seconds.
-        ✘ Test run with 2 tests in 2 suites failed after 0.001 seconds.
+        ✘ Test run with 5 tests in 3 suites failed after 0.001 seconds.
         """
         let result = try run("puts \(String(reflecting: report)); exit 1")
+        #expect(result.status == 1)
+        #expect(result.output.contains("GL runner: FAILED"))
+    }
+
+    /// Does not mistake a synthetic metric failure for a graphics availability failure.
+    @Test
+    private func syntheticFailureIsNotClassifiedAsUnavailable() throws {
+        let report = """
+        GL_RUNNER_GRAPHICS_UNAVAILABLE: glfwInitFailed
+        ✘ Test comparesSharedScenesAcrossBackends() failed after 0.001 seconds.
+        ✘ Test localFailureCannotHideInMean() failed after 0.001 seconds.
+        ✘ Test run with 5 tests in 3 suites failed after 0.001 seconds.
+        """
+        let result = try run("puts \(String(reflecting: report)); exit 1")
+        #expect(result.status == 1)
+        #expect(result.output.contains("GL runner: FAILED"))
+    }
+
+    /// Rejects a missing synthetic test even when the remaining results claim success.
+    @Test
+    private func missingMetricTestIsRejected() throws {
+        let report = successOutput.replacing(
+            "✔ Test invalidBuffersAreRejected() passed after 0.001 seconds.\n", with: ""
+        )
+        let result = try run("puts \(String(reflecting: report))")
         #expect(result.status == 1)
         #expect(result.output.contains("GL runner: FAILED"))
     }

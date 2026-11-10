@@ -255,8 +255,8 @@
         "Typecheck passes"
       ],
       "priority": 15,
-      "passes": false,
-      "notes": ""
+           "passes": true,
+           "notes": "Máscara assimétrica validada em GL real contra software e referência localizada; erro máximo observado 1/255, abaixo de 4/255."
     },
     {
       "id": "US-016",

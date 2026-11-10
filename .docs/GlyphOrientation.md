@@ -167,10 +167,61 @@ mask is `2×14` with every sample `255`, while its `A` mask is `8×14` with ever
 sample `255`. Reversing either mask's rows produces identical bytes. The test
 also checks mean difference rather than exact asymmetric pixels.
 
-Source inspection shows that GL flips the vertical UV assignment relative to
-the stored row order, while the software sampler indexes stored atlas rows as
-its local vertical coordinate increases from the quad's lower edge. This makes
-the synthetic test above necessary to resolve the mapping against actual
-readback. The existing all-opaque fixture neither proves nor disproves the
-suspected difference, so this specification does **not** label either backend
-incorrect or authorize changing its behavior.
+At the time of that observation, source inspection showed that GL flipped the
+vertical UV assignment relative to the stored row order, while the then-current
+software sampler indexed stored atlas rows as its local vertical coordinate
+increased from the quad's lower edge. US-014 subsequently corrected the
+software orientation using the synthetic mask. The all-opaque font fixture
+alone could not resolve the mapping against actual GL readback.
+
+## US-015: asymmetric GL observation
+
+On 2026-11-10, `ruby scripts/run-gl-tests.rb --timeout 120` completed with
+five passing tests in three suites. Its artifacts are in
+`.build/gl-comparison/run-20261110T232724-39687/`. The JSON reports record
+macOS 26.6.2 (25G83), Apple M3 Pro, OpenGL `4.1 Metal - 90.5`, and a
+128×128 framebuffer and viewport for a 64×64-point window. The framebuffer
+was linear, with `GL_FRAMEBUFFER_SRGB` disabled; RGBA8 readback is bottom-up.
+The framebuffer had four samples, but multisample rasterization was
+**disabled for the synthetic glyph scenes** to compare samples at pixel
+centers; the previous state was restored afterward.
+
+The same documented 2×3 atlas and draw command were submitted to GL and
+software over opaque black. The tests compare the complete framebuffer,
+including the specified above/below-baseline pixels and black surroundings,
+against each other and against an independently specified coverage image.
+RGB is normalized to sRGB before comparison; this observes coverage through
+white-on-black compositing rather than testing a transparent GL framebuffer.
+Separate geometry tests check all six UVs, the baseline quad, the documented
+transform order, and scaled character spacing.
+
+Each scene produces two reports: `glyph_<scene>_mean.json` records the mean
+absolute channel difference between GL and software; `glyph_<scene>_local.json`
+uses the `difference` field for the **largest** channel difference among
+GL/software, GL/reference, and software/reference, across all pixels.
+Failure of either metric preserves the original GL and software `.rgba`
+buffers. The runner requires both reports for each scene, in addition to
+successful completion of both GL tests and the synthetic metric tests.
+
+| Scene | Mean GL/software | Maximum local difference |
+|---|---:|---:|
+| Above baseline | 0 | 0 |
+| Below baseline | 0 | 0 |
+| 90° rotation | 0 | 0 |
+| Horizontal reflection | 0 | 0 |
+| Vertical reflection | 0 | 0 |
+| Text position, rotation and scaled/translated CTM | 0.000000359 | 1/255 |
+| Scaled character spacing | 0.000000718 | 1/255 |
+
+Both limits are `4/255`: the existing curved/text comparison limit is retained,
+and the local limit allows small filtering and color-conversion rounding
+differences without allowing a row or column inversion to disappear in the
+frame-wide mean. The scaled cases showed at most one sRGB byte of difference;
+the unscaled cases matched exactly. A synthetic one-pixel error verifies that
+the local criterion fails even when the global mean passes, and matching wrong
+backends are checked against the independent reference.
+
+No backend correction was indicated by this run: both matched the specified
+orientation and positions within tolerance. The results do not establish
+parity for partially transparent framebuffers, multisample glyph rasterization,
+other drivers, arbitrary non-integral transforms, or Linux and Windows.

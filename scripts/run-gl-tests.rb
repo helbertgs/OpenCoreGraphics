@@ -19,7 +19,9 @@ rescue OptionParser::ParseError => error
   exit 2
 end
 
-command = ARGV.empty? ? ["swift", "test", "--filter", "GLSoftwareComparisonTests|GLGlyphComparisonTests"] : ARGV
+command = ARGV.empty? ? [
+  "swift", "test", "--filter", "GLSoftwareComparisonTests|GLGlyphComparisonTests|GlyphMetricTests"
+] : ARGV
 artifacts_root = ENV["OPENCOREGRAPHICS_GL_ARTIFACTS"] || File.expand_path("../.build/gl-comparison", __dir__)
 artifacts = File.join(File.expand_path(artifacts_root), "run-#{Time.now.utc.strftime('%Y%m%dT%H%M%S')}-#{Process.pid}")
 environment = {
@@ -89,7 +91,7 @@ unless status.exited?
   exit 1
 end
 
-complete = output.match?(/^.*Test run with 2 tests in 2 suites (?:passed|failed) after .+ seconds(?: with \d+ issues?)?\.\s*$/)
+complete = output.match?(/^.*Test run with 5 tests in 3 suites (?:passed|failed) after .+ seconds(?: with \d+ issues?)?\.\s*$/)
 if !complete
   warn "GL runner: INCOMPLETE: missing final Swift Testing result for both GL suites."
   exit 1
@@ -97,7 +99,8 @@ end
 
 unavailable = output.scan(/^GL_RUNNER_GRAPHICS_UNAVAILABLE: (.+)$/).flatten
 failed_tests = output.scan(/^.*Test (?:comparesSharedScenesAcrossBackends|comparesGlyphRenderingAcrossBackends)\(\) failed after .+ seconds(?: with \d+ issues?)?\.\s*$/)
-if !unavailable.empty? && unavailable.length == failed_tests.length &&
+all_failed_tests = output.scan(/^.*Test (?!run with ).+ failed after .+ seconds(?: with \d+ issues?)?\.\s*$/)
+if !unavailable.empty? && unavailable.length == failed_tests.length && failed_tests.length == all_failed_tests.length &&
    !output.match?(/^.*(?:Expectation failed|Issue recorded|skipped)\b/i)
   warn "GL runner: GRAPHICS_UNAVAILABLE: #{unavailable.uniq.join(', ')}"
   exit 2
@@ -110,13 +113,31 @@ end
 passed = [
   /^.*Test comparesSharedScenesAcrossBackends\(\) passed after .+ seconds\.\s*$/,
   /^.*Test comparesGlyphRenderingAcrossBackends\(\) passed after .+ seconds\.\s*$/,
-  /^.*Test run with 2 tests in 2 suites passed after .+ seconds\.\s*$/
+  /^.*Test localFailureCannotHideInMean\(\) passed after .+ seconds\.\s*$/,
+  /^.*Test identicalWrongBackendsFailReference\(\) passed after .+ seconds\.\s*$/,
+  /^.*Test invalidBuffersAreRejected\(\) passed after .+ seconds\.\s*$/,
+  /^.*Test run with 5 tests in 3 suites passed after .+ seconds\.\s*$/
 ].all? { |pattern| output.match?(pattern) }
 
-if status.success? && passed && !output.match?(/^.*(?:skipped|failed|Issue recorded)\b/i)
-  puts "GL runner: PASSED: both GL tests completed successfully."
+glyph_reports = %w[above below rotation horizontal vertical order spacing].product(%w[mean local])
+glyph_reports_complete = glyph_reports.all? do |scene, metric|
+  matches = output.scan(/^GL_COMPARISON: glyph_#{scene}_#{metric} (PASSED|FAILED) difference=(\S+) tolerance=(\S+)\s*$/)
+  next false unless matches.length == 1
+  status_text, difference_text, tolerance_text = matches.first
+  begin
+    difference = Float(difference_text)
+    tolerance = Float(tolerance_text)
+    status_text == "PASSED" && difference.finite? && tolerance.finite? &&
+      difference >= 0 && tolerance >= 0 && tolerance <= 4.0 / 255.0 && difference <= tolerance
+  rescue ArgumentError
+    false
+  end
+end
+
+if status.success? && passed && glyph_reports_complete && !output.match?(/^.*(?:skipped|failed|Issue recorded)\b/i)
+  puts "GL runner: PASSED: both GL tests and synthetic metric tests completed successfully."
   exit 0
 end
 
-warn "GL runner: FAILED: test failure, skipped test, or unsuccessful process exit."
+warn "GL runner: FAILED: test failure, missing glyph reports, skipped test, or unsuccessful process exit."
 exit 1
