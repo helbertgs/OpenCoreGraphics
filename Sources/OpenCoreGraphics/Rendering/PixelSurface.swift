@@ -29,6 +29,9 @@ struct PixelSurface {
     /// The byte distance between the starts of adjacent rows.
     let bytesPerRow: Int
 
+    /// The color space used to interpret the surface's RGB channels.
+    let colorSpace: CGColorSpace
+
     /// The total number of bytes occupied by all rows.
     var byteCount: Int {
         bytesPerRow * height
@@ -94,6 +97,7 @@ struct PixelSurface {
         self.width = width
         self.height = height
         self.bytesPerRow = bytesPerRow
+        self.colorSpace = colorSpace
         self.channelOrder = channelOrder
         self.storesAlpha = alphaInfo == .premultipliedFirst || alphaInfo == .premultipliedLast
         self.ownedStorage = ownedStorage

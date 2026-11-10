@@ -293,7 +293,7 @@ enum GLRendererGeometry {
 
 /// Renders supported path commands with a cached solid-color OpenGL program.
 @MainActor
-final class GLRenderer: CGRenderBackend {
+final class GLRenderer: CGRenderBackend, CGPixelSurfaceRenderer {
     /// Keeps the compiled programs alive for the lifetime of the renderer.
     private let shaderCache: GLShaderCache
 
@@ -332,6 +332,30 @@ final class GLRenderer: CGRenderBackend {
     nonisolated func execute(_ commands: [DrawCommand], size: CGSize) {
         MainActor.assumeIsolated {
             executeOnMainActor(commands, size: size)
+        }
+    }
+
+    /// Replaces the cached surface texture and draws it across the window.
+    /// - Parameters:
+    ///   - image: The current immutable pixel snapshot.
+    ///   - size: The destination dimensions in pixels.
+    nonisolated func renderSoftwareSurface(_ image: CGImageSnapshot, size: CGSize) {
+        MainActor.assumeIsolated {
+            guard let projection = GLRendererGeometry.orthographicProjection(for: size) else { return }
+            renderImage(
+                image,
+                destination: [
+                    .zero,
+                    CGPoint(x: size.width, y: 0),
+                    CGPoint(x: size.width, y: size.height),
+                    CGPoint(x: 0, y: size.height)
+                ],
+                interpolationQuality: .none,
+                byTiling: false,
+                blendMode: .normal,
+                projection: projection,
+                updateTexture: true
+            )
         }
     }
 
@@ -402,7 +426,8 @@ final class GLRenderer: CGRenderBackend {
         interpolationQuality: CGInterpolationQuality,
         byTiling: Bool,
         blendMode: CGBlendMode,
-        projection: [Float]
+        projection: [Float],
+        updateTexture: Bool = false
     ) {
         guard let vertices = GLRendererGeometry.imageVertices(
             for: destination,
@@ -415,7 +440,9 @@ final class GLRenderer: CGRenderBackend {
         batchBuffer.flush()
         let texture: GLTexture
         do {
-            texture = try textureCache.texture(for: image)
+            texture = try updateTexture
+                ? textureCache.updateTexture(for: image)
+                : textureCache.texture(for: image)
         } catch {
             preconditionFailure("Could not create texture for image draw command: \(error)")
         }

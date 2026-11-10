@@ -39,6 +39,15 @@ protocol CGRenderBackend: AnyObject {
     func execute(_ commands: [DrawCommand], size: CGSize)
 }
 
+/// Renders a software bitmap directly through a window's textured OpenGL pipeline.
+protocol CGPixelSurfaceRenderer: AnyObject {
+    /// Replaces the cached surface texture and draws it across the destination.
+    /// - Parameters:
+    ///   - image: The current immutable pixel snapshot.
+    ///   - size: The destination dimensions in pixels.
+    func renderSoftwareSurface(_ image: CGImageSnapshot, size: CGSize)
+}
+
 /// A test target that records submitted commands without rendering pixels.
 final class RecordingRenderTarget: CGRenderTarget {
     /// The dimensions of this target in pixels.

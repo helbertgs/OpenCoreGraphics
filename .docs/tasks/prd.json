@@ -772,8 +772,8 @@
         "Build e testes passam"
       ],
       "priority": 51,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "`WindowRenderTarget.presentSoftwareSurface` envia snapshots top-down com identidade estável para `GLRenderer`; `GLTextureCache.updateTexture` reutiliza o objeto e `OpenGLTextureLoader` atualiza a imagem com `glTexSubImage2D` (realocando apenas se as dimensões mudarem). O Sample aceita `--software` e desenha os dois retângulos e a elipse em um contexto bitmap antes de exibir a imagem. `swift test` passou (139 testes em 26 suítes), `swift build --target OpenCoreGraphicsSample` e `git diff --check` passaram."
     },
     {
       "id": "US-052",

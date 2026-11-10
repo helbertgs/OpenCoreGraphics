@@ -2,9 +2,54 @@ import Foundation
 import OpenCoreGraphics
 
 let window = try CGWindow(frame: CGRect(x: 0, y: 0, width: 512, height: 512), title: "OpenCoreGraphics Sample")
+let softwareImage: CGImage?
+
+if CommandLine.arguments.contains("--software") {
+    guard let softwareContext = CGContext(
+        data: nil,
+        width: 512,
+        height: 512,
+        bitsPerComponent: 8,
+        bytesPerRow: 0,
+        space: .sRGB,
+        bitmapInfo: 0
+    ) else {
+        preconditionFailure("The software sample bitmap context could not be created.")
+    }
+
+    softwareContext.setFillColor(CGColor(red: 0.2, green: 0.5, blue: 0.8, alpha: 1))
+    softwareContext.fill(CGRect(x: 20, y: 20, width: 150, height: 200))
+
+    softwareContext.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
+    softwareContext.fill(CGRect(x: 200, y: 100, width: 150, height: 200))
+
+    softwareContext.setFillColor(CGColor(red: 0.2, green: 0.8, blue: 0.4, alpha: 1))
+    softwareContext.fillEllipse(in: CGRect(x: 180, y: 340, width: 150, height: 100))
+    softwareContext.flush()
+
+    guard let image = softwareContext.makeImage() else {
+        preconditionFailure("The software sample bitmap image could not be created.")
+    }
+    softwareImage = image
+} else {
+    softwareImage = nil
+}
 
 window.display = {
     let cgContext = window.cgContext
+
+    if let softwareImage {
+        cgContext.saveGState()
+        cgContext.translateBy(x: 0, y: Double(cgContext.height))
+        cgContext.scaleBy(x: 1, y: -1)
+        cgContext.interpolationQuality = .none
+        cgContext.draw(
+            softwareImage,
+            in: CGRect(x: 0, y: 0, width: Double(cgContext.width), height: Double(cgContext.height))
+        )
+        cgContext.restoreGState()
+        return
+    }
 
     if CommandLine.arguments.contains("--test-image") {
         guard let imageURL = Bundle.module.url(forResource: "orientation-test", withExtension: "bmp"),
@@ -81,6 +126,9 @@ window.display = {
 
     cgContext.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1))
     cgContext.fill(CGRect(x: 200, y: 100, width: 150, height: 200))
+
+    cgContext.setFillColor(CGColor(red: 0.2, green: 0.8, blue: 0.4, alpha: 1))
+    cgContext.fillEllipse(in: CGRect(x: 180, y: 340, width: 150, height: 100))
 }
 
 window.makeKeyAndOrderFront()

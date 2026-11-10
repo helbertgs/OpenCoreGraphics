@@ -234,4 +234,40 @@ struct CGImageSnapshot: Equatable, Sendable {
         colorSpace = image.colorSpace
         bitmapInfo = image.bitmapInfo
     }
+
+    /// Creates a snapshot for a mutable source whose texture identity remains stable across frames.
+    /// - Parameters:
+    ///   - identity: The stable identity used to find the source's cached texture.
+    ///   - data: The source pixel bytes.
+    ///   - width: The image width in pixels.
+    ///   - height: The image height in pixels.
+    ///   - bitsPerComponent: The number of bits in each color component.
+    ///   - bitsPerPixel: The number of bits in each pixel.
+    ///   - bytesPerRow: The byte distance between the starts of adjacent rows.
+    ///   - alphaInfo: The alpha channel layout of the image.
+    ///   - colorSpace: The color space used to interpret image components.
+    ///   - bitmapInfo: The byte order used to interpret image pixels.
+    init(
+        identity: UUID,
+        data: Data,
+        width: Int,
+        height: Int,
+        bitsPerComponent: Int,
+        bitsPerPixel: Int,
+        bytesPerRow: Int,
+        alphaInfo: CGImageAlphaInfo,
+        colorSpace: CGColorSpace?,
+        bitmapInfo: CGBitmapInfo
+    ) {
+        self.identity = identity
+        self.data = data
+        self.width = width
+        self.height = height
+        self.bitsPerComponent = bitsPerComponent
+        self.bitsPerPixel = bitsPerPixel
+        self.bytesPerRow = bytesPerRow
+        self.alphaInfo = alphaInfo
+        self.colorSpace = colorSpace
+        self.bitmapInfo = bitmapInfo
+    }
 }

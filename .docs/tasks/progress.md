@@ -10,6 +10,7 @@
 - Mudanças no clip do bitmap descarregam os comandos pendentes antes de substituir a máscara; isso mantém a ordem de desenho quando estados são salvos e restaurados.
 - O `SoftwareRenderer` interpreta imagens usando metadados do snapshot, amostra o quad pela transformação afim inversa e interpola canais de cor em espaço pré-multiplicado.
 - A exportação BMP lê pixels pelo `PixelSurface.pixel(x:y:)`, converte alpha pré-multiplicado para reto e escreve linhas top-down em BGRA.
+- A apresentação direta de um `PixelSurface` no OpenGL usa identidade estável por alvo e `GLTextureCache.updateTexture`; atualize a imagem existente com `glTexSubImage2D` e realoque o armazenamento somente quando as dimensões mudarem.
 - O working tree tem trabalho em andamento do usuário (arquivos novos/movidos ainda não commitados). Os commits das stories incluem **apenas** os arquivos tocados pela story, mais `.docs/tasks/prd.json` e `progress.md`.
 - Valores `struct` que controlam memória alocada usam um proprietário por referência com `deinit`; cópias do valor compartilham a alocação sem duplicar nem liberar o ponteiro prematuramente.
 
@@ -481,4 +482,15 @@
 - **Learnings for future iterations:**
   - O round-trip entre alpha pré-multiplicado e reto pode diferir do valor original em até alguns níveis de 8 bits por causa do arredondamento; valide a saída decodificada contra a conversão esperada do valor pré-multiplicado.
   - Use referências BMP com DIB `BITMAPV4HEADER`, máscaras explícitas e altura negativa para manter canais alpha e ordem top-down no `stb_image`.
+---
+
+## 2026-11-10 - US-051
+- `WindowRenderTarget.presentSoftwareSurface(_:)` converte as linhas lógicas do `PixelSurface` em um snapshot RGBA top-down com identidade persistente e delega ao renderer da janela.
+- `GLRenderer` desenha o snapshot em quad full-screen via programa `image/`; `GLTextureCache.updateTexture(for:)` mantém a textura e `OpenGLTextureLoader` atualiza os pixels com `glTexSubImage2D`, realocando somente em mudança de dimensões.
+- O Sample aceita `--software`, rasteriza os dois retângulos e a elipse em bitmap e exibe a imagem resultante; o modo OpenGL normal também apresenta as mesmas três formas.
+- `swift test` passou (139 testes em 26 suítes), `swift build --target OpenCoreGraphicsSample` e `git diff --check` passaram.
+- Files changed: `Sources/OpenCoreGraphics/2D Drawing/CGImage.swift`, `Sources/OpenCoreGraphics/Rendering/CGRenderTarget.swift`, `Sources/OpenCoreGraphics/Rendering/PixelSurface.swift`, `Sources/OpenCoreGraphics/Rendering/GL/GLRenderer.swift`, `Sources/OpenCoreGraphics/Rendering/GL/GLTexture.swift`, `Sources/OpenCoreGraphics/Rendering/GL/GLTextureCache.swift`, `Sources/OpenCoreGraphics/Rendering/GL/GLTextureLoader.swift`, `Sources/OpenCoreGraphics/Rendering/GL/WindowRenderTarget.swift`, `Sources/OpenCoreGraphicsSample/main.swift`, `Tests/OpenCoreGraphicsTests/Rendering/GLTextureCacheTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/WindowRenderTargetTests.swift`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
+- **Learnings for future iterations:**
+  - Snapshots de uma superfície mutável devem conservar a identidade da textura entre frames, mas receber cópias imutáveis dos bytes de cada frame.
+  - O buffer de `PixelSurface` segue coordenadas lógicas de baixo para cima; para o quad de imagem do OpenGL, empacote as linhas na ordem top-down esperada pelo shader.
 ---

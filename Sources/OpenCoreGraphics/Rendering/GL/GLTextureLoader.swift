@@ -64,6 +64,61 @@ struct OpenGLTextureLoader: GLTextureLoader {
     /// - Returns: A texture that owns the allocated OpenGL identifier.
     /// - Throws: `GLTextureError` when the bitmap layout or allocation is invalid.
     func makeTexture(from image: CGImageSnapshot) throws -> GLTexture {
+        let prepared = try uploadData(for: image)
+
+        var identifier: GLuint = 0
+        glad_glGenTextures(1, &identifier)
+        guard identifier != 0 else { throw GLTextureError.allocationFailed }
+        glad_glBindTexture(GLenum(GL_TEXTURE_2D), identifier)
+        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_WRAP_S), GLint(GL_REPEAT))
+        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_WRAP_T), GLint(GL_REPEAT))
+        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_MIN_FILTER), GLint(GL_LINEAR))
+        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_MAG_FILTER), GLint(GL_LINEAR))
+
+        upload(prepared.data, width: image.width, height: image.height, pixelFormat: prepared.pixelFormat)
+
+        return GLTexture(identifier: identifier, width: image.width, height: image.height)
+    }
+
+    /// Replaces the pixels in an existing texture, reallocating storage only when dimensions change.
+    /// - Parameters:
+    ///   - texture: The texture whose contents should be replaced.
+    ///   - image: The latest image snapshot.
+    /// - Throws: `GLTextureError` when the bitmap layout or pixel data is invalid.
+    func updateTexture(_ texture: GLTexture, from image: CGImageSnapshot) throws {
+        let prepared = try uploadData(for: image)
+        glad_glBindTexture(GLenum(GL_TEXTURE_2D), texture.identifier)
+
+        if texture.width == image.width, texture.height == image.height {
+            var unpackAlignment: GLint = 4
+            glad_glGetIntegerv(GLenum(GL_UNPACK_ALIGNMENT), &unpackAlignment)
+            glad_glPixelStorei(GLenum(GL_UNPACK_ALIGNMENT), 1)
+            defer { glad_glPixelStorei(GLenum(GL_UNPACK_ALIGNMENT), unpackAlignment) }
+
+            prepared.data.withUnsafeBytes { bytes in
+                glad_glTexSubImage2D(
+                    GLenum(GL_TEXTURE_2D),
+                    0,
+                    0,
+                    0,
+                    GLsizei(image.width),
+                    GLsizei(image.height),
+                    prepared.pixelFormat.openGLValue,
+                    GLenum(GL_UNSIGNED_BYTE),
+                    bytes.baseAddress
+                )
+            }
+        } else {
+            upload(prepared.data, width: image.width, height: image.height, pixelFormat: prepared.pixelFormat)
+            texture.updateDimensions(width: image.width, height: image.height)
+        }
+    }
+
+    /// Packs supported source pixels into tightly packed upload bytes.
+    /// - Parameter image: The immutable bitmap snapshot to prepare.
+    /// - Returns: Packed bytes and their matching OpenGL format.
+    /// - Throws: `GLTextureError` when the bitmap layout or pixel data is invalid.
+    private func uploadData(for image: CGImageSnapshot) throws -> (data: Data, pixelFormat: GLTexturePixelFormat) {
         guard let data = image.data else {
             throw GLTextureError.missingPixelData
         }
@@ -96,45 +151,50 @@ struct OpenGLTextureLoader: GLTextureLoader {
             throw GLTextureError.invalidBitmapLayout
         }
 
-        let uploadData = tightlyPackedData(
-            from: data,
-            width: image.width,
-            height: image.height,
-            sourceRowBytes: image.bytesPerRow,
-            sourcePixelBytes: channelCount,
-            alphaInfo: image.alphaInfo,
-            outputByteCount: outputByteCount
+        return (
+            tightlyPackedData(
+                from: data,
+                width: image.width,
+                height: image.height,
+                sourceRowBytes: image.bytesPerRow,
+                sourcePixelBytes: channelCount,
+                alphaInfo: image.alphaInfo,
+                outputByteCount: outputByteCount
+            ),
+            pixelFormat
         )
+    }
 
-        var identifier: GLuint = 0
-        glad_glGenTextures(1, &identifier)
-        guard identifier != 0 else { throw GLTextureError.allocationFailed }
-        glad_glBindTexture(GLenum(GL_TEXTURE_2D), identifier)
-        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_WRAP_S), GLint(GL_REPEAT))
-        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_WRAP_T), GLint(GL_REPEAT))
-        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_MIN_FILTER), GLint(GL_LINEAR))
-        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_MAG_FILTER), GLint(GL_LINEAR))
-
+    /// Uploads bytes and initializes the texture's storage.
+    /// - Parameters:
+    ///   - data: Tightly packed pixels.
+    ///   - width: The texture width in pixels.
+    ///   - height: The texture height in pixels.
+    ///   - pixelFormat: The OpenGL format matching the packed pixels.
+    private func upload(
+        _ data: Data,
+        width: Int,
+        height: Int,
+        pixelFormat: GLTexturePixelFormat
+    ) {
         var unpackAlignment: GLint = 4
         glad_glGetIntegerv(GLenum(GL_UNPACK_ALIGNMENT), &unpackAlignment)
         glad_glPixelStorei(GLenum(GL_UNPACK_ALIGNMENT), 1)
         defer { glad_glPixelStorei(GLenum(GL_UNPACK_ALIGNMENT), unpackAlignment) }
 
-        uploadData.withUnsafeBytes { bytes in
+        data.withUnsafeBytes { bytes in
             glad_glTexImage2D(
                 GLenum(GL_TEXTURE_2D),
                 0,
                 GLint(pixelFormat.openGLValue),
-                GLsizei(image.width),
-                GLsizei(image.height),
+                GLsizei(width),
+                GLsizei(height),
                 0,
                 pixelFormat.openGLValue,
                 GLenum(GL_UNSIGNED_BYTE),
                 bytes.baseAddress
             )
         }
-
-        return GLTexture(identifier: identifier)
     }
 
     /// Removes row padding and expands grayscale-alpha pixels to RGBA.

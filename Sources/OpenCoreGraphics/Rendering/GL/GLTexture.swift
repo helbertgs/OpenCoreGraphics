@@ -32,16 +32,40 @@ final class GLTexture {
     /// The OpenGL identifier used when binding this texture.
     let identifier: UInt32
 
+    /// The width of the currently allocated texture image.
+    private(set) var width: Int
+
+    /// The height of the currently allocated texture image.
+    private(set) var height: Int
+
     /// The operation that releases the owned OpenGL identifier.
     private let release: @MainActor (UInt32) -> Void
 
     /// Creates a texture wrapper for an allocated OpenGL identifier.
     /// - Parameters:
     ///   - identifier: The OpenGL texture identifier.
+    ///   - width: The width of the allocated texture image.
+    ///   - height: The height of the allocated texture image.
     ///   - release: The operation to call when the wrapper is deallocated.
-    init(identifier: UInt32, release: @escaping @MainActor (UInt32) -> Void = GLTexture.deleteTexture) {
+    init(
+        identifier: UInt32,
+        width: Int = 0,
+        height: Int = 0,
+        release: @escaping @MainActor (UInt32) -> Void = GLTexture.deleteTexture
+    ) {
         self.identifier = identifier
+        self.width = width
+        self.height = height
         self.release = release
+    }
+
+    /// Records new storage dimensions after reallocating the OpenGL texture image.
+    /// - Parameters:
+    ///   - width: The updated texture width.
+    ///   - height: The updated texture height.
+    func updateDimensions(width: Int, height: Int) {
+        self.width = width
+        self.height = height
     }
 
     /// Applies the context's image interpolation quality to this texture.

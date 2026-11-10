@@ -51,6 +51,24 @@ struct GLTextureCacheTests {
         #expect(loader.loadCount == 2)
     }
 
+    /// Verifies changed pixels update the existing texture instead of allocating another one.
+    @Test
+    func updatesTextureForStableImageIdentity() throws {
+        let loader = RecordingGLTextureLoader()
+        let cache = GLTextureCache(loader: loader)
+        let identity = UUID()
+        let firstImage = makeSnapshot(identity: identity, pixel: [1, 2, 3, 4])
+        let updatedImage = makeSnapshot(identity: identity, pixel: [5, 6, 7, 8])
+
+        let firstTexture = try cache.updateTexture(for: firstImage)
+        let updatedTexture = try cache.updateTexture(for: updatedImage)
+
+        #expect(firstTexture === updatedTexture)
+        #expect(loader.loadCount == 1)
+        #expect(loader.updateCount == 1)
+        #expect(loader.updatedImageData == Data([5, 6, 7, 8]))
+    }
+
     /// Verifies releasing a texture wrapper invokes its resource cleanup handler.
     @Test
     func releasesTextureIdentifierOnDeinitialization() {
@@ -81,6 +99,26 @@ struct GLTextureCacheTests {
             intent: .defaultIntent
         )
     }
+
+    /// Creates a one-pixel snapshot with a caller-provided stable identity and color.
+    /// - Parameters:
+    ///   - identity: The identity associated with the cached texture.
+    ///   - pixel: The RGBA bytes to store.
+    /// - Returns: A complete one-pixel image snapshot.
+    private func makeSnapshot(identity: UUID, pixel: [UInt8]) -> CGImageSnapshot {
+        CGImageSnapshot(
+            identity: identity,
+            data: Data(pixel),
+            width: 1,
+            height: 1,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: 4,
+            alphaInfo: .premultipliedLast,
+            colorSpace: .sRGB,
+            bitmapInfo: .byteOrder32Big
+        )
+    }
 }
 
 /// Records texture creation requests without requiring a current OpenGL context.
@@ -89,11 +127,26 @@ private final class RecordingGLTextureLoader: GLTextureLoader {
     /// The number of images passed to the fake loader.
     private(set) var loadCount = 0
 
+    /// The number of updates applied to previously allocated textures.
+    private(set) var updateCount = 0
+
+    /// The pixel bytes from the most recent texture update.
+    private(set) var updatedImageData: Data?
+
     /// Returns a fake texture identifier and records the image request.
     /// - Parameter image: The image requested from the loader.
     /// - Returns: A fake texture with no OpenGL release side effect.
     func makeTexture(from image: CGImageSnapshot) throws -> GLTexture {
         loadCount += 1
-        return GLTexture(identifier: UInt32(loadCount), release: { _ in })
+        return GLTexture(identifier: UInt32(loadCount), width: image.width, height: image.height, release: { _ in })
+    }
+
+    /// Records a content update without allocating a new fake texture.
+    /// - Parameters:
+    ///   - texture: The existing fake texture.
+    ///   - image: The new pixel data.
+    func updateTexture(_ texture: GLTexture, from image: CGImageSnapshot) throws {
+        updateCount += 1
+        updatedImageData = image.data
     }
 }
