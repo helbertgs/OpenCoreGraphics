@@ -9,6 +9,7 @@
 - O renderer de bitmap mantém o fast path para retângulos alinhados e rasteriza outras formas pelo `PathFlattener` e amostragem scanline 4×4; cobertura parcial é aplicada como alpha antes do source-over.
 - Mudanças no clip do bitmap descarregam os comandos pendentes antes de substituir a máscara; isso mantém a ordem de desenho quando estados são salvos e restaurados.
 - O `SoftwareRenderer` interpreta imagens usando metadados do snapshot, amostra o quad pela transformação afim inversa e interpola canais de cor em espaço pré-multiplicado.
+- A exportação BMP lê pixels pelo `PixelSurface.pixel(x:y:)`, converte alpha pré-multiplicado para reto e escreve linhas top-down em BGRA.
 - O working tree tem trabalho em andamento do usuário (arquivos novos/movidos ainda não commitados). Os commits das stories incluem **apenas** os arquivos tocados pela story, mais `.docs/tasks/prd.json` e `progress.md`.
 - Valores `struct` que controlam memória alocada usam um proprietário por referência com `deinit`; cópias do valor compartilham a alocação sem duplicar nem liberar o ponteiro prematuramente.
 
@@ -470,4 +471,14 @@
 - **Learnings for future iterations:**
   - Interpole pixels de imagem em RGBA pré-multiplicado e converta para alpha reto só antes da composição; isso evita halos de cor em bordas transparentes.
   - `CGImageSnapshot` deve capturar os metadados usados no rendering junto dos bytes, para que mudanças posteriores na imagem não alterem comandos já enviados.
+---
+
+## 2026-11-10 - US-050
+- Implementado `BMPEncoder` interno para BMP V4 de 32 bits, com linhas top-down, máscaras RGBA e conversão de pixels pré-multiplicados para BGRA com alpha reto.
+- Teste de ida e volta grava uma superfície 4×4 temporária e lê o arquivo pelo `stb_image`; também foi criada uma função de comparação por diferença média de canais e três referências BMP 64×64 para retângulo semitransparente, círculo e estrela `evenOdd`.
+- `swift test` passou (136 testes em 26 suítes), `swift build --target OpenCoreGraphicsSample` e `git diff --check` passaram.
+- Files changed: `Sources/OpenCoreGraphics/Rendering/BMPEncoder.swift`, `Tests/OpenCoreGraphicsTests/Rendering/BMPEncoderTests.swift`, `Tests/OpenCoreGraphicsTests/Resources/software-rectangle-alpha.bmp`, `Tests/OpenCoreGraphicsTests/Resources/software-circle.bmp`, `Tests/OpenCoreGraphicsTests/Resources/software-star-even-odd.bmp`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
+- **Learnings for future iterations:**
+  - O round-trip entre alpha pré-multiplicado e reto pode diferir do valor original em até alguns níveis de 8 bits por causa do arredondamento; valide a saída decodificada contra a conversão esperada do valor pré-multiplicado.
+  - Use referências BMP com DIB `BITMAPV4HEADER`, máscaras explícitas e altura negativa para manter canais alpha e ordem top-down no `stb_image`.
 ---

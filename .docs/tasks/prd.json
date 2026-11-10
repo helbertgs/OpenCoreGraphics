@@ -758,8 +758,8 @@
         "Build e testes passam"
       ],
       "priority": 50,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "BMPEncoder gera BMP V4 de 32 bits com alpha reto e linhas top-down, convertendo os pixels lógicos do PixelSurface. O teste exporta uma superfície 4×4, decodifica o BMP por `stb_image` e compara pixel a pixel; referências 64×64 para retângulo semitransparente, círculo e estrela evenOdd são validadas por diferença média de RGBA ≤ 0,5. `swift test` passou (136 testes em 26 suítes), `swift build --target OpenCoreGraphicsSample` e `git diff --check` passaram."
     },
     {
       "id": "US-051",
