@@ -190,3 +190,12 @@
 - **Learnings for future iterations:**
   - Memória externa precisa permanecer válida e não ser mutada durante a captura; comparar conteúdo evita textura obsoleta sem confiar apenas na identidade.
 ---
+
+## 2026-11-10 - US-018
+- Cache de imagens possui orçamento interno configurável, padrão 64 MiB, eviction LRU e descarte de entradas maiores que o limite após uso; lotes são descarregados antes de alterar ou remover texturas.
+- Testes falsos verificam reutilização, ordem, orçamento e liberação; teste GL real verifica eviction no contexto proprietário.
+- Validação: 272 testes na suíte padrão com concorrência estrita; testes direcionados, build estrito e runner GL conclusivo; `git diff --check` passou. A contagem estima bytes lógicos GPU e snapshots, não memória física do driver ou referências externas.
+- Files changed: `Sources/OpenCoreGraphics/Rendering/GL/GLTextureCache.swift`, `GLRenderer.swift`, testes de cache e teardown, arquivos de progresso.
+- **Learnings for future iterations:**
+  - Flush antes de mutação ou descarte impede que um lote pendente referencie textura alterada ou liberada.
+---

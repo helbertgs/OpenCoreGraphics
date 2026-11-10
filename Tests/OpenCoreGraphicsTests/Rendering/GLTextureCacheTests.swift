@@ -244,6 +244,164 @@ struct GLTextureCacheTests {
         #expect(releasedIdentifier == 42)
     }
 
+    /// Verifies LRU hits change eviction order and remaining textures release once at shutdown.
+    @Test
+    private func limitsRetainedBytesAndEvictsLeastRecentlyUsed() throws {
+        let loader = RecordingGLTextureLoader()
+        var cache: GLTextureCache? = GLTextureCache(loader: loader)
+        cache?.byteBudget = 16
+        let first = makeSnapshot(identity: UUID(), pixel: [1, 2, 3, 4])
+        let second = makeSnapshot(identity: UUID(), pixel: [5, 6, 7, 8])
+        let third = makeSnapshot(identity: UUID(), pixel: [9, 10, 11, 12])
+        _ = try cache?.texture(for: first)
+        _ = try cache?.texture(for: second)
+        #expect(cache?.retainedByteCount == 16)
+        _ = try cache?.texture(for: first)
+        _ = try cache?.texture(for: third)
+        #expect(loader.loadCount == 3)
+        #expect(loader.releasedIdentifiers == [2])
+        #expect(cache?.retainedByteCount == 16)
+        _ = try cache?.texture(for: first)
+        #expect(loader.loadCount == 3)
+        cache = nil
+        #expect(loader.releasedIdentifiers.sorted() == [1, 2, 3])
+    }
+
+    /// Verifies oversized entries bypass the cache without displacing smaller entries.
+    @Test
+    private func oversizedImageIsTransient() throws {
+        let loader = RecordingGLTextureLoader()
+        let cache = GLTextureCache(loader: loader)
+        cache.byteBudget = 8
+        let small = makeSnapshot(identity: UUID(), pixel: [1, 2, 3, 4])
+        let large = makeSnapshot(identity: UUID(), pixel: [1, 2, 3, 4, 5])
+        _ = try cache.texture(for: small)
+        var transient: GLTexture? = try cache.texture(for: large)
+        #expect(cache.retainedByteCount == 8)
+        #expect(loader.releasedIdentifiers.isEmpty)
+        transient = nil
+        #expect(transient == nil)
+        #expect(loader.releasedIdentifiers == [2])
+        _ = try cache.texture(for: small)
+        _ = try cache.texture(for: large)
+        #expect(loader.loadCount == 3)
+        #expect(loader.releasedIdentifiers == [2, 3])
+    }
+
+    /// Verifies reducing the budget immediately evicts older entries.
+    @Test
+    private func reducingBudgetTrimsImmediately() throws {
+        let loader = RecordingGLTextureLoader()
+        let cache = GLTextureCache(loader: loader)
+        let first = makeSnapshot(identity: UUID(), pixel: [1, 2, 3, 4])
+        let second = makeSnapshot(identity: UUID(), pixel: [5, 6, 7, 8])
+        _ = try cache.texture(for: first)
+        _ = try cache.texture(for: second)
+        cache.byteBudget = 8
+        #expect(cache.retainedByteCount == 8)
+        #expect(loader.releasedIdentifiers == [1])
+        cache.byteBudget = 0
+        #expect(cache.retainedByteCount == 0)
+        #expect(loader.releasedIdentifiers == [1, 2])
+    }
+
+    /// Verifies update and creation failures do not discard or reaccount successful entries.
+    @Test
+    private func failuresPreserveAccountingAndSuccessfulUpdateCanBecomeOversized() throws {
+        let loader = RecordingGLTextureLoader()
+        let cache = GLTextureCache(loader: loader)
+        cache.byteBudget = 8
+        let identity = UUID()
+        let original = makeSnapshot(identity: identity, pixel: [1, 2, 3, 4])
+        let expanded = makeSnapshot(identity: identity, pixel: [5, 6, 7, 8, 9])
+        _ = try cache.texture(for: original)
+        loader.rejectUpdates = true
+        #expect(throws: GLTextureError.missingPixelData) {
+            try cache.texture(for: expanded)
+        }
+        #expect(cache.retainedByteCount == 8)
+        loader.rejectUpdates = false
+        loader.rejectCreation = true
+        #expect(throws: GLTextureError.allocationFailed) {
+            try cache.texture(for: makeSnapshot(identity: UUID(), pixel: [1, 1, 1, 1]))
+        }
+        #expect(cache.retainedByteCount == 8)
+        #expect(loader.releasedIdentifiers.isEmpty)
+        _ = try cache.texture(for: expanded)
+        #expect(cache.retainedByteCount == 0)
+        #expect(loader.releasedIdentifiers == [1])
+        loader.rejectCreation = false
+        _ = try cache.texture(for: original)
+        #expect(loader.loadCount == 2)
+    }
+
+    /// Verifies GPU format and retained source bytes are counted across updates and resize.
+    @Test
+    private func accountsForFormatsAndResizedSnapshots() throws {
+        let loader = RecordingGLTextureLoader()
+        let cache = GLTextureCache(loader: loader)
+        let identity = UUID()
+        let gray = makeSnapshot(identity: identity, width: 1, channels: 1, data: [1, 0, 0])
+        let rgba = makeSnapshot(identity: identity, width: 1, channels: 4, data: [1, 2, 3, 4])
+        let resized = makeSnapshot(identity: identity, width: 2, channels: 2, data: [1, 2, 3, 4, 0])
+        _ = try cache.texture(for: gray)
+        #expect(cache.retainedByteCount == 4)
+        _ = try cache.texture(for: rgba)
+        #expect(cache.retainedByteCount == 5)
+        _ = try cache.texture(for: resized)
+        #expect(cache.retainedByteCount == 13)
+        #expect(loader.loadCount == 1)
+        #expect(loader.updateCount == 2)
+    }
+
+    /// Verifies eviction flushes the actual pending batch before releasing its texture.
+    @Test
+    private func flushesPendingBatchBeforeEviction() throws {
+        let loader = RecordingGLTextureLoader()
+        let driver = TextureCacheBatchDriver()
+        let batch = try GLBatchBuffer(driver: driver)
+        let cache = GLTextureCache(loader: loader)
+        cache.byteBudget = 8
+        cache.prepareForTextureMutation = { batch.flush() }
+        loader.onRelease = { identifier in
+            driver.events.append("release \(identifier)")
+        }
+        let first = makeSnapshot(identity: UUID(), pixel: [1, 2, 3, 4])
+        let second = makeSnapshot(identity: UUID(), pixel: [5, 6, 7, 8])
+        _ = try cache.texture(for: first)
+        let state = GLBatchState(program: 7, texture: 1, blendMode: .normal)
+        try batch.append(vertices: [1, 2, 3, 4, 5, 6, 7, 8], state: state)
+        _ = try cache.texture(for: second)
+        #expect(driver.events == ["upload", "draw 1", "release 1"])
+        #expect(driver.uploadedVertices == [1, 2, 3, 4, 5, 6, 7, 8])
+        #expect(driver.drawnState == state)
+        let nextState = GLBatchState(program: 8, texture: 2, blendMode: .multiply)
+        try batch.append(vertices: [9, 10, 11, 12], state: nextState)
+        batch.flush()
+        #expect(driver.events == ["upload", "draw 1", "release 1", "upload", "draw 2"])
+        #expect(driver.uploadedVertices == [9, 10, 11, 12])
+        #expect(driver.drawnState == nextState)
+    }
+
+    /// Verifies a pending draw completes before its texture contents are updated.
+    @Test
+    private func flushesPendingBatchBeforeUpdate() throws {
+        let loader = RecordingGLTextureLoader()
+        let driver = TextureCacheBatchDriver()
+        let batch = try GLBatchBuffer(driver: driver)
+        let cache = GLTextureCache(loader: loader)
+        cache.prepareForTextureMutation = { batch.flush() }
+        loader.onUpdate = { driver.events.append("update") }
+        let identity = UUID()
+        _ = try cache.texture(for: makeSnapshot(identity: identity, pixel: [1, 2, 3, 4]))
+        let state = GLBatchState(program: 7, texture: 1, blendMode: .normal)
+        try batch.append(vertices: [1, 2, 3, 4], state: state)
+        _ = try cache.texture(for: makeSnapshot(identity: identity, pixel: [5, 6, 7, 8]))
+        #expect(driver.events == ["upload", "draw 1", "update"])
+        #expect(driver.uploadedVertices == [1, 2, 3, 4])
+        #expect(driver.drawnState == state)
+    }
+
     /// Creates a small image backed by owned RGBA data for cache tests.
     private func makeImage() -> CGImage {
         CGImage(
@@ -289,6 +447,22 @@ struct GLTextureCacheTests {
             bitsPerPixel: 32,
             bytesPerRow: 4,
             alphaInfo: .premultipliedLast,
+            colorSpace: .genericRGBLinear,
+            bitmapInfo: .byteOrder32Big
+        )
+    }
+
+    /// Creates a snapshot with explicit dimensions, format and retained source bytes.
+    private func makeSnapshot(identity: UUID, width: Int, channels: Int, data: [UInt8]) -> CGImageSnapshot {
+        CGImageSnapshot(
+            identity: identity,
+            data: Data(data),
+            width: width,
+            height: 1,
+            bitsPerComponent: 8,
+            bitsPerPixel: channels * 8,
+            bytesPerRow: width * channels,
+            alphaInfo: .none,
             colorSpace: .genericRGBLinear,
             bitmapInfo: .byteOrder32Big
         )
@@ -340,15 +514,34 @@ private final class RecordingGLTextureLoader: GLTextureLoader {
     /// Whether a missing image buffer causes the fake update to fail.
     var rejectMissingData = false
 
+    /// Whether new texture allocation should fail.
+    var rejectCreation = false
+
+    /// Whether updates should fail before changing the texture.
+    var rejectUpdates = false
+
+    /// Identifiers released by fake texture wrappers.
+    private(set) var releasedIdentifiers: [UInt32] = []
+
+    /// Observes resource releases in relation to fake batch operations.
+    var onRelease: @MainActor (UInt32) -> Void = { _ in }
+
+    /// Observes successful updates in relation to fake batch operations.
+    var onUpdate: @MainActor () -> Void = {}
+
     /// Returns a fake texture identifier and records the image request.
     /// - Parameter image: The image requested from the loader.
     /// - Returns: A fake texture with no OpenGL release side effect.
     func makeTexture(from image: CGImageSnapshot) throws -> GLTexture {
+        if rejectCreation { throw GLTextureError.allocationFailed }
         loadCount += 1
         if let data = image.data {
             uploadedImages.append(data)
         }
-        return GLTexture(identifier: UInt32(loadCount), width: image.width, height: image.height, release: { _ in })
+        return GLTexture(identifier: UInt32(loadCount), width: image.width, height: image.height) { identifier in
+            self.releasedIdentifiers.append(identifier)
+            self.onRelease(identifier)
+        }
     }
 
     /// Returns a fake texture identifier and records the glyph atlas request.
@@ -369,9 +562,10 @@ private final class RecordingGLTextureLoader: GLTextureLoader {
     ///   - texture: The existing fake texture.
     ///   - image: The new pixel data.
     func updateTexture(_ texture: GLTexture, from image: CGImageSnapshot) throws {
-        if rejectMissingData && image.data == nil {
+        if rejectUpdates || (rejectMissingData && image.data == nil) {
             throw GLTextureError.missingPixelData
         }
+        onUpdate()
         updateCount += 1
         updatedImageData = image.data
         if let data = image.data {

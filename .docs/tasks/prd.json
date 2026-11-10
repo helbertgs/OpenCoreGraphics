@@ -306,8 +306,8 @@
         "Typecheck passes"
       ],
       "priority": 18,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Cache LRU limitado a 64 MiB por padrão, contabilizando estimativa GPU e snapshot; itens maiores não permanecem no cache e lotes são descarregados antes de alteração/eviction."
     },
     {
       "id": "US-019",

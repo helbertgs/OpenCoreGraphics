@@ -454,6 +454,9 @@ final class GLRenderer: CGWindowRenderBackend, CGPixelSurfaceRenderer, CGPixelRe
         textProgram = try shaderCache.program(for: .text)
         batchBuffer = try GLBatchBuffer(driver: batchBufferDriver)
         textureCache = GLTextureCache()
+        textureCache.prepareForTextureMutation = { [batchBuffer] in
+            batchBuffer.flush()
+        }
     }
 
     /// Executes commands synchronously on the main actor that owns the GL context.

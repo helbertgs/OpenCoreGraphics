@@ -8,6 +8,51 @@ import OpenGLFW
 @Suite(.enabled(if: ProcessInfo.processInfo.environment["OPENCOREGRAPHICS_RUN_GL_COMPARISON"] == "1"))
 @MainActor
 struct GLResourceTeardownIntegrationTests {
+    /// Verifies budget eviction selects the owning context even when another window was current.
+    @Test
+    private func evictsImageInOwningContext() throws {
+        let owner = try CGWindow(frame: CGRect(x: 0, y: 0, width: 16, height: 16), title: "Cache owner")
+        let other = try CGWindow(frame: CGRect(x: 0, y: 0, width: 16, height: 16), title: "Other context")
+        defer {
+            owner.destroy()
+            other.destroy()
+        }
+        let ownerRef = try #require(owner.windowRef)
+        let otherRef = try #require(other.windowRef)
+        do {
+            let renderer = try #require(Mirror(reflecting: owner).descendant("renderer") as? GLRenderer)
+            let cache = try #require(Mirror(reflecting: renderer).descendant("textureCache") as? GLTextureCache)
+            cache.byteBudget = 8
+            let first = CGImage(
+                width: 1, height: 1, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: 4,
+                space: .sRGB, bitmapInfo: .byteOrder32Big,
+                provider: CGDataProvider(data: Data([255, 0, 0, 255])),
+                decode: nil, shouldInterpolate: false, intent: .defaultIntent
+            )
+            let second = CGImage(
+                width: 1, height: 1, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: 4,
+                space: .sRGB, bitmapInfo: .byteOrder32Big,
+                provider: CGDataProvider(data: Data([0, 255, 0, 255])),
+                decode: nil, shouldInterpolate: false, intent: .defaultIntent
+            )
+            owner.cgContext.draw(first, in: CGRect(x: 0, y: 0, width: 8, height: 8))
+            owner.cgContext.flush()
+            glfwMakeContextCurrent(ownerRef)
+            let firstID: UInt32 = try {
+                let textures = try #require(Mirror(reflecting: cache).descendant("textures") as? [UUID: GLTexture])
+                return try #require(textures.values.first?.identifier)
+            }()
+            #expect(glad_glIsTexture(firstID) == GL_TRUE)
+            glfwMakeContextCurrent(otherRef)
+            owner.cgContext.draw(second, in: CGRect(x: 8, y: 0, width: 8, height: 8))
+            owner.cgContext.flush()
+            #expect(glfwGetCurrentContext() == ownerRef)
+            glfwMakeContextCurrent(ownerRef)
+            #expect(glad_glIsTexture(firstID) == GL_FALSE)
+            #expect(cache.retainedByteCount == 8)
+        }
+    }
+
     /// Releases an implicitly deallocated window while another window's context is current.
     @Test
     func deallocationDestroysWindowInItsOwningContext() throws {
