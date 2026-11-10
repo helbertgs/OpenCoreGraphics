@@ -5,20 +5,19 @@ import PackageDescription
 
 let package = Package(
     name: "OpenCoreGraphics",
+    platforms: [
+        .macOS(.v13)
+    ],
     products: [
         .library(
             name: "OpenCoreGraphics",
             targets: ["OpenCoreGraphics"]
         ),
-        .executable(
-            name: "OpenCoreGraphicsSample",
-            targets: ["OpenCoreGraphicsSample"]
-        ),
     ],
     dependencies: [
-        .package(url: "https://github.com/helbertgs/OpenGLAD", branch: "main"),
-        .package(url: "https://github.com/helbertgs/OpenGLFW", branch: "main"),
-        .package(url: "https://github.com/helbertgs/OpenSTB", branch: "main")
+        .package(url: "https://github.com/helbertgs/OpenGLAD", revision: "f7e045c6b10f96c6e35ee8dec39c6194ebf57020"),
+        .package(url: "https://github.com/helbertgs/OpenGLFW", revision: "fa6ea9f17f321ba759146b27687816ec7baf5b1a"),
+        .package(url: "https://github.com/helbertgs/OpenSTB", revision: "ec0baf3213cb9f89641eb336ceb20d130bba8fee")
     ],
     targets: [
         .target(
@@ -27,6 +26,9 @@ let package = Package(
                 .product(name: "OpenGLAD", package: "OpenGLAD"),
                 .product(name: "OpenGLFW", package: "OpenGLFW"),
                 .product(name: "OpenSTB", package: "OpenSTB")
+            ],
+            resources: [
+                .copy("Resources")
             ]
         ),
         .executableTarget(

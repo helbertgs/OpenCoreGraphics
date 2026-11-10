@@ -74,8 +74,8 @@
         "Build e testes passam"
       ],
       "priority": 5,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "platforms provisório .macOS(.v13) (questão Q-1 do PRD). Package.resolved regenerado após mover .build/workspace-state.json (o cache mantinha branch: main nos pins)."
     },
     {
       "id": "US-006",

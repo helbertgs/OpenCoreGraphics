@@ -1,0 +1,30 @@
+{
+  "originHash" : "739e0372f3f0c2642a7f8ce4a62564720d4a7c2032a99cea6f704226ac8a15d0",
+  "pins" : [
+    {
+      "identity" : "openglad",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/helbertgs/OpenGLAD",
+      "state" : {
+        "revision" : "f7e045c6b10f96c6e35ee8dec39c6194ebf57020"
+      }
+    },
+    {
+      "identity" : "openglfw",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/helbertgs/OpenGLFW",
+      "state" : {
+        "revision" : "fa6ea9f17f321ba759146b27687816ec7baf5b1a"
+      }
+    },
+    {
+      "identity" : "openstb",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/helbertgs/OpenSTB",
+      "state" : {
+        "revision" : "ec0baf3213cb9f89641eb336ceb20d130bba8fee"
+      }
+    }
+  ],
+  "version" : 3
+}

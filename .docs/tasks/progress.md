@@ -51,3 +51,14 @@
   - Sem `debugShader`, erros de compilação de shader ficam silenciosos até a US-022 (`GLProgram` com erro tipado).
   - Script de limpeza usado: regex `^[ \t]*//(?!/)(?![ \t]*MARK:).*\n` por arquivo; revise o diff depois (comentário doc `///` de um item comentado precisa sair junto).
 ---
+
+## 2026-11-09 - US-005
+- `Package.swift`: dependências fixadas por `revision:` (as mesmas de `Package.resolved`), `platforms: [.macOS(.v13)]` (provisório, Q-1 do PRD), `resources: [.copy("Resources")]` no target `OpenCoreGraphics`, e o `OpenCoreGraphicsSample` deixou de ser `product` (continua `executableTarget`).
+- `.gitignore`: removida a linha `Package.resolved`; o arquivo foi gerado de novo e passa a ser versionado.
+- O aviso "found 2 file(s) which are unhandled" (shaders `.glsl`) desapareceu.
+- Files changed: `Package.swift`, `.gitignore`, `Package.resolved`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
+- **Learnings for future iterations:**
+  - Trocar `branch:` por `revision:` no manifesto **não** atualiza o `Package.resolved`: o SwiftPM reaproveita `.build/workspace-state.json` e mantém `"branch": "main"` nos pins. Para regenerar: mover esse arquivo, apagar `Package.resolved` e rodar `swift package resolve` (precisa de rede ou cache).
+  - `swift package dump-package` mostra o que o manifesto realmente declara (requisitos, plataformas, recursos).
+  - Os arquivos em `Resources/` são `.copy`: o acesso em código será por `Bundle.module` (US-021).
+---
