@@ -51,6 +51,11 @@ let package = Package(
                 .copy("Resources")
             ]
         ),
+        .executableTarget(
+            name: "OpenCoreGraphicsWindowBaseline",
+            dependencies: ["OpenCoreGraphics"],
+            path: "tools/WindowBaseline"
+        ),
         .testTarget(
             name: "OpenCoreGraphicsTests",
             dependencies: [

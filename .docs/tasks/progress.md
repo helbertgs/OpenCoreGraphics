@@ -116,3 +116,12 @@
 - **Learnings for future iterations:**
   - Testes de saída isolam precondições fatais da ponte legada; não são evidência de garantia estática.
 ---
+
+## 2026-11-10 - US-010
+- Criado experimento gráfico macOS supervisionado por timeout, com procedimento, ambiente e limitações em `.docs/WindowLoopBaseline.md`.
+- Na reprodução adicional: 4,5401% de um núcleo em repouso, 20/20 eventos sintéticos, tarefa MainActor progrediu durante o loop, 0 desenhos em repouso e 102,940 ms entre pedido de fechamento e retorno. Outra janela exigiu redraw explícito.
+- Validação: experimento concluiu com resumo; testes do supervisor; 227 testes na suíte padrão com concorrência estrita; build estrito; `git diff --check` passou. A medição não comprova comportamento em Linux/Windows nem latência de entrada física.
+- Files changed: `Package.swift`, `tools/WindowBaseline/`, `scripts/run-window-baseline.rb`, `Tests/OpenCoreGraphicsTests/Rendering/WindowBaselineRunnerTests.swift`, `.docs/WindowLoopBaseline.md`, arquivos de progresso.
+- **Learnings for future iterations:**
+  - O loop observado permite progresso de tarefa MainActor no macOS, mas não prova cooperação geral nem operação automática de múltiplas janelas.
+---

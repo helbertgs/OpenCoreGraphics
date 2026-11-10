@@ -170,8 +170,8 @@
         "Typecheck passes"
       ],
       "priority": 10,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Baseline reproduzível do loop em .docs/WindowLoopBaseline.md, com CPU, eventos sintéticos, progresso MainActor, redraw, fechamento e limitações de múltiplas janelas."
     },
     {
       "id": "US-011",
