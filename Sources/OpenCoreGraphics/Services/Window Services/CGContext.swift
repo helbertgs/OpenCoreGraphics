@@ -1,5 +1,4 @@
 import Foundation
-@preconcurrency import OpenGLAD
 
 /// A Core Graphics 2D drawing environment.
 /// 
@@ -145,6 +144,12 @@ open class CGContext {
 
     /// Returns a path object built from the current path information in a graphics context.
     public var path: CGPath?
+
+    /// The render target that receives queued drawing commands.
+    var renderTarget: CGRenderTarget?
+
+    /// Drawing commands waiting to be submitted to the render target.
+    private var pendingDrawCommands: [DrawCommand] = []
 
     /// The stack of saved graphics-state snapshots.
     private var graphicsStateStack: [CGGraphicsState] = []
@@ -348,22 +353,24 @@ open class CGContext {
     /// The current path is cleared as a side effect of calling this function.
     /// - Parameter mode: A path drawing mode constant—``.fill``, ``.eoFill``, ``.stroke``, ``.fillStroke``, or ``.eoFillStroke``.
     open func drawPath(using mode: CGPath.CGPathDrawingMode) {
+        guard let path else { return }
+
         switch mode {
         case .fill:
-            fillPath(using: .winding)
+            pendingDrawCommands.append(.fillPath(path: path, rule: .winding, color: fillColor, blendMode: blendMode))
         case .eoFill:
-            fillPath(using: .evenOdd)
+            pendingDrawCommands.append(.fillPath(path: path, rule: .evenOdd, color: fillColor, blendMode: blendMode))
         case .stroke:
-            strokePath()
+            pendingDrawCommands.append(.strokePath(path: path, color: strokeColor, style: currentStrokeStyle, blendMode: blendMode))
         case .fillStroke:
-            fillPath(using: .winding)
-            strokePath()
+            pendingDrawCommands.append(.fillPath(path: path, rule: .winding, color: fillColor, blendMode: blendMode))
+            pendingDrawCommands.append(.strokePath(path: path, color: strokeColor, style: currentStrokeStyle, blendMode: blendMode))
         case .eoFillStroke:
-            fillPath(using: .evenOdd)
-            strokePath()
+            pendingDrawCommands.append(.fillPath(path: path, rule: .evenOdd, color: fillColor, blendMode: blendMode))
+            pendingDrawCommands.append(.strokePath(path: path, color: strokeColor, style: currentStrokeStyle, blendMode: blendMode))
         }
 
-        path = nil
+        self.path = nil
     }
 
     /// Paints the area within the current path, as determined by the specified fill rule.
@@ -373,48 +380,7 @@ open class CGContext {
     /// - Parameter rule: The rule for determining which areas to treat as the interior of the path.
     open func fillPath(using rule: CGPath.CGPathFillRule = .winding) {
         guard let path = self.path else { return }
-        var vertices: [Float] = []
-
-        path.subpath.forEach { subpath in
-            if subpath.type == CGPath.CGPathElementType.addRectToPoint { 
-                subpath.points.forEach { point in
-                    vertices.append(Float(point.x))
-                    vertices.append(Float(point.y))
-                }
-            }
-
-            var vao = UInt32(0)
-            var vbo = UInt32(0)
-
-            glad_glGenVertexArrays(1, &vao)
-            glad_glGenBuffers(1, &vbo)
-            glad_glBindVertexArray(vao)
-
-            glad_glBindBuffer(GLenum(GL_ARRAY_BUFFER), vbo)
-            vertices.withUnsafeBytes {
-                glad_glBufferData(GLenum(GL_ARRAY_BUFFER), GLsizeiptr($0.count), $0.baseAddress, GLenum(GL_STATIC_DRAW))
-            }
-
-            glad_glVertexAttribPointer(0, 2, GLenum(GL_FLOAT), GLboolean(GL_FALSE), 2 * GLsizei(MemoryLayout<Float>.stride), nil)
-            glad_glEnableVertexAttribArray(0)
-
-            glad_glEnable(UInt32(GL_BLEND))
-            glad_glBlendFunc(UInt32(GL_SRC_ALPHA), UInt32(GL_ONE_MINUS_SRC_ALPHA))
-
-            let shader = CGShading(.fill)
-            shader.use()
-            shader.setUniform4f(name: "uColor", value: fillColor)
-
-            glad_glDrawArrays(GLenum(GL_TRIANGLE_FAN), 0, GLsizei(vertices.count / 2))
-            glad_glBindBuffer(GLenum(GL_ARRAY_BUFFER), 0)
-            glad_glBindVertexArray(0)
-            glad_glDeleteVertexArrays(1, &vao)
-            glad_glDeleteBuffers(1, &vbo)
-            shader.delete()
-
-            glad_glDisable(UInt32(GL_BLEND))
-        }
-
+        pendingDrawCommands.append(.fillPath(path: path, rule: rule, color: fillColor, blendMode: blendMode))
         self.path = nil
     }
 
@@ -424,51 +390,13 @@ open class CGContext {
     /// The current path is cleared as a side effect of calling this function.
     open func strokePath() {
         guard let path = self.path else { return }
-        var vertices: [Float] = []
-
-        path.subpath.forEach { subpath in
-            if subpath.type == CGPath.CGPathElementType.addRectToPoint { 
-                subpath.points.forEach { point in
-                    vertices.append(Float(point.x))
-                    vertices.append(Float(point.y))
-                }
-            }
-
-            var vao = UInt32(0)
-            var vbo = UInt32(0)
-
-            glad_glGenVertexArrays(1, &vao)
-            glad_glGenBuffers(1, &vbo)
-            glad_glBindVertexArray(vao)
-
-            glad_glBindBuffer(GLenum(GL_ARRAY_BUFFER), vbo)
-            vertices.withUnsafeBytes {
-                glad_glBufferData(GLenum(GL_ARRAY_BUFFER), GLsizeiptr($0.count), $0.baseAddress, GLenum(GL_STATIC_DRAW))
-            }
-
-            glad_glVertexAttribPointer(0, 2, GLenum(GL_FLOAT), GLboolean(GL_FALSE), 2 * GLsizei(MemoryLayout<Float>.stride), nil)
-            glad_glEnableVertexAttribArray(0)
-
-            let shader = CGShading(.stroke)
-            shader.use()
-            shader.setUniform4f(name: "uColor", value: strokeColor)
-
-            glad_glEnable(UInt32(GL_BLEND))
-            glad_glBlendFunc(UInt32(GL_SRC_ALPHA), UInt32(GL_ONE_MINUS_SRC_ALPHA))
-
-            glad_glLineWidth(GLfloat(lineWidth))
-            glad_glDrawArrays(GLenum(GL_LINE_LOOP), 0, GLsizei(vertices.count / 2))
-
-            glad_glBindBuffer(GLenum(GL_ARRAY_BUFFER), 0)
-            glad_glBindVertexArray(0)
-            glad_glDeleteVertexArrays(1, &vao)
-            glad_glDeleteBuffers(1, &vbo)
-            shader.delete()
-
-            glad_glDisable(UInt32(GL_BLEND))
-        }
-
+        pendingDrawCommands.append(.strokePath(path: path, color: strokeColor, style: currentStrokeStyle, blendMode: blendMode))
         self.path = nil
+    }
+
+    /// Captures the current line parameters for a stroke command.
+    private var currentStrokeStyle: StrokeStyle {
+        StrokeStyle(width: lineWidth, cap: lineCap, join: lineJoin, miterLimit: miterLimit, dash: lineDash)
     }
 
     // MARK: - Drawing Shapes
@@ -480,9 +408,8 @@ open class CGContext {
     /// However, you should not use this function in contexts other than window or bitmap contexts.
     /// - Parameter rect: The rectangle, in user space coordinates.
     open func clear(_ rect: CGRect) {
-        fillColor = .clear
-        path = .init(rect: convertToDeviceSpace(rect), transform: ctm)
-        drawPath(using: .fill)
+        let clearPath = CGPath(rect: rect, transform: ctm)
+        pendingDrawCommands.append(.fillPath(path: clearPath, rule: .winding, color: .clear, blendMode: .clear))
         path = nil
     }
 
@@ -491,7 +418,7 @@ open class CGContext {
     /// The current path is cleared as a side effect of calling this function.
     /// - Parameter rect: A rectangle, in user space coordinates.
     open func fill(_ rect: CGRect) {
-        path = .init(rect: convertToDeviceSpace(rect), transform: ctm)
+        path = .init(rect: rect, transform: ctm)
         drawPath(using: .fill)
         path = nil
     }
@@ -511,7 +438,7 @@ open class CGContext {
     /// The current path is cleared as a side effect of calling this function.
     /// - Parameter rect: A rectangle that defines the area for the ellipse to fit in.
     open func fillEllipse(in rect: CGRect) {
-        path = .init(ellipseIn: rect, transform: ctm )
+        path = .init(ellipseIn: rect, transform: ctm)
         drawPath(using: .fill)
         path = nil
     }
@@ -522,7 +449,7 @@ open class CGContext {
     /// The current path is cleared as a side effect of calling this function.
     /// - Parameter rect: A rectangle, specified in user space coordinates.
     open func stroke(_ rect: CGRect) {
-        path = .init(rect: convertToDeviceSpace(rect), transform: ctm)
+        path = .init(rect: rect, transform: ctm)
         drawPath(using: .stroke)
         path = nil
     }
@@ -532,6 +459,9 @@ open class CGContext {
     /// The current path is cleared as a side effect of calling this function.
     /// - Parameter rect: A rectangle that defines the area for the ellipse to fit in.
     open func strokeEllipse(in rect: CGRect) {
+        path = .init(ellipseIn: rect, transform: ctm)
+        drawPath(using: .stroke)
+        path = nil
     }
 
     /// Strokes a sequence of line segments.
@@ -554,70 +484,16 @@ open class CGContext {
     ///   - rect: The rectangle, in user space coordinates, in which to draw the image.
     ///   - byTiling: If true, this method fills the context’s entire clipping region by tiling many copies of the image, and the rect parameter defines the origin and size of the tiling pattern.
     ///               If false (the default), this method draws a single copy of the image in the area defined by the rect parameter.
-    open func draw(_ image: CGImage, in rect: CGRect, byTiling: Bool = false) {        
-        guard var data = image.dataProvider?.data else { 
-            return 
-        }
-
-        let rect = convertToDeviceSpace(rect)
-        let vertices: [Float] = [
-            Float(rect.maxX), Float(rect.maxY),  1.0, 1.0,
-            Float(rect.maxX), Float(rect.minY),  1.0, 0.0,
-            Float(rect.minX), Float(rect.minY),  0.0, 0.0,
-            Float(rect.minX), Float(rect.maxY),  0.0, 1.0
-        ]
-
-        var vao = UInt32(0)
-        glad_glGenVertexArrays(1, &vao)
-        defer { glad_glDeleteVertexArrays(1, &vao) }
-
-        var vbo = UInt32(0)
-        glad_glGenBuffers(1, &vbo)
-        defer { glad_glDeleteBuffers(1, &vbo) }
-
-        glad_glBindVertexArray(vao)
-
-        glad_glBindBuffer(GLenum(GL_ARRAY_BUFFER), vbo)
-        vertices.withUnsafeBytes {
-            glad_glBufferData(GLenum(GL_ARRAY_BUFFER), GLsizeiptr($0.count), $0.baseAddress, GLenum(GL_STATIC_DRAW))
-        }
-
-        glad_glVertexAttribPointer(0, 2, GLenum(GL_FLOAT), GLboolean(GL_FALSE), 4 * GLsizei(MemoryLayout<Float>.stride), nil)
-        glad_glEnableVertexAttribArray(0)
-
-        glad_glVertexAttribPointer(1, 2, GLenum(GL_FLOAT), GLboolean(GL_FALSE), 4 * GLsizei(MemoryLayout<Float>.stride), UnsafeRawPointer(bitPattern: 2 * MemoryLayout<Float>.size))
-        glad_glEnableVertexAttribArray(1)
-
-        let format = image.colorSpace == CGColorSpace.sRGB ? GL_RGBA : GL_RGB
-
-        var id = UInt32(0)
-        glad_glGenTextures(1, &id)
-        defer { glad_glDeleteTextures(1, &id) }
-        glad_glBindTexture(GLenum(GL_TEXTURE_2D), id)
-        
-        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_WRAP_S), GLint(GL_REPEAT))
-        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_WRAP_T), GLint(GL_REPEAT))
-        
-        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_MIN_FILTER), GLint(GL_LINEAR))
-        glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_MAG_FILTER), GLint(GL_LINEAR))
-
-        data.withUnsafeMutableBytes {
-            glad_glTexImage2D(GLenum(GL_TEXTURE_2D), 0,  format,  GLsizei(image.width),  GLsizei(image.height),  0,  GLenum(format),  GLenum(GL_UNSIGNED_BYTE),  $0.baseAddress)
-        }
-
-        glad_glGenerateMipmap(GLenum(GL_TEXTURE_2D))
-
-        let shader = CGShading(.image)
-        shader.use()
-        glad_glActiveTexture(GLenum(GL_TEXTURE0))
-        glad_glBindTexture(GLenum(GL_TEXTURE_2D), id)
-        shader.setUniform1i(name: "uImage", value: 0)
-
-        glad_glBindVertexArray(vao)
-        glad_glDrawArrays(GLenum(GL_TRIANGLE_FAN), 0, 4)
-        glad_glBindVertexArray(0)
-
-        shader.delete()
+    open func draw(_ image: CGImage, in rect: CGRect, byTiling: Bool = false) {
+        pendingDrawCommands.append(
+            .drawImage(
+                data: image.dataProvider?.data,
+                width: image.width,
+                height: image.height,
+                destination: convertToDeviceSpace(rect),
+                blendMode: blendMode
+            )
+        )
     }
 
     /// Returns the current level of interpolation quality for a graphics context.
@@ -949,6 +825,10 @@ open class CGContext {
     /// Because the system software flushes a context automatically at the appropriate times, calling this function could have an adverse effect on performance. 
     /// Under normal conditions, you do not need to call this function.
     public func flush() {
+        guard let renderTarget else { return }
+
+        pendingDrawCommands.forEach(renderTarget.submit)
+        pendingDrawCommands.removeAll(keepingCapacity: true)
     }
 
     /// Marks a window context for update.

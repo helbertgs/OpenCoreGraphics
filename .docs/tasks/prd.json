@@ -195,8 +195,8 @@
         "Build e testes passam"
       ],
       "priority": 13,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "CGContext agora enfileira comandos sem OpenGL, aplica a CTM ao criar caminhos de formas, captura estilo/regra/blend e envia a fila ao alvo em flush(). fillStroke grava preenchimento antes do traço; fillPath e strokePath limpam o caminho."
     },
     {
       "id": "US-014",

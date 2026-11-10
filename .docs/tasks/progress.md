@@ -131,3 +131,14 @@
 - **Learnings for future iterations:**
   - `RecordingRenderTarget` é o alvo de injeção para testar filas de renderização sem criar uma janela ou contexto OpenGL.
 ---
+
+## 2026-11-09 - US-013
+- `CGContext` deixou de importar/chamar OpenGL e agora enfileira operações de preenchimento, traço, elipse, limpeza e imagem como `DrawCommand`.
+- `flush()` transfere a fila ao `CGRenderTarget` em ordem e mantém os comandos pendentes quando ainda não há alvo conectado.
+- `drawPath(.fillStroke)` grava dois comandos na ordem correta; fill/stroke individuais limpam o caminho depois de enfileirar.
+- Formas aplicam a CTM ao construir o caminho, e os comandos capturam a regra de preenchimento, cores, blend e estilo de traço.
+- `swift test --filter CGContextCommandTests` passou (4 testes); `CGContext.swift` não contém mais referências OpenGL.
+- **Learnings for future iterations:**
+  - O `flush()` público de CGContext já existia como método vazio; a fila de comandos usa esse ponto de integração, sem acrescentar API pública.
+  - A conversão de imagem para comando copia os bytes do provider e deixa dimensões/blend capturados no valor, evitando reter a classe mutável `CGImage`.
+---
