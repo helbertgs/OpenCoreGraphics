@@ -4,7 +4,7 @@ import Foundation
 @MainActor
 final class WindowRenderTarget: CGRenderTarget {
     /// The pixel dimensions of the window render destination.
-    var size: CGSize
+    private var windowSize: CGSize
 
     /// The renderer owned by the window, which may be released during teardown.
     private weak var renderer: (any CGRenderBackend)?
@@ -17,30 +17,45 @@ final class WindowRenderTarget: CGRenderTarget {
     ///   - size: The window dimensions in pixels.
     ///   - renderer: The OpenGL renderer owned by the window.
     init(size: CGSize, renderer: any CGRenderBackend) {
-        self.size = size
+        windowSize = size
         self.renderer = renderer
+    }
+
+    /// Returns the window dimensions from the actor that owns the window.
+    nonisolated var size: CGSize {
+        MainActor.assumeIsolated { windowSize }
+    }
+
+    /// Updates the window dimensions after a framebuffer resize.
+    /// - Parameter size: The new window dimensions in pixels.
+    func updateSize(_ size: CGSize) {
+        windowSize = size
     }
 
     /// Adds a drawing command to the pending frame.
     /// - Parameter command: The operation to submit for rendering.
-    func submit(_ command: DrawCommand) {
-        pendingCommands.append(command)
+    nonisolated func submit(_ command: DrawCommand) {
+        MainActor.assumeIsolated {
+            pendingCommands.append(command)
+        }
     }
 
     /// Returns nil because the window target does not expose pixel readback yet.
     /// - Returns: Always nil for the window destination.
-    func readPixels() -> Data? {
+    nonisolated func readPixels() -> Data? {
         nil
     }
 
     /// Renders all commands queued for the current frame.
-    func flush() {
-        guard let renderer else {
-            pendingCommands.removeAll(keepingCapacity: true)
-            return
-        }
+    nonisolated func flush() {
+        MainActor.assumeIsolated {
+            guard let renderer else {
+                pendingCommands.removeAll(keepingCapacity: true)
+                return
+            }
 
-        renderer.execute(pendingCommands, size: size)
-        pendingCommands.removeAll(keepingCapacity: true)
+            renderer.execute(pendingCommands, size: windowSize)
+            pendingCommands.removeAll(keepingCapacity: true)
+        }
     }
 }

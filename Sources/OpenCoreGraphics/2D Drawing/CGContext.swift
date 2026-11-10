@@ -70,6 +70,10 @@ open class CGContext {
         }
 
         pixelSurface = surface
+        renderTarget = BitmapRenderTarget(
+            size: CGSize(width: surface.width, height: surface.height),
+            surface: surface
+        )
         storedData = Data()
         self.width = width
         self.height = height
@@ -988,10 +992,8 @@ open class CGContext {
 
         let commands = pendingDrawCommands
         pendingDrawCommands.removeAll(keepingCapacity: true)
-        MainActor.assumeIsolated {
-            commands.forEach(renderTarget.submit)
-            renderTarget.flush()
-        }
+        commands.forEach(renderTarget.submit)
+        renderTarget.flush()
     }
 
     /// Marks a window context for update.

@@ -5,7 +5,7 @@
 - O build usa o sistema do Xcode (`.build/out/...`); o aviso "found 2 file(s) which are unhandled" é o `Resources/default/*.glsl` ainda não declarado em `Package.swift` (resolvido na US-005).
 - `CGColor.components` é `[Double]`; qualquer chamada `glad_*` que recebe `GLfloat` precisa de `Float(...)`.
 - As conversões entre espaço de usuário e pixels usam `ctm`; `CGAffineTransform.inverse` não reverte corretamente translações 2D, então o contexto calcula a inversa 2D localmente.
-- Os protocolos internos de renderização OpenGL (`CGRenderTarget` e `CGRenderBackend`) são `@MainActor`, pois executam operações vinculadas ao contexto OpenGL atual; `CGContext.flush()` transfere os comandos locais via `MainActor.assumeIsolated`.
+- `CGRenderTarget` e `CGRenderBackend` não são isolados por ator, para permitir renderização síncrona em bitmap. O target de janela mantém seu estado no `MainActor` e usa `MainActor.assumeIsolated` nos requisitos síncronos; o backend OpenGL aplica a mesma fronteira ao acessar o contexto GL.
 - O working tree tem trabalho em andamento do usuário (arquivos novos/movidos ainda não commitados). Os commits das stories incluem **apenas** os arquivos tocados pela story, mais `.docs/tasks/prd.json` e `progress.md`.
 - Valores `struct` que controlam memória alocada usam um proprietário por referência com `deinit`; cópias do valor compartilham a alocação sem duplicar nem liberar o ponteiro prematuramente.
 
@@ -427,4 +427,14 @@
 - **Learnings for future iterations:**
   - `CGImage` precisa manter `alphaInfo` separado da ordem de bytes; o overload interno permite que `makeImage()` preserve o layout sem alterar o inicializador público existente.
   - Uma superfície emprestada deve permanecer válida enquanto o contexto existir; `makeImage()` precisa copiar os bytes para não depender do tempo de vida do buffer do chamador.
+---
+
+## 2026-11-10 - US-046
+- Implementados `SoftwareRenderer` e `BitmapRenderTarget`; contextos bitmap executam preenchimento de retângulos alinhados, source-over pré-multiplicado e limpeza transparente, sem dependência de OpenGL ou isolamento de ator.
+- `CGRenderTarget` e `CGRenderBackend` agora permitem implementações síncronas não isoladas; `WindowRenderTarget` e `GLRenderer` preservam o acesso ao contexto GL no `MainActor`.
+- Testes verificam pixels exatos em superfície 8×8, composição `(255, 128, 128, 255)` e limpeza restrita à região; `swift test` passou (123 testes em 25 suítes), sem warnings. `git diff --check` passou.
+- Files changed: `Sources/OpenCoreGraphics/Rendering/SoftwareRenderer.swift`, `Sources/OpenCoreGraphics/Rendering/BitmapRenderTarget.swift`, `Sources/OpenCoreGraphics/Rendering/CGRenderTarget.swift`, `Sources/OpenCoreGraphics/Rendering/GL/GLRenderer.swift`, `Sources/OpenCoreGraphics/Rendering/GL/WindowRenderTarget.swift`, `Sources/OpenCoreGraphics/2D Drawing/CGContext.swift`, `Sources/OpenCoreGraphics/Services/Window Services/CGWindow.swift`, `Tests/OpenCoreGraphicsTests/Rendering/SoftwareRendererTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/WindowRenderTargetTests.swift`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
+- **Learnings for future iterations:**
+  - Para renderização compartilhada por software e OpenGL, mantenha os protocolos internos sem isolamento global e confine a fronteira OpenGL ao adapter da janela/backend.
+  - `PixelSurface.pixel` e `setPixel` abstraem RGBA lógico sobre armazenamento RGBA/BGRA; renderizadores devem operar nesses canais lógicos em vez de indexar diretamente o buffer.
 ---

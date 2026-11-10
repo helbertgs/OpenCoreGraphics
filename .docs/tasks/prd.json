@@ -695,8 +695,8 @@
         "Build e testes passam"
       ],
       "priority": 46,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "`SoftwareRenderer` implementa `CGRenderBackend` sem dependência OpenGL nem isolamento de ator; `BitmapRenderTarget` conecta o renderer à superfície do `CGContext`. Retângulos alinhados são preenchidos com composição source-over pré-multiplicada e `clear(_:)` zera os pixels da área. `swift test` passou (123 testes em 25 suítes), sem warnings."
     },
     {
       "id": "US-047",

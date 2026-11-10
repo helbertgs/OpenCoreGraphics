@@ -329,8 +329,10 @@ final class GLRenderer: CGRenderBackend {
     /// - Parameters:
     ///   - commands: The backend-independent draw commands to render.
     ///   - size: The destination dimensions in pixels.
-    func execute(_ commands: [DrawCommand], size: CGSize) {
-        executeOnMainActor(commands, size: size)
+    nonisolated func execute(_ commands: [DrawCommand], size: CGSize) {
+        MainActor.assumeIsolated {
+            executeOnMainActor(commands, size: size)
+        }
     }
 
     /// Renders path fills and batches adjacent commands with matching state.

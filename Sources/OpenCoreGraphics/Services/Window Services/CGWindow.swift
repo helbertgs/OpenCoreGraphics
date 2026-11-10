@@ -288,7 +288,7 @@ extension CGWindow {
         let size = CGSize(width: width, height: height)
         framebufferSize = size
         glad_glViewport(0, 0, width, height)
-        windowRenderTarget?.size = size
+        windowRenderTarget?.updateSize(size)
 
         guard hasCreatedCGContext else { return }
         cgContext.width = Int(width)

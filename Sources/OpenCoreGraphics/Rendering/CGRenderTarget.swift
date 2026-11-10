@@ -1,8 +1,7 @@
 import Foundation
 
 /// Receives backend-independent drawing commands and exposes rendered pixels.
-@MainActor
-protocol CGRenderTarget: Sendable {
+protocol CGRenderTarget {
     /// The dimensions of the drawing destination in pixels.
     var size: CGSize { get }
 
@@ -24,7 +23,6 @@ extension CGRenderTarget {
 }
 
 /// Executes drawing commands for a destination of the supplied size.
-@MainActor
 protocol CGRenderBackend: AnyObject {
     /// Renders a sequence of commands into a destination.
     /// - Parameters:

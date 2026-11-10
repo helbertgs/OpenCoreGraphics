@@ -23,7 +23,7 @@ struct WindowRenderTargetTests {
         #expect(renderer.commands == [command])
         #expect(renderer.size == CGSize(width: 32, height: 24))
 
-        target.size = CGSize(width: 40, height: 48)
+        target.updateSize(CGSize(width: 40, height: 48))
         target.submit(command)
         target.flush()
         #expect(renderer.commands == [command, command])
@@ -32,7 +32,6 @@ struct WindowRenderTargetTests {
 }
 
 /// Records backend calls without requiring an OpenGL context.
-@MainActor
 private final class RecordingRenderBackend: CGRenderBackend {
     /// The commands received from the render target.
     private(set) var commands: [DrawCommand] = []
