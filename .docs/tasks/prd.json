@@ -434,8 +434,8 @@
         "Build e testes passam"
       ],
       "priority": 29,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Tipos GL e CGWindow ficam em MainActor; CGGraphicsState, DrawCommand, CGPath e CGColor são Sendable e não isolados. CGContext continua não isolado e intencionalmente não Sendable por conter estado mutável. Recursos GL usam isolated deinit, sem @unchecked Sendable; swift build sem warnings e swift test passam."
     },
     {
       "id": "US-030",

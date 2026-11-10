@@ -276,3 +276,13 @@
 - **Learnings for future iterations:**
   - `CGRenderTarget` e `DrawCommand` ficam na camada de rendering genérica; dependências OpenGL e carregamento de shaders devem permanecer em `Rendering/GL/`.
 ---
+
+## 2026-11-10 - US-029
+- Tipos de runtime GL e `CGWindow` são isolados em `MainActor`; drivers de GL e targets ligados à janela também são main-actor.
+- `CGGraphicsState`, `DrawCommand`, `CGPath` e `CGColor` são valores `Sendable` e não isolados. `CGContext` permanece não isolado e não `Sendable` por conter estado mutável.
+- Recursos `GLProgram` e `GLBatchBuffer` são liberados por `isolated deinit`; não há `@unchecked Sendable` nem `nonisolated deinit`.
+- Busca confirma import OpenGLAD apenas em `Rendering/GL/` e `CGWindow.swift`.
+- `swift build` passou sem avisos; `swift test` passou (71 testes em 19 suítes).
+- **Learnings for future iterations:**
+  - Para APIs síncronas não isoladas que enviam comandos ao target OpenGL, `MainActor.assumeIsolated` é a fronteira explícita; valores enviados devem ser `Sendable`, mas o próprio `CGContext` mutável não deve ser marcado como `Sendable`.
+---
