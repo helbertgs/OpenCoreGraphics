@@ -341,3 +341,12 @@
   - Para limitar miter, compare a extensão do canto com o semidiâmetro da linha; uma junção de 90° ultrapassa o limite 1 e precisa virar bevel.
   - O contorno de um caminho fechado precisa de dois anéis com winding oposto para não preencher o interior.
 ---
+
+## 2026-11-10 - US-036
+- `StrokeStyle` aceita `dashPhase` e `dashLengths`, mantendo o inicializador com `dash:` para compatibilidade.
+- `Stroker` divide linhas em intervalos pintados/vazios, mantém o padrão através de vértices, aplica deslocamento de fase e trata lista vazia como traço contínuo.
+- Testes validam cinco segmentos de 10 em linha de 100, a fase 5 (incluindo os trechos parciais nas extremidades) e padrão vazio; `swift test` passou (92 testes em 21 suítes).
+- **Learnings for future iterations:**
+  - O phase é um deslocamento dentro do padrão no começo de cada subpath; segmentos pintados contínuos devem atravessar vértices sem reiniciar caps.
+  - Padrões com número ímpar de comprimentos devem ser repetidos para manter alternância contínua entre pintado e vazio.
+---

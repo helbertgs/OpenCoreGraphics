@@ -539,8 +539,8 @@
         "Build e testes passam"
       ],
       "priority": 36,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "StrokeStyle agora aceita dashPhase e dashLengths; o padrão alterna segmentos pintados/vazios ao longo dos vértices, trata fase positiva/negativa, repete padrões ímpares e mantém vazio como traço contínuo. O inicializador com o rótulo dash permanece compatível. swift test passou (92 testes em 21 suítes)."
     },
     {
       "id": "US-037",

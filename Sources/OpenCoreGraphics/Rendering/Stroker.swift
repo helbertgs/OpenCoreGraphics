@@ -10,10 +10,18 @@ enum Stroker {
     /// - Precondition: The line width is finite and nonnegative.
     static func outline(_ polylines: [Polyline], style: StrokeStyle) -> [Polyline] {
         precondition(style.width.isFinite && style.width >= 0, "Stroke width must be finite and nonnegative.")
+        precondition(style.dashPhase.isFinite, "Dash phase must be finite.")
+        precondition(
+            style.dashLengths.allSatisfy { $0.isFinite && $0 > 0 },
+            "Dash lengths must be finite and greater than zero."
+        )
         guard style.width > 0 else { return [] }
 
+        let visiblePolylines = style.dashLengths.isEmpty
+            ? polylines
+            : dashedPolylines(polylines, style: style)
         var outlines: [Polyline] = []
-        for polyline in polylines {
+        for polyline in visiblePolylines {
             let points = cleanedPoints(polyline.points, isClosed: polyline.isClosed)
             guard points.isEmpty == false else { continue }
             if points.count == 1 {
@@ -29,6 +37,106 @@ enum Stroker {
             outlines.append(outline(forOpenPoints: points, style: style))
         }
         return outlines
+    }
+
+    /// Splits polylines into painted intervals following the dash pattern.
+    private static func dashedPolylines(_ polylines: [Polyline], style: StrokeStyle) -> [Polyline] {
+        var pattern = style.dashLengths
+        if pattern.count.isMultiple(of: 2) == false {
+            pattern.append(contentsOf: style.dashLengths)
+        }
+        let patternLength = pattern.reduce(0, +)
+        precondition(patternLength.isFinite, "Total dash pattern length must be finite.")
+        return polylines.flatMap { dashedPolyline($0, pattern: pattern, patternLength: patternLength, phase: style.dashPhase) }
+    }
+
+    /// Splits one open or closed polyline into its painted dash intervals.
+    private static func dashedPolyline(
+        _ polyline: Polyline,
+        pattern: [Double],
+        patternLength: Double,
+        phase: Double
+    ) -> [Polyline] {
+        var pathPoints = cleanedPoints(polyline.points, isClosed: polyline.isClosed)
+        guard pathPoints.count > 1 else { return [] }
+        if polyline.isClosed {
+            pathPoints.append(pathPoints[0])
+        }
+
+        var patternIndex = 0
+        var phaseOffset = phase.truncatingRemainder(dividingBy: patternLength)
+        if phaseOffset < 0 {
+            phaseOffset += patternLength
+        }
+        while phaseOffset >= pattern[patternIndex] {
+            phaseOffset -= pattern[patternIndex]
+            patternIndex = (patternIndex + 1) % pattern.count
+        }
+        var isPainted = patternIndex.isMultiple(of: 2)
+        var patternRemaining = pattern[patternIndex] - phaseOffset
+        var dashes: [Polyline] = []
+        var currentDash: [CGPoint] = []
+
+        for segmentIndex in 0..<(pathPoints.count - 1) {
+            let start = pathPoints[segmentIndex]
+            let end = pathPoints[segmentIndex + 1]
+            let dx = end.x - start.x
+            let dy = end.y - start.y
+            let segmentLength = (dx * dx + dy * dy).squareRoot()
+            guard segmentLength > Double.ulpOfOne else { continue }
+
+            var segmentProgress = 0.0
+            while segmentProgress < segmentLength {
+                let segmentRemaining = segmentLength - segmentProgress
+                let step = min(patternRemaining, segmentRemaining)
+                let intervalStart = interpolate(start, end, at: segmentProgress / segmentLength)
+                let intervalEnd = interpolate(start, end, at: (segmentProgress + step) / segmentLength)
+                if isPainted {
+                    if currentDash.last != intervalStart {
+                        currentDash.append(intervalStart)
+                    }
+                    if currentDash.last != intervalEnd {
+                        currentDash.append(intervalEnd)
+                    }
+                }
+
+                segmentProgress += step
+                patternRemaining -= step
+                if patternRemaining <= Double.ulpOfOne * max(1, pattern[patternIndex]) {
+                    if isPainted, currentDash.count > 1 {
+                        dashes.append(Polyline(points: currentDash, isClosed: false))
+                    }
+                    currentDash.removeAll(keepingCapacity: true)
+                    patternIndex = (patternIndex + 1) % pattern.count
+                    isPainted = patternIndex.isMultiple(of: 2)
+                    patternRemaining = pattern[patternIndex]
+                }
+            }
+        }
+        if currentDash.count > 1 {
+            dashes.append(Polyline(points: currentDash, isClosed: false))
+        }
+
+        guard polyline.isClosed, let first = dashes.first, let last = dashes.last,
+              first.points.first == pathPoints.first, last.points.last == pathPoints.first else {
+            return dashes
+        }
+        if dashes.count == 1 {
+            return [Polyline(points: Array(first.points.dropLast()), isClosed: true)]
+        }
+
+        let wrappedDash = Polyline(points: last.points + first.points.dropFirst(), isClosed: false)
+        return [wrappedDash] + dashes.dropFirst().dropLast()
+    }
+
+    /// Interpolates along a segment while preserving its exact endpoint values.
+    private static func interpolate(_ start: CGPoint, _ end: CGPoint, at parameter: Double) -> CGPoint {
+        if parameter <= 0 { return start }
+        if parameter >= 1 { return end }
+        return CGPoint(
+            x: start.x + (end.x - start.x) * parameter,
+            y: start.y + (end.y - start.y) * parameter
+        )
     }
 
     /// Removes adjacent duplicate points and the repeated endpoint of a closed polyline.

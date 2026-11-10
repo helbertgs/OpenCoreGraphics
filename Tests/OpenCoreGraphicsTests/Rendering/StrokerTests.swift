@@ -62,6 +62,47 @@ struct StrokerTests {
         #expect(outlines[1].points.contains(CGPoint(x: 2, y: 2)))
     }
 
+    /// Verifies an even dash pattern creates five ten-point segments on a 100-point line.
+    @Test
+    func appliesDashLengthsAcrossLine() throws {
+        let line = Polyline(points: [CGPoint(x: 0, y: 0), CGPoint(x: 100, y: 0)], isClosed: false)
+        let outlines = Stroker.outline([line], style: strokeStyle(dashLengths: [10, 10]))
+        let bounds = try outlines.map { try horizontalBounds(of: $0) }
+
+        #expect(outlines.count == 5)
+        #expect(bounds.map(\.minimum) == [0, 20, 40, 60, 80])
+        #expect(bounds.map { $0.maximum - $0.minimum } == [10, 10, 10, 10, 10])
+    }
+
+    /// Verifies a positive dash phase starts partway through the first painted interval.
+    @Test
+    func appliesDashPhase() throws {
+        let line = Polyline(points: [CGPoint(x: 0, y: 0), CGPoint(x: 100, y: 0)], isClosed: false)
+        let outlines = Stroker.outline(
+            [line],
+            style: strokeStyle(dashPhase: 5, dashLengths: [10, 10])
+        )
+        let bounds = try outlines.map { try horizontalBounds(of: $0) }
+
+        #expect(zip(bounds.map(\.minimum), [0, 15, 35, 55, 75, 95]).allSatisfy {
+            abs($0.0 - $0.1) < 1e-9
+        })
+        #expect(zip(bounds.map { $0.maximum - $0.minimum }, [5, 10, 10, 10, 10, 5]).allSatisfy {
+            abs($0.0 - $0.1) < 1e-9
+        })
+    }
+
+    /// Verifies an empty dash pattern keeps a path continuous.
+    @Test
+    func emptyDashPatternKeepsContinuousStroke() throws {
+        let line = Polyline(points: [CGPoint(x: 0, y: 0), CGPoint(x: 100, y: 0)], isClosed: false)
+        let outline = try #require(Stroker.outline([line], style: strokeStyle()).first)
+        let bounds = try horizontalBounds(of: outline)
+
+        #expect(bounds.minimum == 0)
+        #expect(bounds.maximum == 100)
+    }
+
     /// Verifies round caps and joins produce closed outlines.
     @Test
     func createsRoundOutlines() throws {
@@ -86,9 +127,18 @@ struct StrokerTests {
     private func strokeStyle(
         cap: CGLineCap = .butt,
         join: CGLineJoin = .miter,
-        miterLimit: Double = 10
+        miterLimit: Double = 10,
+        dashPhase: Double = 0,
+        dashLengths: [Double] = []
     ) -> StrokeStyle {
-        StrokeStyle(width: 4, cap: cap, join: join, miterLimit: miterLimit, dash: [])
+        StrokeStyle(
+            width: 4,
+            cap: cap,
+            join: join,
+            miterLimit: miterLimit,
+            dashPhase: dashPhase,
+            dashLengths: dashLengths
+        )
     }
 
     /// Calculates the signed area of a closed polygon without repeating its first point.
@@ -98,5 +148,12 @@ struct StrokerTests {
             let next = points[(index + 1) % points.count]
             return area + current.x * next.y - next.x * current.y
         }
+    }
+
+    /// Returns horizontal bounds for an outline's vertices.
+    private func horizontalBounds(of polyline: Polyline) throws -> (minimum: Double, maximum: Double) {
+        let minimum = try #require(polyline.points.map(\.x).min())
+        let maximum = try #require(polyline.points.map(\.x).max())
+        return (minimum, maximum)
     }
 }

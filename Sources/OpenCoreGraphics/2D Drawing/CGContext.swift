@@ -449,7 +449,7 @@ open class CGContext {
 
     /// Captures the current line parameters for a stroke command.
     private var currentStrokeStyle: StrokeStyle {
-        StrokeStyle(width: lineWidth, cap: lineCap, join: lineJoin, miterLimit: miterLimit, dash: lineDash)
+        StrokeStyle(width: lineWidth, cap: lineCap, join: lineJoin, miterLimit: miterLimit, dashLengths: lineDash)
     }
 
     // MARK: - Drawing Shapes
