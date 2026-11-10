@@ -41,7 +41,19 @@ struct DrawCommandTests {
                 blendMode: .normal
             ),
             .clip(path: path, rule: .winding),
-            .glyphs(glyphs: [1, 2], positions: [CGPoint(x: 4, y: 5), CGPoint(x: 6, y: 7)], fontName: "Test", fontSize: 12, color: color, blendMode: .normal)
+            .glyphs(
+                glyphs: [1, 2],
+                positions: [CGPoint(x: 4, y: 5), CGPoint(x: 6, y: 7)],
+                fontName: "Test",
+                fontSize: 12,
+                glyphBitmaps: [nil, nil],
+                characterSpacing: 0,
+                textMatrix: .identity,
+                textPosition: .zero,
+                ctm: .identity,
+                color: color,
+                blendMode: .normal
+            )
         ]
 
         #expect(commands.count == 5)
@@ -57,6 +69,18 @@ struct DrawCommandTests {
             blendMode: .normal
         ))
         #expect(commands[3] == .clip(path: path, rule: .winding))
-        #expect(commands[4] == .glyphs(glyphs: [1, 2], positions: [CGPoint(x: 4, y: 5), CGPoint(x: 6, y: 7)], fontName: "Test", fontSize: 12, color: color, blendMode: .normal))
+        #expect(commands[4] == .glyphs(
+            glyphs: [1, 2],
+            positions: [CGPoint(x: 4, y: 5), CGPoint(x: 6, y: 7)],
+            fontName: "Test",
+            fontSize: 12,
+            glyphBitmaps: [nil, nil],
+            characterSpacing: 0,
+            textMatrix: .identity,
+            textPosition: .zero,
+            ctm: .identity,
+            color: color,
+            blendMode: .normal
+        ))
     }
 }

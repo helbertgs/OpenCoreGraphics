@@ -6,6 +6,7 @@
 
 #include "include/OpenCoreGraphicsSTB.h"
 
+#include <math.h>
 #include <stdlib.h>
 
 struct OCGSTBFont {
@@ -88,4 +89,42 @@ void ocg_stb_font_get_glyph_horizontal_metrics(
     int *leftSideBearing
 ) {
     stbtt_GetGlyphHMetrics(&font->fontInfo, glyphIndex, advanceWidth, leftSideBearing);
+}
+
+unsigned char *ocg_stb_font_rasterize_glyph(
+    const OCGSTBFont *font,
+    int glyphIndex,
+    float pixelHeight,
+    int *width,
+    int *height,
+    int *xOffset,
+    int *yOffset
+) {
+    if (font == NULL ||
+        glyphIndex < 0 ||
+        glyphIndex >= font->fontInfo.numGlyphs ||
+        !isfinite(pixelHeight) ||
+        pixelHeight <= 0 ||
+        width == NULL ||
+        height == NULL ||
+        xOffset == NULL ||
+        yOffset == NULL) {
+        return NULL;
+    }
+
+    float scale = stbtt_ScaleForPixelHeight(&font->fontInfo, pixelHeight);
+    return stbtt_GetGlyphBitmap(
+        &font->fontInfo,
+        scale,
+        scale,
+        glyphIndex,
+        width,
+        height,
+        xOffset,
+        yOffset
+    );
+}
+
+void ocg_stb_font_free_glyph_bitmap(unsigned char *bitmap) {
+    stbtt_FreeBitmap(bitmap, NULL);
 }

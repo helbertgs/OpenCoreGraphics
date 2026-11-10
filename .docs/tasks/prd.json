@@ -921,8 +921,8 @@
         "Build e testes passam"
       ],
       "priority": 61,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "showGlyphs captura as máscaras de 8 bits geradas por stb_truetype; o SoftwareRenderer as organiza em atlas por comando, aplica clipping, cor, blend e as transformações de texto/contexto. Apenas fill é suportado; os demais modos são documentados e normalizados para fill. Testes validam a região de pixels de I a 20 px e o posicionamento por textPosition, characterSpacing, textMatrix e CTM."
     },
     {
       "id": "US-062",

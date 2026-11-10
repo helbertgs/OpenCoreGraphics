@@ -192,6 +192,57 @@ public class CGFont {
         return Double(advanceWidth)
     }
 
+    /// Rasterizes a glyph as an 8-bit coverage bitmap at the requested pixel height.
+    /// - Parameters:
+    ///   - glyph: The glyph index to rasterize.
+    ///   - size: The requested font height in pixels.
+    /// - Returns: The glyph bitmap, or nil when the glyph or size is invalid.
+    func rasterizedGlyph(_ glyph: CGGlyph, at size: Double) -> CGGlyphBitmap? {
+        guard Int(glyph) < numberOfGlyphs,
+              let fontInfo,
+              size.isFinite,
+              size > 0,
+              size <= Double(Float.greatestFiniteMagnitude) else {
+            return nil
+        }
+
+        var width: Int32 = 0
+        var height: Int32 = 0
+        var xOffset: Int32 = 0
+        var yOffset: Int32 = 0
+        let bitmap = ocg_stb_font_rasterize_glyph(
+            fontInfo,
+            Int32(glyph),
+            Float(size),
+            &width,
+            &height,
+            &xOffset,
+            &yOffset
+        )
+
+        guard width >= 0, height >= 0 else { return nil }
+        let (pixelCount, overflow) = Int(width).multipliedReportingOverflow(by: Int(height))
+        guard overflow == false else { return nil }
+
+        let coverage: Data
+        if let bitmap {
+            defer { ocg_stb_font_free_glyph_bitmap(bitmap) }
+            guard pixelCount > 0 else { return nil }
+            coverage = Data(bytes: bitmap, count: pixelCount)
+        } else {
+            guard width == 0 || height == 0 else { return nil }
+            coverage = Data()
+        }
+
+        return CGGlyphBitmap(
+            width: Int(width),
+            height: Int(height),
+            xOffset: Int(xOffset),
+            yOffset: Int(yOffset),
+            coverage: coverage
+        )
+    }
+
     /// Returns the glyph name of the specified glyph in the specified font.
     /// - Parameter glyph: The glyph whose name is desired.
     /// - Returns: The name of the specified glyph, or nil if the glyph isn’t associated with the font object.

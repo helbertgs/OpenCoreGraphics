@@ -59,7 +59,19 @@ enum DrawCommand: Equatable, Sendable {
     case resetClip
 
     /// Draws positioned glyphs using a font snapshot and captured text state.
-    case glyphs(glyphs: [CGGlyph], positions: [CGPoint], fontName: String?, fontSize: Double, color: CGColor, blendMode: CGBlendMode)
+    case glyphs(
+        glyphs: [CGGlyph],
+        positions: [CGPoint],
+        fontName: String?,
+        fontSize: Double,
+        glyphBitmaps: [CGGlyphBitmap?],
+        characterSpacing: Double,
+        textMatrix: CGAffineTransform,
+        textPosition: CGPoint,
+        ctm: CGAffineTransform,
+        color: CGColor,
+        blendMode: CGBlendMode
+    )
 }
 
 /// The line parameters captured by a stroke drawing command.

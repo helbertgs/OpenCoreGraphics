@@ -943,19 +943,43 @@ open class CGContext {
         self.fontSize = size
     }
 
-    /// Sets the current text drawing mode.
+    /// Sets the current text drawing mode; modes other than fill are treated as fill in this rendering phase.
     /// - Parameter mode: A text drawing mode (such as ``.fill`` or ``.stroke``) that specifies how Core Graphics renders individual glyphs in a graphics context.
     public func setTextDrawingMode(_ mode: CGTextDrawingMode) {
-        self.textDrawingMode = mode
+        self.textDrawingMode = .fill
     }
 
     /// Draws a set of glyphs at a set of corresponding positions.
     /// 
-    /// Points in the positions array are specified in text space, so the ``textMatrix`` property defines their transformation to user space.
+    /// Positions and character spacing are specified in text space and transformed by ``textMatrix``. The current text position is added in user space before applying the current transformation matrix.
     /// - Parameters:
     ///   - glyphs: An array of glyphs.
     ///   - positions: An array positions for the glyphs. Each item in this array specifies the position at which to draw the glyph at the corresponding index in the glyphs array.
     public func showGlyphs(_ glyphs: [CGGlyph], at positions: [CGPoint]) {
+        guard glyphs.isEmpty == false,
+              glyphs.count == positions.count,
+              let font,
+              fontSize.isFinite,
+              fontSize > 0,
+              characterSpacing.isFinite else {
+            return
+        }
+
+        pendingDrawCommands.append(
+            .glyphs(
+                glyphs: glyphs,
+                positions: positions,
+                fontName: font.fullName,
+                fontSize: fontSize,
+                glyphBitmaps: glyphs.map { font.rasterizedGlyph($0, at: fontSize) },
+                characterSpacing: characterSpacing,
+                textMatrix: textMatrix,
+                textPosition: textPosition,
+                ctm: ctm,
+                color: fillColor,
+                blendMode: blendMode
+            )
+        )
     }
 
     // MARK: - Setting Fill, Stroke, and Shadow Colors

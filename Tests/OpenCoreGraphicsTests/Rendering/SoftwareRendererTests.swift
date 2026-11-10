@@ -35,6 +35,70 @@ struct SoftwareRendererTests {
         #expect(pixel(at: 1, y: 1, in: pixels) == [255, 255, 255, 255])
     }
 
+    /// Verifies a 20-pixel TrueType glyph paints only within its expected bitmap bounds.
+    @Test
+    func drawsTrueTypeGlyphInsideItsExpectedBounds() throws {
+        let context = try #require(makeContext(width: 32, height: 32))
+        let fontURL = try #require(
+            Bundle.module.url(forResource: "tiny-test", withExtension: "ttf", subdirectory: "Resources")
+        )
+        let font = try #require(CGFont(fontURL.path))
+        let glyph = try #require(font.glyph(for: "I"))
+        context.setFont(font)
+        context.setFontSize(20)
+        context.setTextDrawingMode(.stroke)
+        context.setFillColor(.white)
+        context.textPosition = CGPoint(x: 6, y: 24)
+        context.showGlyphs([glyph], at: [.zero])
+        context.flush()
+
+        let pixels = Array(context.data)
+        let painted = (0..<32).flatMap { y in
+            (0..<32).compactMap { x -> (Int, Int)? in
+                pixel(at: x, y: y, in: pixels, width: 32)[3] > 0 ? (x, y) : nil
+            }
+        }
+
+        #expect(painted.isEmpty == false)
+        #expect(painted.allSatisfy { (8..<15).contains($0.0) && (9..<25).contains($0.1) })
+    }
+
+    /// Verifies glyph origins account for character spacing and both text and context transforms.
+    @Test
+    func positionsGlyphsUsingTextStateAndTransforms() throws {
+        let context = try #require(makeContext(width: 40, height: 64))
+        let fontURL = try #require(
+            Bundle.module.url(forResource: "tiny-test", withExtension: "ttf", subdirectory: "Resources")
+        )
+        let font = try #require(CGFont(fontURL.path))
+        let glyph = try #require(font.glyph(for: "I"))
+        context.setFont(font)
+        context.setFontSize(20)
+        context.setCharacterSpacing(5)
+        context.textPosition = CGPoint(x: 2, y: 35)
+        context.textMatrix = CGAffineTransform(a: 1.5, b: 0, c: 0, d: 1.5, tx: 1, ty: 0)
+        context.translateBy(x: 2, y: 3)
+        context.setFillColor(.white)
+        context.showGlyphs([glyph, glyph], at: [.zero, .zero])
+        context.flush()
+
+        let pixels = Array(context.data)
+        let painted = (0..<64).flatMap { y in
+            (0..<40).compactMap { x -> (Int, Int)? in
+                pixel(at: x, y: y, in: pixels, width: 40)[3] > 0 ? (x, y) : nil
+            }
+        }
+        let paintedX = painted.map(\.0)
+        let paintedY = painted.map(\.1)
+
+        #expect(painted.isEmpty == false)
+        #expect((paintedX.min() ?? 0) >= 10)
+        #expect((paintedX.max() ?? 0) >= 18)
+        #expect((paintedX.max() ?? 40) < 30)
+        #expect((paintedY.min() ?? 0) >= 15)
+        #expect((paintedY.max() ?? 64) < 40)
+    }
+
     /// Verifies a black-to-white linear gradient produces evenly spaced pixel values.
     @Test
     func interpolatesLinearGradientAcrossPixelCenters() throws {

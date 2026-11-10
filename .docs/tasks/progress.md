@@ -2,6 +2,7 @@
 
 ## Codebase Patterns
 - A implementação C de `stb_truetype` usa `OpenCoreGraphicsSTB` e seu header privado textual; importar o header de `OpenSTB` como módulo não emite a implementação definida por `STB_TRUETYPE_IMPLEMENTATION`. Adicione wrappers C nessa ponte para expor operações do stb às próximas etapas.
+- `showGlyphs` captura os bitmaps de cobertura no `DrawCommand`; o software os organiza em um atlas 8-bit por comando, então o backend GL pode reutilizar a mesma captura sem reler a fonte.
 - Para ver só os erros de build: `swift build 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | grep -E "error:|Build complete"`. O Swift para no primeiro arquivo com erro, então **depois de corrigir um erro, rode o build de novo**: outros erros podem estar escondidos.
 - O build usa o sistema do Xcode (`.build/out/...`); o aviso "found 2 file(s) which are unhandled" é o `Resources/default/*.glsl` ainda não declarado em `Package.swift` (resolvido na US-005).
 - `CGColor.components` é `[Double]`; qualquer chamada `glad_*` que recebe `GLfloat` precisa de `Float(...)`.
@@ -594,4 +595,15 @@
 - Files changed: `Package.swift`, `Sources/OpenCoreGraphicsSTB/`, `Sources/OpenCoreGraphics/Colors and Fonts/CGFont.swift`, `Tests/OpenCoreGraphicsTests/Colors and Fonts/CGFontTests.swift`, `Tests/OpenCoreGraphicsTests/Resources/tiny-test.ttf`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
 - **Learnings for future iterations:**
   - Para ampliar o uso de `stb_truetype`, exponha wrappers C em `OpenCoreGraphicsSTB`; não importe o header privado diretamente do Swift.
+---
+
+## 2026-11-10 - US-061
+- `CGContext.showGlyphs` agora grava comandos com IDs, posições, estado tipográfico e máscaras rasterizadas de 8 bits geradas por `stb_truetype`.
+- O `SoftwareRenderer` empacota as máscaras em um atlas por comando, amostra a cobertura com interpolação bilinear e compõe o preenchimento respeitando clip, blend mode, `textMatrix`, `textPosition`, CTM e espaçamento.
+- Somente `.fill` é suportado na fase atual; os outros modos de texto são documentados como fallback para `.fill`.
+- Testes confirmam pixels de `I` em 20 px dentro da região esperada, fallback `.stroke` e posicionamento com spacing/matrizes.
+- `swift test` passou (163 testes em 30 suítes), `swift build --target OpenCoreGraphicsSample` e `git diff --check` passaram.
+- Files changed: `Sources/OpenCoreGraphics/2D Drawing/CGContext.swift`, `Sources/OpenCoreGraphics/Colors and Fonts/CGFont.swift`, `Sources/OpenCoreGraphics/Colors and Fonts/CGGlyphBitmap.swift`, `Sources/OpenCoreGraphics/Colors and Fonts/CGTextDrawingMode.swift`, `Sources/OpenCoreGraphics/Rendering/DrawCommand.swift`, `Sources/OpenCoreGraphics/Rendering/SoftwareRenderer.swift`, `Sources/OpenCoreGraphicsSTB/include/OpenCoreGraphicsSTB.h`, `Sources/OpenCoreGraphicsSTB/stb_truetype.c`, `Tests/OpenCoreGraphicsTests/Rendering/DrawCommandTests.swift`, `Tests/OpenCoreGraphicsTests/Rendering/SoftwareRendererTests.swift`, `.docs/tasks/prd.json`, `.docs/tasks/progress.md`
+- **Learnings for future iterations:**
+  - Preserve the glyph bitmaps in the draw command so later backends can consume the same rasterized coverage and avoid reopening font files.
 ---

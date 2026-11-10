@@ -70,3 +70,27 @@ void ocg_stb_font_get_glyph_horizontal_metrics(
     int *advanceWidth,
     int *leftSideBearing
 );
+
+/// Rasterizes one glyph into an 8-bit coverage bitmap.
+/// - Parameters:
+///   - font: The initialized parser.
+///   - glyphIndex: The glyph index to rasterize.
+///   - pixelHeight: The requested font height in pixels.
+///   - width: Receives the bitmap width.
+///   - height: Receives the bitmap height.
+///   - xOffset: Receives the bitmap's horizontal offset from the glyph origin.
+///   - yOffset: Receives the bitmap's vertical offset from the baseline.
+/// - Returns: The allocated bitmap, or `NULL` when the glyph has no bitmap.
+unsigned char *ocg_stb_font_rasterize_glyph(
+    const OCGSTBFont *font,
+    int glyphIndex,
+    float pixelHeight,
+    int *width,
+    int *height,
+    int *xOffset,
+    int *yOffset
+);
+
+/// Releases a glyph bitmap created by `ocg_stb_font_rasterize_glyph`.
+/// - Parameter bitmap: The allocated glyph bitmap.
+void ocg_stb_font_free_glyph_bitmap(unsigned char *bitmap);
