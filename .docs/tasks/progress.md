@@ -159,3 +159,12 @@
 - **Learnings for future iterations:**
   - `CGColorModel` já contém os modelos necessários; os metadados do enum podem ser derivados diretamente dos quatro casos sem novos tipos auxiliares.
 ---
+
+## 2026-11-09 - US-016
+- `CGBitmapParameters` substituiu o dicionário dinâmico por propriedades tipadas de espaço de cor, layout, componente, informação do componente e alfa.
+- Definidos defaults RGBA, inteiro de 8 bits, componente inteiro e alfa premultiplicado no último canal.
+- Teste verifica leitura e atualização de todas as propriedades.
+- `swift test --filter CGBitmapParametersTests` passou (1 teste).
+- **Learnings for future iterations:**
+  - `CGBitmapLayout`, `CGComponent`, `CGImageComponentInfo` e `CGImageAlphaInfo` já cobrem os tipos necessários; não foi preciso adicionar enums.
+---

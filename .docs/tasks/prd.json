@@ -238,8 +238,8 @@
         "Build e testes passam"
       ],
       "priority": 16,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "CGBitmapParameters agora expõe propriedades tipadas com defaults RGBA/integer8/premultipliedLast; removidos dynamicMemberLookup, dicionário e cast forçado. Teste verifica leitura e atualização de todas as propriedades."
     },
     {
       "id": "US-017",
