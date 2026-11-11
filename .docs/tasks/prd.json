@@ -339,8 +339,8 @@
         "Typecheck passes"
       ],
       "priority": 20,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Benchmark reproduzível compara cache e referência sem reutilização, captura real de snapshots, uploads, tempo e memória lógica; não mede latência GPU nem afirma ganho."
     },
     {
       "id": "US-021",

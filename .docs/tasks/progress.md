@@ -208,3 +208,12 @@
 - **Learnings for future iterations:**
   - O orçamento limita somente entradas do cache: referências externas podem prolongar a vida da textura e não contam no orçamento.
 ---
+
+## 2026-11-10 - US-020
+- Benchmark reproduzível captura snapshots de provider real e compara cache com referência sem reutilização usando as mesmas imagens e loader simulado; documenta custo e limitações em `.docs/ImageUpdateBenchmark.md`.
+- Em 30 frames de 128×128, ambos capturam 1.966.080 bytes; cache estático envia 65.536 bytes contra 1.966.080 da referência, enquanto o mutável envia 1.966.080 em ambos. O cache retém 131.072 bytes lógicos. Medianas da carga CPU foram maiores no cache; GPU, RSS e ganho real não foram medidos.
+- Validação: 277 testes em 48 suítes com concorrência estrita; build estrito; runner GL concluiu 28 testes em cinco suítes; benchmark direcionado e `git diff --check` passaram.
+- Files changed: `.docs/ImageUpdateBenchmark.md`, `README.md`, `Tests/OpenCoreGraphicsTests/Rendering/GLImageUpdateBenchmarkTests.swift`, arquivos de progresso.
+- **Learnings for future iterations:**
+  - Comparar uploads isolados com loader simulado não mede custo real do driver nem determina ganho de desempenho.
+---

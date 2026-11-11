@@ -23,6 +23,18 @@ In Windows and Linux, OpenCoreGraphics also includes services for working with d
 - **Run the Sample**: swift run
 - **Run the opt-in OpenGL comparisons**: `ruby scripts/run-gl-tests.rb --timeout 120` on a machine with a graphical session and an OpenGL 3.3 driver. The timeout covers the build and tests. The runner exits with 0 only when both comparisons complete successfully; 1 means a failure, timeout, interruption, skipped test or incomplete report, and 2 means invalid arguments or an explicitly reported unavailable graphics context. Ruby and Swift must be available on `PATH`. Each run prints a unique artifacts directory under `.build/gl-comparison/` (override the parent directory with `OPENCOREGRAPHICS_GL_ARTIFACTS`): per-scene JSON contains the system, GL driver, framebuffer state, tolerance and result; failing scenes also preserve raw RGBA pixel buffers for both backends. Comparisons normalize opaque framebuffer pixels to sRGB; see [GL comparison diagnostics](.docs/GLComparisonDiagnostics.md). Incomplete runs may contain only partial results and must not be interpreted as passing.
 
+## Image update measurements
+
+Run the deterministic CPU-side image-cache workload with
+`swift test -Xswiftc -strict-concurrency=complete --filter GLImageUpdateBenchmarkTests`.
+It prints same-input comparisons for static and changing 128×128 RGBA images,
+captured per frame through the production `CGImageSnapshot(image:)` path,
+including explicit snapshot payload copies, cache equality checks, texture-loader
+calls, uploaded bytes, elapsed time and logical retained bytes. The recording
+loader does not call OpenGL, so these measurements characterize cache bookkeeping
+and upload decisions—not GPU transfer latency, process RSS or rendered pixels.
+See [image update benchmark methodology and results](.docs/ImageUpdateBenchmark.md).
+
 ## Cooperative window processing
 
 `CGWindow.makeKeyAndOrderFrontAsync(_:)` is a `@MainActor` asynchronous alternative
