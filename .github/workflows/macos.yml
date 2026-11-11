@@ -1,0 +1,145 @@
+name: macOS
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_gl:
+        description: Run the opt-in GL comparisons on a self-hosted macOS graphics runner
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    name: Build and tests
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Test Swift toolchain selector
+        run: bash scripts/test-select-swift-toolchain.sh
+
+      - name: Select compatible Swift toolchain
+        run: |
+          source scripts/select-swift-toolchain.sh
+          swift package dump-package > /dev/null
+
+      - name: Build
+        id: build
+        run: swift build
+
+      - name: Run standard tests
+        id: standard-tests
+        run: |
+          set -o pipefail
+          swift test 2>&1 | tee "$RUNNER_TEMP/standard-tests.log"
+
+      - name: Build with complete strict concurrency
+        id: strict-build
+        run: swift build -Xswiftc -strict-concurrency=complete -Xswiftc -warnings-as-errors
+
+      - name: Test with complete strict concurrency
+        id: strict-tests
+        run: |
+          set -o pipefail
+          swift test -Xswiftc -strict-concurrency=complete -Xswiftc -warnings-as-errors 2>&1 | tee "$RUNNER_TEMP/strict-tests.log"
+
+      - name: Publish test and coverage summary
+        if: always()
+        env:
+          BUILD_RESULT: ${{ steps.build.outcome }}
+          STANDARD_TEST_RESULT: ${{ steps.standard-tests.outcome }}
+          STRICT_BUILD_RESULT: ${{ steps.strict-build.outcome }}
+          STRICT_TEST_RESULT: ${{ steps.strict-tests.outcome }}
+        run: |
+          {
+            echo "## macOS verification"
+            echo
+            echo "| Check | Result |"
+            echo "| --- | --- |"
+            echo "| \`swift build\` | ${BUILD_RESULT:-not run} |"
+            echo "| \`swift test\` | ${STANDARD_TEST_RESULT:-not run} |"
+            echo "| Complete strict-concurrency build (warnings as errors) | ${STRICT_BUILD_RESULT:-not run} |"
+            echo "| Complete strict-concurrency tests (warnings as errors) | ${STRICT_TEST_RESULT:-not run} |"
+            echo
+            for test_log in standard-tests strict-tests; do
+              log_path="$RUNNER_TEMP/${test_log}.log"
+              echo "### ${test_log} test report"
+              if [ -f "$log_path" ]; then
+                report="$(grep -E 'Test run with [0-9]+ tests in [0-9]+ suites (passed|failed)' "$log_path" | tail -n 1 || true)"
+                if [ -n "$report" ]; then
+                  echo "- $report"
+                else
+                  echo "- No final Swift Testing summary was produced."
+                fi
+                skipped="$(grep -E ' (Suite|Test) .+ skipped\.$' "$log_path" | sed -E 's/.*➜ /- /' || true)"
+                if [ -n "$skipped" ]; then
+                  echo "$skipped"
+                else
+                  echo "- No skipped suites or tests were reported."
+                fi
+              else
+                echo "- Test command did not run."
+              fi
+              echo
+            done
+            echo "These reports reflect the default test selection with opt-in environment flags unset. Skipped tests are not passed."
+            echo "No graphics context is assumed on this runner. GL comparisons are only run by the manual opt-in job on a self-hosted macOS runner labelled \`graphics\`; an unavailable context, skipped test, incomplete report, or comparison failure fails that job."
+            echo
+            echo "Coverage is not collected or reported by this workflow; no coverage percentage is claimed. This job reports build/test selection only."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  gl-comparisons:
+    name: Opt-in GL comparisons
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_gl }}
+    runs-on: [self-hosted, macOS, graphics]
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+
+      - name: Verify toolchain and runner prerequisites
+        run: |
+          source scripts/select-swift-toolchain.sh
+          swift --version
+          swift package dump-package > /dev/null
+          ruby --version
+
+      - name: Run conclusive GL comparisons
+        id: gl-tests
+        run: |
+          result=0
+          ruby scripts/run-gl-tests.rb --timeout 600 || result=$?
+          echo "exit_code=$result" >> "$GITHUB_OUTPUT"
+          exit "$result"
+
+      - name: Publish GL result summary
+        if: always()
+        env:
+          GL_RESULT: ${{ steps.gl-tests.outcome }}
+          GL_EXIT_CODE: ${{ steps.gl-tests.outputs.exit_code }}
+        run: |
+          {
+            echo "## Opt-in GL comparison"
+            echo
+            echo "- Job result: ${GL_RESULT:-not run}"
+            echo "- Runner exit code: ${GL_EXIT_CODE:-not started}"
+            if [ "$GL_EXIT_CODE" = "0" ]; then
+              echo "- Required GL reports and comparisons completed successfully."
+            elif [ "$GL_EXIT_CODE" = "2" ]; then
+              echo "- The runner reported unavailable graphics context or invalid invocation. This is a failure, not a passed comparison."
+            elif [ -n "$GL_EXIT_CODE" ]; then
+              echo "- The runner reported a test failure, timeout, skipped test, interrupted process, or incomplete report. This is not a passed comparison."
+            else
+              echo "- The GL test step did not start; no comparison result is claimed."
+            fi
+            echo
+            echo "This job requires an explicitly configured self-hosted macOS runner labelled \`graphics\`, with an active graphical session and an OpenGL 3.3 driver. Its reports and any failure artifacts are written below \`.build/gl-comparison/\` on that runner."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+if [[ "${1:-}" != "--find" || "${2:-}" != "swift" || -z "${DEVELOPER_DIR:-}" ]]; then
+  exit 1
+fi
+candidate="$DEVELOPER_DIR/usr/bin/swift"
+[[ -x "$candidate" ]] || exit 1
+printf '%s\n' "$candidate"

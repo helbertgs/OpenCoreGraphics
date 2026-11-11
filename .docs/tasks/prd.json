@@ -425,8 +425,8 @@
         "Typecheck passes"
       ],
       "priority": 25,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Workflow macOS com seleção validada de Swift >= 6.4, testes estritos, resumo e GL opt-in; execução no GitHub e disponibilidade da toolchain hospedada ainda não verificadas."
     },
     {
       "id": "US-026",

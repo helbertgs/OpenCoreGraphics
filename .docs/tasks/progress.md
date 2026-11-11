@@ -254,3 +254,12 @@
 - **Learnings for future iterations:**
   - Atualizações do header stb podem deslocar diagnóstico e exigem revisão explícita da baseline, inclusive linha e coluna.
 ---
+
+## 2026-11-11 - US-025
+- Workflow macOS executa build e testes padrão e estritos, publica testes ignorados e declara ausência de cobertura; GL é opt-in em runner gráfico self-hosted e falhas não contam como aprovação. Nenhum CI Windows/Linux foi criado.
+- Seletor de Swift >= 6.4 avalia Xcodes por `DEVELOPER_DIR` e toolchains standalone; fixtures exercitam versões e fallback. Disponibilidade no runner hospedado e execução remota ainda não foram verificadas.
+- Validação local: build/testes padrão e estritos, 288 testes; teste intencionalmente falho com `tee` e `pipefail` retornou 1 e foi removido; fixtures do seletor, sintaxe Bash, YAML e `git diff --check` passaram.
+- Files changed: `.github/workflows/macos.yml`, `.docs/CI.md`, `README.md`, scripts e fixtures de seleção, arquivos de progresso.
+- **Learnings for future iterations:**
+  - Sucesso local não comprova disponibilidade da toolchain ou contexto gráfico no GitHub Actions.
+---
