@@ -1,0 +1,95 @@
+{
+  "platform": "macOS 26.6.2 arm64, Swift 6.4.2, LLVM coverage 21.0.0",
+  "entries": {
+    "2D Drawing/CGBlendMode.swift": {
+      "sha256": "503232eca292579fdf5e59e75ea84de3349f321404588df62df5920148df3f50",
+      "classification": "enum-cases-only",
+      "reason": "Declares CGBlendMode cases and conformances only; it has no authored executable function, accessor, initializer, or conditional-compilation branch."
+    },
+    "2D Drawing/CGImageAlphaInfo.swift": {
+      "sha256": "d723c4f3a33b0ec146b231296c3b0c26be383661526a90243042baa53f1d60f7",
+      "classification": "enum-cases-only",
+      "reason": "Declares CGImageAlphaInfo cases and conformances only; it has no authored executable function, accessor, initializer, or conditional-compilation branch."
+    },
+    "2D Drawing/CGInterpolationQuality.swift": {
+      "sha256": "bccd8f1f8fba3a605286ed398d3ab3e5c7a4405df25b029c5efbac9311057846",
+      "classification": "enum-cases-only",
+      "reason": "Declares CGInterpolationQuality cases and conformances only; @frozen and the cases introduce no authored executable function or conditional-compilation branch."
+    },
+    "Colors and Fonts/CGColorRenderingIntent.swift": {
+      "sha256": "facea214cbd18f2f23cd983bb2a47bbbb1bc4646d28d0aefb14fa3b62412fe5e",
+      "classification": "enum-cases-only",
+      "reason": "Declares CGColorRenderingIntent cases and conformances only; it has no authored executable function, accessor, initializer, or conditional-compilation branch."
+    },
+    "Colors and Fonts/CGGlyph.swift": {
+      "sha256": "b43045443d1aa9881cf76b65a52ab4a284fa02ad71be46f55558754e88573e81",
+      "classification": "typealias-only",
+      "reason": "Declares CGGlyph as a UInt16 typealias; a typealias has no executable source lines or conditional-compilation branch."
+    },
+    "Colors and Fonts/CGGlyphBitmap.swift": {
+      "sha256": "2e32729864aa3b1862d48da3962af7841c8e4393c4f4a34da835463866172431",
+      "classification": "stored-properties-only",
+      "reason": "Declares immutable stored data fields and synthesized Equatable/Sendable conformances only; it has no authored function body, accessor, initializer, or conditional-compilation branch."
+    },
+    "Colors and Fonts/CGTextDrawingMode.swift": {
+      "sha256": "b6abe272b8f8f95555e1a216a5e6d6e278a1515fd34e24cd774fb3cf26e52464",
+      "classification": "enum-cases-only",
+      "reason": "Declares CGTextDrawingMode cases and conformances only; it has no authored executable function, accessor, initializer, or conditional-compilation branch."
+    },
+    "Enumerations/CGBitmapLayout.swift": {
+      "sha256": "252cbe8c5af9a6557a7799e4046077e44208a4d63fc425d7b5a19b8668e668a3",
+      "classification": "enum-cases-only",
+      "reason": "Declares CGBitmapLayout cases and conformances only; it has no authored executable function, accessor, initializer, or conditional-compilation branch."
+    },
+    "Enumerations/CGColorModel.swift": {
+      "sha256": "eeb7280e7554232db49b899bff8e5e9b1f4498af423c642363af20b45363406f",
+      "classification": "enum-cases-only",
+      "reason": "Declares CGColorModel cases and conformances only; it has no authored executable function, accessor, initializer, or conditional-compilation branch."
+    },
+    "Enumerations/CGComponent.swift": {
+      "sha256": "5332f0dcda1f3a2def4a010d8728fc0dd1a797abc737f507fee5230aa6a34472",
+      "classification": "enum-cases-only",
+      "reason": "Declares CGComponent cases and conformances only; it has no authored executable function, accessor, initializer, or conditional-compilation branch."
+    },
+    "Enumerations/CGImageComponentInfo.swift": {
+      "sha256": "af1937ac241159f35fa9b196d536d2ca461196f6bd3eca3c416ffcff387d85ca",
+      "classification": "enum-cases-only",
+      "reason": "Declares CGImageComponentInfo cases and conformances only; it has no authored executable function, accessor, initializer, or conditional-compilation branch."
+    },
+    "Enumerations/CGLineCap.swift": {
+      "sha256": "fb72ebd4bb436b5159fdec66257db1eac71b18eb355539012db6c8ff16744e95",
+      "classification": "enum-cases-only",
+      "reason": "Declares CGLineCap cases and conformances only; it has no authored executable function, accessor, initializer, or conditional-compilation branch."
+    },
+    "Enumerations/CGLineJoin.swift": {
+      "sha256": "29116ea3942751fb4af60751e76dc11485d7961c4afad11855275924dd14a75a",
+      "classification": "enum-cases-only",
+      "reason": "Declares CGLineJoin cases and conformances only; it has no authored executable function, accessor, initializer, or conditional-compilation branch."
+    },
+    "Rendering/CGClipCoverageError.swift": {
+      "sha256": "fa836da90f1485e37fce6e573c2e899086199e1f16157aad434d89083aa3c549",
+      "classification": "enum-case-only",
+      "reason": "Declares one CGClipCoverageError case and Equatable conformance only; it has no authored executable function, accessor, initializer, or conditional-compilation branch."
+    },
+    "Rendering/Polyline.swift": {
+      "sha256": "b5df00a9ec358784178e49e04919288417b9d3c15626aea0217fed20609b7e4b",
+      "classification": "stored-properties-only",
+      "reason": "Declares immutable stored point and closed-state fields with synthesized Equatable/Sendable conformances only; it has no authored function body, accessor, initializer, or conditional-compilation branch."
+    },
+    "Services/Display Services/CGDisplay.swift": {
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "classification": "empty-file",
+      "reason": "The file is empty (zero bytes); it contains no declarations, executable lines, or conditional-compilation branch."
+    },
+    "Services/Window Services/CGWindowError.swift": {
+      "sha256": "d4dcc11bdf4e4f218d56bd2362c4dd5b57195dd53de6958975520ebe92c5368b",
+      "classification": "enum-cases-only",
+      "reason": "Declares CGWindowError cases and Error/Equatable/Sendable conformances only; it has no authored executable function, accessor, initializer, or conditional-compilation branch."
+    },
+    "Services/Window Services/WindowLoopTestHandle.swift": {
+      "sha256": "a94c6511cf34b0bf3784ad71fefc459f6ef6cd5526a47fb6704024b76aaf796c",
+      "classification": "stored-properties-only",
+      "reason": "Declares two stored closure properties and a MainActor annotation only; it has no authored function body, accessor, initializer, or conditional-compilation branch."
+    }
+  }
+}

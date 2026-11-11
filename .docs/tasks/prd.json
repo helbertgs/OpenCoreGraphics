@@ -442,8 +442,8 @@
         "Typecheck passes"
       ],
       "priority": 26,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Cobertura LLVM do núcleo elegível: 4501/5014 (89,77%) sem opt-in; fontes sem mapeamento revisadas por conteúdo e hash; GL/janela separados."
     },
     {
       "id": "US-027",

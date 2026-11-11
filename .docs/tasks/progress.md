@@ -263,3 +263,12 @@
 - **Learnings for future iterations:**
   - Sucesso local não comprova disponibilidade da toolchain ou contexto gráfico no GitHub Actions.
 ---
+
+## 2026-11-11 - US-026
+- Cobertura de linhas LLVM no núcleo elegível: 4.501/5.014 (89,77%) na execução padrão, acima de 80%; GL e janela relatados separadamente. No perfil GL opt-in, núcleo 4.522/5.014, GL 1.880/2.220 e serviços de janela 640/881.
+- Inventário completo verifica 18 fontes elegíveis sem mapeamento, revisadas individualmente como declarações sem corpo executável autoral e protegidas por SHA-256; fontes ausentes desconhecidas ou modificadas bloqueiam a medição.
+- Validação: 288 testes em 51 suítes com cobertura, execução GL opt-in com três skips declarados e runner GL conclusivo; build/testes estritos, quatro testes de fixtures e `git diff --check` passaram.
+- Files changed: `.docs/tasks/coverage.md`, agregador e manifest de revisão de cobertura, testes do agregador, arquivos de progresso.
+- **Learnings for future iterations:**
+  - Cobertura de fontes sem mapeamento precisa de revisão explícita; não atribuir zero linhas instrumentáveis por suposição nem somar percentuais com denominadores sobrepostos.
+---
