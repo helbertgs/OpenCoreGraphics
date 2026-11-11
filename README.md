@@ -43,6 +43,19 @@ loader does not call OpenGL, so these measurements characterize cache bookkeepin
 and upload decisions—not GPU transfer latency, process RSS or rendered pixels.
 See [image update benchmark methodology and results](.docs/ImageUpdateBenchmark.md).
 
+## Glyph-cache measurements
+
+Run the deterministic CPU prototype comparison with
+`swift test -Xswiftc -strict-concurrency=complete --filter GLGlyphCacheBenchmarkTests`.
+The comparison covers repeated static and changing text, reports rasterization,
+upload-model, preparation-time and logical-memory measurements, and does not
+call OpenGL for the prototype strategies. The current pipeline's separate GL
+timings and the latest run-to-run measurement changes are documented in
+[glyph benchmark methodology and results](.docs/GlyphCacheBenchmark.md).
+These measurements do not justify a production glyph cache or establish a
+performance gain. The conclusive GL runner separately validates text rendering
+across glyph pages.
+
 ## OpenGL glyph texture limits
 
 Window text rendering reads `GL_MAX_TEXTURE_SIZE` only after selecting the

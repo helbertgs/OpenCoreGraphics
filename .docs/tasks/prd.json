@@ -390,8 +390,8 @@
         "Typecheck passes"
       ],
       "priority": 23,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Mantida decisão de não introduzir cache de glifos; medições e limitações registradas, paginação e regressões GL aprovadas."
     },
     {
       "id": "US-024",

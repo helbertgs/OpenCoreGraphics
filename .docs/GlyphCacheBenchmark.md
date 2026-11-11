@@ -59,12 +59,20 @@ overhead.
 
 | Scenario | Strategy | Rasterizations | Atlas builds | Modeled uploads | Modeled bytes uploaded | Retained CPU bytes | Retained GPU bytes | Peak transient CPU / GPU bytes | Draw batches | Median CPU prep / frame |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| Static | Command atlas | 1,440 | 30 | 30 | 161,760 | 0 | 0 | 5,392 / 5,392 | 30 | 237,074 ns |
-| Static | CPU mask cache | 2 | 30 | 30 | 161,760 | 140 | 0 | 5,392 / 5,392 | 30 | 174,415 ns |
-| Static | Paged atlas | 2 | 0 | 1 | 4,096 | 4,236 | 4,096 | 0 / 0 | 30 | 19,246 ns |
-| Mutable | Command atlas | 1,440 | 30 | 30 | 161,760 | 0 | 0 | 5,392 / 5,392 | 30 | 236,460 ns |
-| Mutable | CPU mask cache | 2 | 30 | 30 | 161,760 | 140 | 0 | 5,392 / 5,392 | 30 | 172,015 ns |
-| Mutable | Paged atlas | 2 | 0 | 1 | 4,096 | 4,236 | 4,096 | 0 / 0 | 30 | 19,063 ns |
+| Static | Command atlas | 1,440 | 30 | 30 | 161,760 | 0 | 0 | 5,392 / 5,392 | 30 | 229,846 ns |
+| Static | CPU mask cache | 2 | 30 | 30 | 161,760 | 140 | 0 | 5,392 / 5,392 | 30 | 170,533 ns |
+| Static | Paged atlas | 2 | 0 | 1 | 4,096 | 4,236 | 4,096 | 0 / 0 | 30 | 17,685 ns |
+| Mutable | Command atlas | 1,440 | 30 | 30 | 161,760 | 0 | 0 | 5,392 / 5,392 | 30 | 229,083 ns |
+| Mutable | CPU mask cache | 2 | 30 | 30 | 161,760 | 140 | 0 | 5,392 / 5,392 | 30 | 170,047 ns |
+| Mutable | Paged atlas | 2 | 0 | 1 | 4,096 | 4,236 | 4,096 | 0 / 0 | 30 | 18,714 ns |
+
+These are the medians from the latest rerun on 2026-11-11 using the command
+above. The operation, upload, and logical-memory counts were unchanged from the
+previous run. The earlier CPU preparation medians were 237,074 / 236,460 ns
+(command atlas), 174,415 / 172,015 ns (CPU mask cache), and 19,246 / 19,063 ns
+(paged atlas), for static / mutable respectively. The latest values are lower
+in this run, but CPU preparation times vary between runs and these are prototype
+measurements, not a before/after production comparison.
 
 The page's 4,096-byte upload is the initial 64×64 R8 page, including empty
 texels; the separate 140 bytes are the two cached source masks. The command
@@ -74,9 +82,9 @@ occurrence is packed separately.
 ## Decision
 
 **Keep the current per-command drawing strategy for now; do not introduce a
-production glyph cache in this story.** For these two-character repeated
-workloads, the CPU-mask prototype reduces rasterizations from 1,440 to 2 and
-its preparation median is about 26% lower, but it does not reduce atlas builds,
+production glyph cache.** For these two-character repeated workloads, the
+CPU-mask prototype reduces rasterizations from 1,440 to 2 and its latest
+preparation medians are about 26% lower, but it does not reduce atlas builds,
 uploads, or uploaded bytes. The paged prototype models one upload instead of
 30 and the lowest CPU preparation time, at the cost of retaining 4,236 CPU
 bytes and 4,096 logical GPU bytes for this tiny working set. Its timing excludes
@@ -107,9 +115,12 @@ ruby scripts/run-gl-tests.rb --timeout 90
 It completed 28 tests in five suites. The glyph rendering comparison passed
 with zero measured difference at a 4/255 tolerance. The pixel-comparison tests
 recorded Apple M3 Pro / Apple GL 4.1 Metal - 90.5, 128×128 linear RGBA8
-framebuffer, MSAA 4, and system version 26.6.2. The real current-pipeline
-frame timings are reported separately below; prototype comparisons above
-remain CPU/model measurements only.
+framebuffer, MSAA 4, and system version 26.6.2. The real current-pipeline frame timings are reported separately below;
+prototype comparisons above remain CPU/model measurements only. The runner's
+required paged-glyph report verified two pages for 2,731 glyphs at a queried
+16,384 texture limit. There were 34 non-black GL/software pixels before the
+page boundary and 102 after it; overall and both regional mean differences
+were `3.5903033088235294e-7` (within the 4/255 tolerance).
 
 ## Real GL current-pipeline frame timing
 
@@ -137,17 +148,18 @@ includes CPU text preparation/rasterization, atlas packing, GL submission and
 upload, GPU execution, and the blocking completion wait. It excludes buffer
 swap, v-sync, and presentation. The report summarizes individual frame times
 as min/median/p95/max and is saved as `glyph-frame-time.json` in the runner's
-unique artifact directory. For the observed run, the report is
-`.build/gl-comparison/run-20261111T002914-97655/glyph-frame-time.json`.
+unique artifact directory. For the latest rerun, the report is
+`.build/gl-comparison/run-20261111T005827-25540/glyph-frame-time.json`.
 Runner success requires the JSON report, valid GL
 metadata, 150 samples per scenario, expected source-derived operation counts,
 and positive timings and atlas payloads.
 
-**Observed run:** Apple M3 Pro, arm64, macOS 26.6.2 (Build 25G83), Swift 6.4.2,
+**Latest observed run (2026-11-11):** Apple M3 Pro, arm64, macOS 26.6.2
+(Build 25G83), Swift 6.4.2,
 11 logical processors, Apple GL 4.1 Metal - 90.5. The benchmark window is
 512×96 points; its measured RGBA8 framebuffer was 1024×192 pixels with MSAA 4.
-The runner completed all 28 tests in five suites and validated the emitted
-real-GL report.
+The conclusive runner completed all 28 tests in five suites and validated the
+emitted real-GL and paged-glyph reports.
 
 | Current GL path, per 150-frame scenario | Static | Mutable |
 |---|---:|---:|
@@ -157,10 +169,10 @@ real-GL report.
 | R8 bytes uploaded (source-derived from atlas payloads) | 808,800 | 808,800 |
 | Largest one-frame atlas payload | 5,392 bytes | 5,392 bytes |
 | Logical glyph-cache bytes after flush/eviction | 0 | 0 |
-| Frame completion minimum | 736,042 ns | 719,875 ns |
-| Frame completion median | 829,333 ns | 791,125 ns |
-| Frame completion p95 | 1,670,666 ns | 1,169,375 ns |
-| Frame completion maximum | 3,748,625 ns | 1,700,291 ns |
+| Frame completion minimum | 999,833 ns | 999,375 ns |
+| Frame completion median | 1,074,334 ns | 1,068,458 ns |
+| Frame completion p95 | 1,336,708 ns | 1,296,750 ns |
+| Frame completion maximum | 1,607,292 ns | 3,481,542 ns |
 
 Rasterization and upload counters describe measured frames and are exact counts
 derived from the production call path and submitted text, not GL-call
@@ -173,10 +185,15 @@ GPU-memory counter is collected. Per-frame times are one observed run on this
 host and remain sensitive to system load. `glFinish` intentionally serializes
 frames and does not represent v-synced interactive throughput.
 
-These are real measurements for the current pipeline only. The command-atlas,
-CPU-mask-cache, and paged-atlas comparisons above remain CPU timings and
-controlled upload/accounting models; neither prototype was run or timed on GL.
-The observed static and mutable GL medians are close for this two-glyph
-workload and do not establish performance for other text, devices, drivers, or
-workloads. This evidence does not justify changing the decision to defer a
-production cache and does not address or waive US-022 texture-size limits.
+These are real measurements for the current pipeline only. The previous
+recorded medians were 829,333 ns static and 791,125 ns mutable; the latest are
+1,074,334 ns and 1,068,458 ns respectively. The mutable maximum also changed
+from 1,700,291 ns to 3,481,542 ns. These are separate runs, so this is
+run-to-run variation, not a before/after cache comparison and not evidence of a
+regression or gain. The
+command-atlas, CPU-mask-cache, and paged-atlas comparisons above remain CPU
+timings and controlled upload/accounting models; neither prototype was run or
+timed on GL. The similar static and mutable medians for this two-glyph workload
+do not establish performance for other text, devices, drivers, or workloads.
+This evidence does not justify changing the decision to defer a production
+cache and does not address or waive US-022 texture-size limits.

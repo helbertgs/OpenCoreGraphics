@@ -236,3 +236,12 @@
 - **Learnings for future iterations:**
   - Falha de renderização em prefixo de resize exige rebasing das barreiras antes de interromper; diagnóstico terminal evita sucesso silencioso em comandos posteriores.
 ---
+
+## 2026-11-11 - US-023
+- Mantida a decisão de não implementar cache de glifos: protótipos CPU e uploads modelados não comprovam vantagem end-to-end nem definem orçamento adequado; medições pós-paginação e limitações estão em `.docs/GlyphCacheBenchmark.md`.
+- A carga GL atual registrou medianas de 1.074.334 ns estático e 1.068.458 ns mutável, 150 uploads e 808.800 bytes por cenário; valores não comprovam ganho ou regressão.
+- Validação: 288 testes em 51 suítes com concorrência estrita; build estrito; runner GL concluiu 28 testes em cinco suítes, incluindo paginação de 2.731 glifos em duas páginas e pixels locais em ambos os lados.
+- Files changed: `.docs/GlyphCacheBenchmark.md`, `README.md`, arquivos de progresso.
+- **Learnings for future iterations:**
+  - Comparações entre execuções sem controle do ambiente não demonstram ganho; preserve as medições e suas limitações.
+---
