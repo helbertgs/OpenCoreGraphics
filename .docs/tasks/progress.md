@@ -227,3 +227,12 @@
 - **Learnings for future iterations:**
   - Medições de protótipos CPU e tempos de frame GL da implementação atual não constituem comparação end-to-end entre estratégias.
 ---
+
+## 2026-11-11 - US-022
+- Atlas GL é dividido em páginas sequenciais respeitando `GL_MAX_TEXTURE_SIZE` no contexto proprietário, mantendo posições e espaçamento; falhas de limite e upload são registradas explicitamente e tornam o target terminal, preservando o primeiro erro.
+- Testes cobrem limite pequeno, ordem e repetição, glifo excessivo, upload, falhas com resize e interrupção do lote. GL real: limite 16.384, 2 páginas, pixels visíveis e comparação local nos dois lados da fronteira.
+- Validação: 288 testes em 51 suítes com concorrência estrita; build estrito; runner GL concluiu 28 testes em cinco suítes; `ruby -c` e `git diff --check` passaram.
+- Files changed: atlas de glifos, renderer e target GL, loader de texturas, testes de paginação, executor GL, README e arquivos de progresso.
+- **Learnings for future iterations:**
+  - Falha de renderização em prefixo de resize exige rebasing das barreiras antes de interromper; diagnóstico terminal evita sucesso silencioso em comandos posteriores.
+---

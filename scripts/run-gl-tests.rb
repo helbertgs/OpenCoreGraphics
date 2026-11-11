@@ -138,6 +138,27 @@ glyph_reports_complete = glyph_reports.all? do |scene, metric|
   end
 end
 
+glyph_paging_reports = output.scan(
+  /^GL_GLYPH_PAGING: maxTextureSize=(\d+) glyphCount=(\d+) pages=(\d+) difference=(\S+) beforeGLPixels=(\d+) beforeSoftwarePixels=(\d+) beforeDifference=(\S+) afterGLPixels=(\d+) afterSoftwarePixels=(\d+) afterDifference=(\S+)\s*$/
+)
+glyph_paging_complete = glyph_paging_reports.length == 1 && begin
+  limit, glyph_count, page_count, overall_difference,
+    before_gl_pixels, before_software_pixels, before_difference,
+    after_gl_pixels, after_software_pixels, after_difference =
+    glyph_paging_reports.first
+  overall_difference, before_difference, after_difference =
+    [overall_difference, before_difference, after_difference].map { |value| Float(value) }
+  limit.to_i.positive? &&
+    glyph_count.to_i.positive? &&
+    page_count.to_i > 1 &&
+    [before_gl_pixels, before_software_pixels, after_gl_pixels, after_software_pixels]
+      .all? { |count| count.to_i.positive? } &&
+    [overall_difference, before_difference, after_difference]
+      .all? { |difference| difference.finite? && difference >= 0 && difference <= 4.0 / 255.0 }
+rescue ArgumentError
+  false
+end
+
 mutable_reports_complete = %w[mutable_before mutable_after mutable_queued].all? do |scene|
   matches = output.scan(/^GL_COMPARISON: #{scene} (PASSED|FAILED) difference=(\S+) tolerance=(\S+)\s*$/)
   next false unless matches.length == 1
@@ -201,12 +222,12 @@ real_cache_complete = real_cache_reports.length == 1 && begin
     er < 10 && eg > 245 && eb < 10 && ea > 245
 end
 
-if status.success? && passed && glyph_reports_complete && mutable_reports_complete &&
+if status.success? && passed && glyph_reports_complete && glyph_paging_complete && mutable_reports_complete &&
    deterministic_cache_complete && real_cache_complete && real_glyph_benchmark_complete &&
    !output.match?(/^.*(?:skipped|failed|Issue recorded)\b/i)
   puts "GL runner: PASSED: GL rendering, texture-cache lifecycle, synthetic metrics, and real glyph frame-time workloads completed successfully."
   exit 0
 end
 
-warn "GL runner: FAILED: test failure, missing glyph reports, mutable-image reports, texture-cache evidence, or glyph frame-time benchmark evidence, skipped test, or unsuccessful process exit."
+warn "GL runner: FAILED: test failure, missing glyph or paginated-glyph reports, mutable-image reports, texture-cache evidence, or glyph frame-time benchmark evidence, skipped test, or unsuccessful process exit."
 exit 1

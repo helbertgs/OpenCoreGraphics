@@ -105,7 +105,324 @@ struct GLGlyphComparisonTests {
         )
         #expect(difference <= 4.0 / 255.0, "Glyph rendering mean channel difference was \(difference)")
         try compareAsymmetricGlyphs(window: window, softwareContext: softwareContext)
+        try comparePagedGlyphRun(window: window, softwareContext: softwareContext, font: font)
+        try rendererStopsAtFirstGlyphFailure(window: window)
         try measureCurrentPipelineFrameTimes(font: font)
+    }
+
+    /// Stops at the first glyph failure, retains it, and still flushes geometry queued before it.
+    private func rendererStopsAtFirstGlyphFailure(window: CGWindow) throws {
+        try #require(glfwGetCurrentContext() == window.windowRef)
+        var maximumTextureSize: GLint = 0
+        glad_glGetIntegerv(GLenum(GL_MAX_TEXTURE_SIZE), &maximumTextureSize)
+        try #require(maximumTextureSize > 0)
+
+        let renderer = try GLRenderer()
+        let width = window.cgContext.width
+        let height = window.cgContext.height
+        let redBeforeFailure = DrawCommand.fillPath(
+            path: CGPath(rect: CGRect(x: 4, y: 0, width: 20, height: Double(height))),
+            rule: .winding,
+            color: CGColor(red: 1, green: 0, blue: 0, alpha: 1),
+            blendMode: .normal
+        )
+        let blueAfterFailure = DrawCommand.fillPath(
+            path: CGPath(rect: CGRect(x: Double(width - 24), y: 0, width: 20, height: Double(height))),
+            rule: .winding,
+            color: CGColor(red: 0, green: 0, blue: 1, alpha: 1),
+            blendMode: .normal
+        )
+        let oversizedBitmap = CGGlyphBitmap(
+            width: Int(maximumTextureSize),
+            height: 1,
+            xOffset: 0,
+            yOffset: 0,
+            coverage: Data(repeating: 255, count: Int(maximumTextureSize))
+        )
+        let oversizedAtlas = try #require(CGGlyphAtlas(bitmaps: [oversizedBitmap]))
+        let oversizedGlyphCommand = DrawCommand.glyphs(
+            glyphs: [1],
+            positions: [OpenCoreGraphics.CGPoint(x: 2, y: 8)],
+            fontName: nil,
+            fontSize: 1,
+            glyphAtlas: oversizedAtlas,
+            characterSpacing: 0,
+            textMatrix: .identity,
+            textPosition: .zero,
+            ctm: .identity,
+            color: .white,
+            blendMode: .normal
+        )
+        let validAtlas = try #require(
+            CGGlyphAtlas(bitmaps: [
+                CGGlyphBitmap(width: 1, height: 1, xOffset: 0, yOffset: 0, coverage: Data([255]))
+            ])
+        )
+        let secondGlyphFailureCommand = DrawCommand.glyphs(
+            glyphs: [1],
+            positions: [OpenCoreGraphics.CGPoint(x: 2, y: 8)],
+            fontName: nil,
+            fontSize: 1,
+            glyphAtlas: validAtlas,
+            characterSpacing: 0,
+            textMatrix: .identity,
+            textPosition: .zero,
+            ctm: .identity,
+            color: .white,
+            blendMode: .normal
+        )
+
+        glad_glClearColor(0, 0, 0, 1)
+        glad_glClear(GLbitfield(GL_COLOR_BUFFER_BIT))
+        while glad_glGetError() != GLenum(GL_NO_ERROR) { }
+        glad_glEnable(GLenum(UInt32.max))
+        defer {
+            while glad_glGetError() != GLenum(GL_NO_ERROR) { }
+        }
+
+        renderer.execute(
+            [
+                redBeforeFailure,
+                oversizedGlyphCommand,
+                blueAfterFailure,
+                secondGlyphFailureCommand
+            ],
+            size: CGSize(width: width, height: height)
+        )
+        glad_glFinish()
+
+        let expectedFirstFailure = GLRendererError.glyphAtlas(
+            .glyphExceedsTextureLimit(
+                width: Int(maximumTextureSize) + 2,
+                height: 3,
+                limit: Int(maximumTextureSize)
+            )
+        )
+        #expect(renderer.renderingError == expectedFirstFailure)
+
+        let pixels = try #require(renderer.readPixels(size: CGSize(width: width, height: height)))
+        let row = height / 2
+        let redOffset = (row * width + 8) * 4
+        let blueOffset = (row * width + width - 14) * 4
+        #expect(pixels[redOffset] > 200)
+        #expect(pixels[redOffset + 1] < 20)
+        #expect(pixels[redOffset + 2] < 20)
+        #expect(pixels[blueOffset] < 20)
+        #expect(pixels[blueOffset + 1] < 20)
+        #expect(pixels[blueOffset + 2] < 20)
+
+        renderer.execute([blueAfterFailure], size: CGSize(width: width, height: height))
+        #expect(renderer.renderingError == expectedFirstFailure)
+    }
+
+    /// Forces the production GL renderer to split a long run at its queried texture limit.
+    /// - Parameters:
+    ///   - window: The window owning the GL context and its framebuffer.
+    ///   - softwareContext: The independent bitmap renderer used for pixel comparison.
+    ///   - font: The bundled font used to rasterize the repeated glyph.
+    private func comparePagedGlyphRun(
+        window: CGWindow,
+        softwareContext: CGContext,
+        font: CGFont
+    ) throws {
+        let context = window.cgContext
+        let target = try #require(context.renderTarget as? WindowRenderTarget)
+        _ = target.readPixels()
+        try #require(glfwGetCurrentContext() == window.windowRef)
+        var maximumTextureSize: GLint = 0
+        glad_glGetIntegerv(GLenum(GL_MAX_TEXTURE_SIZE), &maximumTextureSize)
+        try #require(maximumTextureSize > 0)
+
+        while glad_glGetError() != GLenum(GL_NO_ERROR) { }
+        glad_glEnable(GLenum(UInt32.max))
+        let errorProbeBitmap = CGGlyphBitmap(
+            width: 1,
+            height: 1,
+            xOffset: 0,
+            yOffset: 0,
+            coverage: Data([255])
+        )
+        let errorProbeAtlas = try #require(CGGlyphAtlas(bitmaps: [errorProbeBitmap]))
+        #expect(throws: GLTextureError.preexistingGraphicsError(UInt32(GL_INVALID_ENUM))) {
+            try OpenGLTextureLoader().makeTexture(from: errorProbeAtlas)
+        }
+        #expect(glad_glGetError() == GLenum(GL_NO_ERROR))
+
+        let glyph = try #require(font.glyph(for: "I"))
+        let fontSize = 24.0
+        let bitmap = font.rasterizedGlyph(glyph, at: fontSize)
+        let bitmapWidth = try #require(bitmap?.width)
+        let bitmapHeight = try #require(bitmap?.height)
+        let framebufferWidth = context.width
+        let framebufferHeight = context.height
+        let pageBoundary = framebufferWidth / 2
+        try #require(
+            pageBoundary > bitmapWidth + 4,
+            "Framebuffer is too narrow to show a glyph on each side of the page boundary"
+        )
+        try #require(
+            framebufferHeight > bitmapHeight + 4,
+            "Framebuffer is too short to show the glyph"
+        )
+        let glyphFootprint = bitmapWidth + 2
+        let glyphCount = Int(maximumTextureSize) / glyphFootprint + 1
+        let bitmaps = [CGGlyphBitmap?](repeating: bitmap, count: glyphCount)
+        let atlas = try #require(CGGlyphAtlas(bitmaps: bitmaps))
+        let pages = try atlas.pages(maxTextureSize: Int(maximumTextureSize))
+        #expect(pages.count > 1)
+        #expect(pages.allSatisfy {
+            $0.atlas.width <= Int(maximumTextureSize)
+                && $0.atlas.height <= Int(maximumTextureSize)
+        })
+
+        let glyphs = [CGGlyph](repeating: glyph, count: glyphCount)
+        let nextPageStart = pages[0].range.upperBound
+        let beforeBoundaryX = Double(pageBoundary - bitmapWidth - 2)
+        let afterBoundaryX = Double(pageBoundary + 2)
+        let glyphBaselineY = Double(framebufferHeight / 2)
+        var positions: [OpenCoreGraphics.CGPoint] = []
+        positions.reserveCapacity(glyphCount)
+        for index in 0..<glyphCount {
+            let x: Double
+            if index == 0 {
+                x = beforeBoundaryX
+            } else if index == nextPageStart {
+                x = afterBoundaryX
+            } else if index == nextPageStart - 1 {
+                x = beforeBoundaryX
+            } else {
+                x = Double(context.width + index * Int(fontSize))
+            }
+            positions.append(OpenCoreGraphics.CGPoint(
+                x: x,
+                y: glyphBaselineY
+            ))
+        }
+        for destination in [context, softwareContext] {
+            destination.setFillColor(.black)
+            destination.fill(CGRect(x: 0, y: 0, width: Double(context.width), height: Double(context.height)))
+            destination.setFillColor(.white)
+            destination.setFont(font)
+            destination.setFontSize(fontSize)
+            destination.setCharacterSpacing(0)
+            destination.textPosition = .zero
+            destination.showGlyphs(glyphs, at: positions)
+        }
+        context.flush()
+        softwareContext.flush()
+        try #require(target.renderingError == nil, "The GL renderer reported a glyph-page failure")
+
+        let glPixels = try #require(target.readPixels())
+        let normalizedGLPixels = try GLComparisonPixels(pixels: glPixels).data
+        let normalizedSoftwarePixels = try GLComparisonPixels(
+            pixels: softwareContext.data,
+            storedAsSRGB: true
+        ).data
+        let difference = try #require(meanChannelDifference(normalizedGLPixels, normalizedSoftwarePixels))
+        try #require(framebufferWidth >= 4, "Framebuffer is too narrow for split-page regions")
+        let beforeRegion = try glyphPagingRegionMetrics(
+            glPixels: normalizedGLPixels,
+            softwarePixels: normalizedSoftwarePixels,
+            width: framebufferWidth,
+            height: framebufferHeight,
+            xRange: 0..<pageBoundary
+        )
+        let afterRegion = try glyphPagingRegionMetrics(
+            glPixels: normalizedGLPixels,
+            softwarePixels: normalizedSoftwarePixels,
+            width: framebufferWidth,
+            height: framebufferHeight,
+            xRange: pageBoundary..<framebufferWidth
+        )
+        _ = try GLComparisonReport(
+            scene: "glyphs_paged",
+            width: context.width,
+            height: context.height,
+            difference: difference,
+            tolerance: 4.0 / 255.0,
+            glPixels: glPixels,
+            softwarePixels: softwareContext.data
+        )
+        print(
+            "GL_GLYPH_PAGING: maxTextureSize=\(maximumTextureSize) "
+                + "glyphCount=\(glyphCount) pages=\(pages.count) difference=\(difference) "
+                + "beforeGLPixels=\(beforeRegion.glNonBlackPixelCount) "
+                + "beforeSoftwarePixels=\(beforeRegion.softwareNonBlackPixelCount) "
+                + "beforeDifference=\(beforeRegion.difference) "
+                + "afterGLPixels=\(afterRegion.glNonBlackPixelCount) "
+                + "afterSoftwarePixels=\(afterRegion.softwareNonBlackPixelCount) "
+                + "afterDifference=\(afterRegion.difference)"
+        )
+        #expect(difference <= 4.0 / 255.0, "Paged glyph rendering difference was \(difference)")
+        #expect(beforeRegion.glNonBlackPixelCount > 0)
+        #expect(beforeRegion.softwareNonBlackPixelCount > 0)
+        #expect(beforeRegion.difference <= 4.0 / 255.0)
+        #expect(afterRegion.glNonBlackPixelCount > 0)
+        #expect(afterRegion.softwareNonBlackPixelCount > 0)
+        #expect(afterRegion.difference <= 4.0 / 255.0)
+    }
+
+    /// Counts visible pixels and measures backend difference within one horizontal page region.
+    /// - Parameters:
+    ///   - glPixels: Normalized bottom-up GL RGBA bytes.
+    ///   - softwarePixels: Normalized software RGBA bytes in matching coordinates.
+    ///   - width: The actual framebuffer width.
+    ///   - height: The actual framebuffer height.
+    ///   - xRange: The horizontal region assigned to one side of the page boundary.
+    /// - Returns: Non-black coverage in both backends and mean channel difference in the region.
+    private func glyphPagingRegionMetrics(
+        glPixels: Data,
+        softwarePixels: Data,
+        width: Int,
+        height: Int,
+        xRange: Range<Int>
+    ) throws -> (glNonBlackPixelCount: Int, softwareNonBlackPixelCount: Int, difference: Double) {
+        let (pixelCount, pixelOverflow) = width.multipliedReportingOverflow(by: height)
+        let (byteCount, byteOverflow) = pixelCount.multipliedReportingOverflow(by: 4)
+        guard width > 0,
+              height > 0,
+              pixelOverflow == false,
+              byteOverflow == false,
+              glPixels.count == byteCount,
+              softwarePixels.count == byteCount,
+              xRange.lowerBound >= 0,
+              xRange.upperBound <= width,
+              xRange.isEmpty == false else {
+            throw GLComparisonReportError.invalidComparison
+        }
+
+        var glNonBlackPixelCount = 0
+        var softwareNonBlackPixelCount = 0
+        var channelDifference = 0
+        for y in 0..<height {
+            for x in xRange {
+                let offset = (y * width + x) * 4
+                let glIsVisible = glPixels[offset] > 8
+                    || glPixels[offset + 1] > 8
+                    || glPixels[offset + 2] > 8
+                let softwareIsVisible = softwarePixels[offset] > 8
+                    || softwarePixels[offset + 1] > 8
+                    || softwarePixels[offset + 2] > 8
+                if glIsVisible && glPixels[offset + 3] > 0 {
+                    glNonBlackPixelCount += 1
+                }
+                if softwareIsVisible && softwarePixels[offset + 3] > 0 {
+                    softwareNonBlackPixelCount += 1
+                }
+                for channel in 0..<4 {
+                    channelDifference += abs(
+                        Int(glPixels[offset + channel]) - Int(softwarePixels[offset + channel])
+                    )
+                }
+            }
+        }
+
+        let regionPixelCount = (xRange.count * height)
+        return (
+            glNonBlackPixelCount,
+            softwareNonBlackPixelCount,
+            Double(channelDifference) / (Double(regionPixelCount) * 4 * 255)
+        )
     }
 
     /// Compares the documented asymmetric samples on both sides of the baseline and after transforms.

@@ -373,8 +373,8 @@
         "Typecheck passes"
       ],
       "priority": 22,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Atlas dividido por limite GL consultado, preservando ordem e posições; falhas são diagnosticadas e target entra em estado terminal. GL real valida pixels nas duas páginas."
     },
     {
       "id": "US-023",

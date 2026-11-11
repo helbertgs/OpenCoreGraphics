@@ -57,6 +57,13 @@ protocol CGWindowRenderBackend: AnyObject {
     func execute(_ commands: [DrawCommand], size: CGSize)
 }
 
+/// Exposes a typed failure produced while executing commands for a window.
+@MainActor
+protocol CGWindowRenderFailureReporting: AnyObject {
+    /// The failure from the most recent command batch, if execution did not complete.
+    var renderingError: GLRendererError? { get }
+}
+
 /// Renders a software bitmap directly through a window's textured OpenGL pipeline.
 @MainActor
 protocol CGPixelSurfaceRenderer: AnyObject {

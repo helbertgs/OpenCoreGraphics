@@ -58,6 +58,7 @@ struct GLTestRunnerTests {
         GL_COMPARISON: mutable_before PASSED difference=0.0 tolerance=0.007
         GL_COMPARISON: mutable_after PASSED difference=0.0 tolerance=0.007
         GL_COMPARISON: mutable_queued PASSED difference=0.0 tolerance=0.007
+        GL_GLYPH_PAGING: maxTextureSize=16384 glyphCount=2731 pages=2 difference=0.0 beforeGLPixels=8 beforeSoftwarePixels=8 beforeDifference=0.0 afterGLPixels=9 afterSoftwarePixels=9 afterDifference=0.0
         GLYPH_REAL_FRAME_BENCHMARK: \(benchmark)
         GL_TEXTURE_CACHE_METRICS: frames=6 uploads=5 updates=1 uploadedBytes=20 retainedBytes=8,8,16,16,16,16 budgetBytes=16 evictions=2 externallyRetainedBytes=8
         GL_TEXTURE_CACHE_REAL: updates=1 evictions=1 retainedBytes=8 budgetBytes=8 updatedPixel=[0, 0, 255, 255] evictedPixel=[0, 255, 0, 255] lifetime=verified
@@ -157,7 +158,35 @@ struct GLTestRunnerTests {
         )
         let result = try run("puts \(String(reflecting: incomplete))")
         #expect(result.status == 1)
-        #expect(result.output.contains("missing glyph reports"))
+        #expect(result.output.contains("missing glyph or paginated-glyph reports"))
+    }
+
+    /// Rejects a successful process that omits its paginated-glyph comparison marker.
+    @Test
+    private func missingGlyphPagingMarkerIsRejected() throws {
+        let incomplete = successOutput.replacing(
+            /GL_GLYPH_PAGING: .+\n/,
+            with: ""
+        )
+        let result = try run("puts \(String(reflecting: incomplete))")
+        #expect(result.status == 1)
+        #expect(result.output.contains("missing glyph or paginated-glyph reports"))
+    }
+
+    /// Rejects a paging marker with no visible pixels or a failing second-page region.
+    @Test
+    private func invalidGlyphPagingRegionEvidenceIsRejected() throws {
+        let marker = "GL_GLYPH_PAGING: maxTextureSize=16384 glyphCount=2731 pages=2 difference=0.0 beforeGLPixels=8 beforeSoftwarePixels=8 beforeDifference=0.0 afterGLPixels=9 afterSoftwarePixels=9 afterDifference=0.0"
+        let invalid = [
+            marker.replacing("afterGLPixels=9", with: "afterGLPixels=0"),
+            marker.replacing("afterDifference=0.0", with: "afterDifference=0.1"),
+            marker.replacing("pages=2", with: "pages=1")
+        ]
+        for report in invalid {
+            let result = try run("puts \(String(reflecting: successOutput.replacing(marker, with: report)))")
+            #expect(result.status == 1)
+            #expect(result.output.contains("missing glyph or paginated-glyph reports"))
+        }
     }
 
     /// Rejects conflicting local outcomes even if a passing report and summary are present.

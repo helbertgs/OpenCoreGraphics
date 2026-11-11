@@ -16,6 +16,9 @@ enum WindowRenderTargetError: Error, Equatable {
 
     /// The window's OpenGL context could not be selected for the requested operation.
     case contextSelectionFailed
+
+    /// A queued glyph could not be rendered by its owning OpenGL context.
+    case renderingFailed(GLRendererError)
 }
 
 /// A resize barrier positioned between commands submitted before and after a framebuffer event.
@@ -52,6 +55,15 @@ final class WindowRenderTarget: CGRenderTarget {
     /// The most recent context lifecycle failure observed by this target.
     private(set) var contextError: GLFWContextSelectionError?
 
+    /// The most recent GL glyph failure, retained for nonthrowing context flush calls.
+    private(set) var renderingError: GLRendererError?
+
+    /// Reports a terminal rendering failure; replaceable internally for deterministic tests.
+    var reportRenderingFailure: @MainActor (GLRendererError) -> Void = { error in
+        let message = "OpenCoreGraphics: window rendering stopped after failure: \(error)\n"
+        FileHandle.standardError.write(Data(message.utf8))
+    }
+
     /// Commands accumulated until the context flushes its current frame.
     private var pendingCommands: [DrawCommand] = []
 
@@ -81,6 +93,7 @@ final class WindowRenderTarget: CGRenderTarget {
     /// Updates the window dimensions after a framebuffer resize.
     /// - Parameter size: The new window dimensions in pixels.
     func updateSize(_ size: CGSize) {
+        guard renderingError == nil else { return }
         windowSize = size
         if clipRegions.isEmpty == false {
             enqueueClipRegions()
@@ -101,6 +114,7 @@ final class WindowRenderTarget: CGRenderTarget {
     /// Records a resize barrier and attempts it without discarding it on failure.
     var enqueueFramebufferResize: @MainActor (CGSize, @escaping @MainActor () -> Void) -> Void {
         { size, updateViewport in
+            guard self.renderingError == nil else { return }
             self.pendingResizes.append(
                 PendingFramebufferResize(
                     precedingCommandCount: self.pendingCommands.count,
@@ -135,6 +149,7 @@ final class WindowRenderTarget: CGRenderTarget {
     /// - Parameter command: The operation to submit for rendering.
     nonisolated func submit(_ command: DrawCommand) {
         MainActor.assumeIsolated {
+            guard renderingError == nil else { return }
             pendingCommands.append(command)
         }
     }
@@ -143,6 +158,7 @@ final class WindowRenderTarget: CGRenderTarget {
     /// - Returns: Bottom-up RGBA bytes, or nil when the renderer is unavailable.
     nonisolated func readPixels() -> Data? {
         MainActor.assumeIsolated {
+            if renderingError != nil { return nil }
             if pendingResizes.isEmpty == false, flushPendingCommands() == false { return nil }
             do {
                 try ensureWindowIsOpen()
@@ -167,6 +183,7 @@ final class WindowRenderTarget: CGRenderTarget {
     /// - Parameter regions: The device-space regions that form the current clip.
     nonisolated func setClipRegions(_ regions: [CGClipRegion]) {
         MainActor.assumeIsolated {
+            guard renderingError == nil else { return }
             clipRegions = regions
             enqueueClipRegions()
             _ = flushPendingCommands()
@@ -207,6 +224,7 @@ final class WindowRenderTarget: CGRenderTarget {
     /// Executes pending clip and drawing work, preserving it if context selection fails.
     /// - Returns: Whether all currently pending work was executed or already complete.
     private func flushPendingCommands() -> Bool {
+        if renderingError != nil { return false }
         guard (try? ensureWindowIsOpen()) != nil else {
             pendingCommands.removeAll(keepingCapacity: true)
             pendingResizes.removeAll(keepingCapacity: true)
@@ -218,31 +236,72 @@ final class WindowRenderTarget: CGRenderTarget {
         while let resize = pendingResizes.first {
             guard (try? selectWindowContext()) != nil else { return false }
             let count = resize.precedingCommandCount
+            guard count <= pendingCommands.count else {
+                let error = GLRendererError.unexpected(
+                    "Resize barrier requires \(count) queued commands, but only \(pendingCommands.count) remain."
+                )
+                recordRenderingFailure(error)
+                return false
+            }
             if count > 0 {
                 renderer.execute(Array(pendingCommands.prefix(count)), size: windowSize)
-                pendingCommands.removeFirst(count)
+                consumePendingCommands(count)
+                guard recordRenderingError(from: renderer) else { return false }
             }
             resize.updateViewport()
             windowSize = resize.size
             if resize.clipRegions.isEmpty == false {
                 renderer.execute([.resetClip] + resize.clipRegions.map(\.drawCommand), size: windowSize)
+                guard recordRenderingError(from: renderer) else { return false }
             }
             pendingResizes.removeFirst()
-            for index in pendingResizes.indices {
-                pendingResizes[index].precedingCommandCount -= count
-            }
         }
         guard pendingCommands.isEmpty == false else { return true }
         guard (try? selectWindowContext()) != nil else { return false }
 
         renderer.execute(pendingCommands, size: windowSize)
-        pendingCommands.removeAll(keepingCapacity: true)
-        return true
+        consumePendingCommands(pendingCommands.count)
+        return recordRenderingError(from: renderer)
+    }
+
+    /// Removes executed commands and rebases every queued resize barrier to the remaining prefix.
+    /// - Parameter count: The number of commands consumed from the front of the queue.
+    private func consumePendingCommands(_ count: Int) {
+        guard count > 0 else { return }
+        pendingCommands.removeFirst(count)
+        for index in pendingResizes.indices {
+            pendingResizes[index].precedingCommandCount = max(
+                0,
+                pendingResizes[index].precedingCommandCount - count
+            )
+        }
+    }
+
+    /// Retains a backend's typed failure for callers of the nonthrowing flush API.
+    /// - Parameter renderer: The backend that just executed a command batch.
+    /// - Returns: Whether the backend completed without a recorded glyph failure.
+    private func recordRenderingError(from renderer: any CGWindowRenderBackend) -> Bool {
+        guard let error = (renderer as? any CGWindowRenderFailureReporting)?.renderingError else {
+            return true
+        }
+        recordRenderingFailure(error)
+        return false
+    }
+
+    /// Marks this target terminal and reports the failure exactly once.
+    /// - Parameter error: The failure that prevents later commands from rendering.
+    private func recordRenderingFailure(_ error: GLRendererError) {
+        guard renderingError == nil else { return }
+        renderingError = error
+        reportRenderingFailure(error)
     }
 
     /// Returns the typed target error corresponding to the last failed context selection.
     private var contextOperationError: WindowRenderTargetError {
-        switch contextError {
+        if let renderingError {
+            return .renderingFailed(renderingError)
+        }
+        return switch contextError {
         case .windowClosed:
             .windowClosed
         case .selectionFailed:

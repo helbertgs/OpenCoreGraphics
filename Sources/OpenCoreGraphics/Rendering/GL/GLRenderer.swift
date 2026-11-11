@@ -1,5 +1,20 @@
 @preconcurrency import OpenGLAD
 
+/// A glyph-rendering failure retained by the window target instead of being swallowed.
+enum GLRendererError: Error, Equatable {
+    /// Atlas pagination rejected the texture limit or a glyph bitmap.
+    case glyphAtlas(CGGlyphAtlasPaginationError)
+
+    /// A page texture could not be allocated or uploaded.
+    case texture(GLTextureError)
+
+    /// Glyph vertices could not be appended to the renderer's batch.
+    case batchBuffer(GLBatchBufferError)
+
+    /// An unexpected failure occurred while preparing a glyph page.
+    case unexpected(String)
+}
+
 /// Converts paths and destination dimensions into OpenGL geometry.
 enum GLRendererGeometry {
     /// Triangulates each rectangular subpath into two triangles.
@@ -407,7 +422,8 @@ enum GLRendererGeometry {
 
 /// Renders supported path commands with a cached solid-color OpenGL program.
 @MainActor
-final class GLRenderer: CGWindowRenderBackend, CGPixelSurfaceRenderer, CGPixelReadbackRenderer {
+final class GLRenderer: CGWindowRenderBackend, CGWindowRenderFailureReporting,
+    CGPixelSurfaceRenderer, CGPixelReadbackRenderer {
     /// Keeps the compiled programs alive for the lifetime of the renderer.
     private let shaderCache: GLShaderCache
 
@@ -438,6 +454,9 @@ final class GLRenderer: CGWindowRenderBackend, CGPixelSurfaceRenderer, CGPixelRe
     /// The current intersection of rectangular clip regions in device pixels.
     private var clipScissorRect: CGRect?
 
+    /// The first glyph-rendering failure, retained until the renderer is discarded.
+    private(set) var renderingError: GLRendererError?
+
     /// Creates the shader programs and reusable geometry buffers.
     /// - Parameters:
     ///   - shaderCache: The cache from which the solid-color program is loaded.
@@ -464,6 +483,7 @@ final class GLRenderer: CGWindowRenderBackend, CGPixelSurfaceRenderer, CGPixelRe
     ///   - commands: The backend-independent draw commands to render.
     ///   - size: The destination dimensions in pixels.
     func execute(_ commands: [DrawCommand], size: CGSize) {
+        guard renderingError == nil else { return }
         executeOnMainActor(commands, size: size)
     }
 
@@ -540,7 +560,7 @@ final class GLRenderer: CGWindowRenderBackend, CGPixelSurfaceRenderer, CGPixelRe
         applyClipState()
         var currentColor: [Float]?
 
-        for command in commands {
+        commandLoop: for command in commands {
             switch command {
             case let .fillPath(path, rule, color, blendMode, _):
                 renderFillPath(
@@ -623,18 +643,32 @@ final class GLRenderer: CGWindowRenderBackend, CGPixelSurfaceRenderer, CGPixelRe
                 color,
                 blendMode
             ):
-                renderGlyphs(
-                    glyphs,
-                    positions: positions,
-                    glyphAtlas: glyphAtlas,
-                    characterSpacing: characterSpacing,
-                    textMatrix: textMatrix,
-                    textPosition: textPosition,
-                    ctm: ctm,
-                    color: color,
-                    blendMode: blendMode,
-                    projection: projection
-                )
+                do {
+                    try renderGlyphs(
+                        glyphs,
+                        positions: positions,
+                        glyphAtlas: glyphAtlas,
+                        characterSpacing: characterSpacing,
+                        textMatrix: textMatrix,
+                        textPosition: textPosition,
+                        ctm: ctm,
+                        color: color,
+                        blendMode: blendMode,
+                        projection: projection
+                    )
+                } catch let error as CGGlyphAtlasPaginationError {
+                    recordRenderingFailure(.glyphAtlas(error))
+                    break commandLoop
+                } catch let error as GLTextureError {
+                    recordRenderingFailure(.texture(error))
+                    break commandLoop
+                } catch let error as GLBatchBufferError {
+                    recordRenderingFailure(.batchBuffer(error))
+                    break commandLoop
+                } catch {
+                    recordRenderingFailure(.unexpected(String(describing: error)))
+                    break commandLoop
+                }
                 currentColor = nil
             case let .clip(path, rule):
                 applyClipPath(path, rule: rule, size: size)
@@ -648,6 +682,13 @@ final class GLRenderer: CGWindowRenderBackend, CGPixelSurfaceRenderer, CGPixelRe
         }
 
         batchBuffer.flush()
+    }
+
+    /// Keeps the first diagnostic for this renderer instead of replacing it with a later failure.
+    /// - Parameter error: The failure raised while executing the current command.
+    private func recordRenderingFailure(_ error: GLRendererError) {
+        guard renderingError == nil else { return }
+        renderingError = error
     }
 
     /// Draws a linear or radial gradient across the clipped destination.
@@ -821,35 +862,51 @@ final class GLRenderer: CGWindowRenderBackend, CGPixelSurfaceRenderer, CGPixelRe
         color: CGColor,
         blendMode: CGBlendMode,
         projection: [Float]
-    ) {
+    ) throws {
         guard let rgba = GLRendererGeometry.rgbaComponents(for: color) else { return }
-        let vertices = GLRendererGeometry.glyphVertices(
-            glyphs,
-            positions: positions,
-            glyphAtlas: glyphAtlas,
-            characterSpacing: characterSpacing,
-            textMatrix: textMatrix,
-            textPosition: textPosition,
-            ctm: ctm
-        )
-        guard vertices.isEmpty == false else { return }
+        guard glyphs.count == positions.count,
+              glyphs.count == glyphAtlas.glyphs.count,
+              glyphAtlas.glyphs.contains(where: { $0 != nil }) else {
+            return
+        }
+
+        var maximumTextureSize: GLint = 0
+        glad_glGetIntegerv(GLenum(GL_MAX_TEXTURE_SIZE), &maximumTextureSize)
+        guard maximumTextureSize > 0 else {
+            throw CGGlyphAtlasPaginationError.invalidTextureLimit
+        }
+        let pages = try glyphAtlas.pages(maxTextureSize: Int(maximumTextureSize))
 
         batchBuffer.flush()
         applyClipState()
-        let texture: GLTexture
-        do {
-            texture = try textureCache.texture(for: glyphAtlas)
-        } catch {
-            preconditionFailure("Could not create texture for glyph draw command: \(error)")
-        }
 
         textProgram.use()
         setProjection(projection, for: textProgram)
         glad_glUniform1i(textProgram.uniformLocation(named: "uGlyphAtlas"), 0)
         let colorLocation = textProgram.uniformLocation(named: "uGlyphColor")
         glad_glUniform4f(colorLocation, rgba[0], rgba[1], rgba[2], rgba[3])
-        let vertexData = vertices.flatMap { [$0.positionX, $0.positionY, $0.textureX, $0.textureY] }
-        do {
+
+        for page in pages {
+            let pageGlyphs = Array(glyphs[page.range])
+            let pagePositions = page.range.map { index in
+                CGPoint(
+                    x: positions[index].x + Double(index) * characterSpacing,
+                    y: positions[index].y
+                )
+            }
+            let vertices = GLRendererGeometry.glyphVertices(
+                pageGlyphs,
+                positions: pagePositions,
+                glyphAtlas: page.atlas,
+                characterSpacing: 0,
+                textMatrix: textMatrix,
+                textPosition: textPosition,
+                ctm: ctm
+            )
+            guard vertices.isEmpty == false else { continue }
+
+            let texture = try textureCache.texture(for: page.atlas)
+            let vertexData = vertices.flatMap { [$0.positionX, $0.positionY, $0.textureX, $0.textureY] }
             try batchBuffer.append(
                 vertices: vertexData,
                 state: GLBatchState(
@@ -858,11 +915,9 @@ final class GLRenderer: CGWindowRenderBackend, CGPixelSurfaceRenderer, CGPixelRe
                     blendMode: blendMode
                 )
             )
-        } catch {
-            preconditionFailure("Glyph quads produced incomplete vertex data: \(error)")
+            batchBuffer.flush()
+            textureCache.evict(page.atlas)
         }
-        batchBuffer.flush()
-        textureCache.evict(glyphAtlas)
     }
 
     /// Draws a fill command directly for simple geometry or through the stencil buffer for complex paths.

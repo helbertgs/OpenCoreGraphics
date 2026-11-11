@@ -103,6 +103,78 @@ struct WindowRenderTargetTests {
         #expect(renderer.size == CGSize(width: 40, height: 48))
     }
 
+    /// Reports and retains a rendering failure through the public CGContext drawing path.
+    @Test
+    func publicContextFlushLogsAndKeepsRenderingFailureTerminal() throws {
+        let renderer = RecordingRenderBackend()
+        renderer.nextRenderingError = .texture(.allocationFailed)
+        let target = WindowRenderTarget(size: CGSize(width: 32, height: 24), renderer: renderer)
+        var reportedErrors: [GLRendererError] = []
+        target.reportRenderingFailure = { reportedErrors.append($0) }
+        let context = CGContext(width: 32, height: 24)
+        context.renderTarget = target
+        let fontURL = try #require(
+            Bundle.module.url(forResource: "tiny-test", withExtension: "ttf", subdirectory: "Resources")
+        )
+        let font = try #require(CGFont(fontURL.path))
+        let glyph = try #require(font.glyph(for: "I"))
+        context.setFont(font)
+        context.setFontSize(16)
+        context.showGlyphs([glyph], at: [OpenCoreGraphics.CGPoint(x: 4, y: 18)])
+        context.flush()
+
+        #expect(reportedErrors == [.texture(.allocationFailed)])
+        #expect(target.renderingError == .texture(.allocationFailed))
+        #expect(renderer.commands.count == 1)
+
+        context.fill(CGRect(x: 1, y: 1, width: 4, height: 4))
+        context.flush()
+
+        #expect(reportedErrors == [.texture(.allocationFailed)])
+        #expect(target.renderingError == .texture(.allocationFailed))
+        #expect(renderer.commands.count == 1)
+        #expect(target.readPixels() == nil)
+    }
+
+    /// Rebases a resize prefix after failure and rejects later public drawing without replay.
+    @Test
+    func failedResizePrefixKeepsBarrierAndLaterCommandsConsistent() throws {
+        let renderer = RecordingRenderBackend()
+        renderer.nextRenderingError = .texture(.allocationFailed)
+        let target = WindowRenderTarget(size: CGSize(width: 8, height: 8), renderer: renderer)
+        var reportedErrors: [GLRendererError] = []
+        target.reportRenderingFailure = { reportedErrors.append($0) }
+        let command = try glyphCommandForFailure()
+        target.submit(command)
+        var viewportChanged = false
+        target.enqueueFramebufferResize(CGSize(width: 12, height: 10)) {
+            viewportChanged = true
+        }
+
+        #expect(target.renderingError == .texture(.allocationFailed))
+        #expect(reportedErrors == [.texture(.allocationFailed)])
+        #expect(renderer.commands == [command])
+        #expect(viewportChanged == false)
+        #expect(target.size == CGSize(width: 8, height: 8))
+
+        let context = CGContext(width: 8, height: 8)
+        context.renderTarget = target
+        context.fill(CGRect(x: 1, y: 1, width: 2, height: 2))
+        context.flush()
+        var laterViewportChanged = false
+        target.enqueueFramebufferResize(CGSize(width: 14, height: 12)) {
+            laterViewportChanged = true
+        }
+        #expect(target.flushBeforeResize() == false)
+
+        #expect(renderer.commands == [command])
+        #expect(renderer.executionSizes == [CGSize(width: 8, height: 8)])
+        #expect(reportedErrors == [.texture(.allocationFailed)])
+        #expect(viewportChanged == false)
+        #expect(laterViewportChanged == false)
+        #expect(target.size == CGSize(width: 8, height: 8))
+    }
+
     /// Verifies clip changes execute after pending drawing and reset the previous clip.
     @Test
     func appliesAndResetsClipRegions() {
@@ -146,6 +218,31 @@ struct WindowRenderTargetTests {
             .clipRect(rectangle)
         ])
         #expect(renderer.size == CGSize(width: 64, height: 48))
+    }
+
+    /// Builds one glyph command that the recording backend uses to trigger an injected failure.
+    private func glyphCommandForFailure() throws -> DrawCommand {
+        let bitmap = CGGlyphBitmap(
+            width: 1,
+            height: 1,
+            xOffset: 0,
+            yOffset: 0,
+            coverage: Data([255])
+        )
+        let atlas = try #require(CGGlyphAtlas(bitmaps: [bitmap]))
+        return .glyphs(
+            glyphs: [1],
+            positions: [OpenCoreGraphics.CGPoint(x: 1, y: 2)],
+            fontName: nil,
+            fontSize: 12,
+            glyphAtlas: atlas,
+            characterSpacing: 0,
+            textMatrix: .identity,
+            textPosition: .zero,
+            ctm: .identity,
+            color: .black,
+            blendMode: .normal
+        )
     }
 
     /// Drains old-size work before resizing A even when B is the current context.
@@ -668,18 +765,28 @@ struct WindowRenderTargetTests {
 }
 
 /// Records backend calls without requiring an OpenGL context.
-private final class RecordingRenderBackend: CGWindowRenderBackend, CGPixelSurfaceRenderer {
+private final class RecordingRenderBackend: CGWindowRenderBackend, CGWindowRenderFailureReporting,
+    CGPixelSurfaceRenderer {
     /// The commands received from the render target.
     private(set) var commands: [DrawCommand] = []
 
     /// The size received with the most recent render call.
     private(set) var size: OpenCoreGraphics.CGSize?
 
+    /// The framebuffer dimensions used for each command batch.
+    private(set) var executionSizes: [OpenCoreGraphics.CGSize] = []
+
     /// Pixel snapshots received for direct software-surface presentation.
     private(set) var surfaceSnapshots: [CGImageSnapshot] = []
 
     /// Destination sizes received for direct software-surface presentation.
     private(set) var surfaceSizes: [OpenCoreGraphics.CGSize] = []
+
+    /// The failure to return for the next command batch containing glyphs.
+    var nextRenderingError: GLRendererError?
+
+    /// The failure produced by the most recently executed command batch.
+    private(set) var renderingError: GLRendererError?
 
     /// Records a renderer invocation.
     /// - Parameters:
@@ -688,6 +795,15 @@ private final class RecordingRenderBackend: CGWindowRenderBackend, CGPixelSurfac
     func execute(_ commands: [DrawCommand], size: OpenCoreGraphics.CGSize) {
         self.commands.append(contentsOf: commands)
         self.size = size
+        executionSizes.append(size)
+        renderingError = nil
+        if commands.contains(where: {
+            if case .glyphs = $0 { return true }
+            return false
+        }) {
+            renderingError = nextRenderingError
+            nextRenderingError = nil
+        }
     }
 
     /// Records a software surface upload and presentation.

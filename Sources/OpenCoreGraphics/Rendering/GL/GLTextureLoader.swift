@@ -14,6 +14,18 @@ enum GLTextureError: Error, Equatable {
 
     /// OpenGL did not allocate a texture identifier.
     case allocationFailed
+
+    /// The requested dimensions exceed the owning context's texture limit.
+    case textureTooLarge(width: Int, height: Int, limit: Int)
+
+    /// The owning context did not return a valid maximum texture dimension.
+    case invalidMaximumTextureSize
+
+    /// OpenGL rejected texture storage or pixel upload.
+    case uploadFailed(UInt32)
+
+    /// An earlier OpenGL operation left an error before texture storage was uploaded.
+    case preexistingGraphicsError(UInt32)
 }
 
 /// An OpenGL pixel format selected from the image's component count.
@@ -75,7 +87,12 @@ struct OpenGLTextureLoader: GLTextureLoader {
         glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_MIN_FILTER), GLint(GL_LINEAR))
         glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_MAG_FILTER), GLint(GL_LINEAR))
 
-        upload(prepared.data, width: image.width, height: image.height, pixelFormat: prepared.pixelFormat)
+        do {
+            try upload(prepared.data, width: image.width, height: image.height, pixelFormat: prepared.pixelFormat)
+        } catch {
+            glad_glDeleteTextures(1, &identifier)
+            throw error
+        }
 
         return GLTexture(identifier: identifier, width: image.width, height: image.height)
     }
@@ -86,6 +103,15 @@ struct OpenGLTextureLoader: GLTextureLoader {
     /// - Throws: `GLTextureError` when the atlas layout or allocation is invalid.
     func makeTexture(from glyphAtlas: CGGlyphAtlas) throws -> GLTexture {
         let prepared = try uploadData(for: glyphAtlas)
+        let maximumTextureSize = try maximumTextureSize()
+        guard glyphAtlas.width <= maximumTextureSize,
+              glyphAtlas.height <= maximumTextureSize else {
+            throw GLTextureError.textureTooLarge(
+                width: glyphAtlas.width,
+                height: glyphAtlas.height,
+                limit: maximumTextureSize
+            )
+        }
 
         var identifier: GLuint = 0
         glad_glGenTextures(1, &identifier)
@@ -96,7 +122,17 @@ struct OpenGLTextureLoader: GLTextureLoader {
         glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_MIN_FILTER), GLint(GL_LINEAR))
         glad_glTexParameteri(GLenum(GL_TEXTURE_2D), GLenum(GL_TEXTURE_MAG_FILTER), GLint(GL_LINEAR))
 
-        upload(prepared.data, width: glyphAtlas.width, height: glyphAtlas.height, pixelFormat: prepared.pixelFormat)
+        do {
+            try upload(
+                prepared.data,
+                width: glyphAtlas.width,
+                height: glyphAtlas.height,
+                pixelFormat: prepared.pixelFormat
+            )
+        } catch {
+            glad_glDeleteTextures(1, &identifier)
+            throw error
+        }
 
         return GLTexture(identifier: identifier, width: glyphAtlas.width, height: glyphAtlas.height)
     }
@@ -130,7 +166,7 @@ struct OpenGLTextureLoader: GLTextureLoader {
                 )
             }
         } else {
-            upload(prepared.data, width: image.width, height: image.height, pixelFormat: prepared.pixelFormat)
+            try upload(prepared.data, width: image.width, height: image.height, pixelFormat: prepared.pixelFormat)
             texture.updateDimensions(width: image.width, height: image.height)
         }
     }
@@ -217,7 +253,11 @@ struct OpenGLTextureLoader: GLTextureLoader {
         width: Int,
         height: Int,
         pixelFormat: GLTexturePixelFormat
-    ) {
+    ) throws {
+        if let priorError = drainGraphicsErrors() {
+            throw GLTextureError.preexistingGraphicsError(priorError)
+        }
+
         var unpackAlignment: GLint = 4
         glad_glGetIntegerv(GLenum(GL_UNPACK_ALIGNMENT), &unpackAlignment)
         glad_glPixelStorei(GLenum(GL_UNPACK_ALIGNMENT), 1)
@@ -236,6 +276,34 @@ struct OpenGLTextureLoader: GLTextureLoader {
                 bytes.baseAddress
             )
         }
+        if let error = drainGraphicsErrors() {
+            throw GLTextureError.uploadFailed(error)
+        }
+    }
+
+    /// Drains the current GL error queue and returns its first error, if any.
+    /// - Returns: The first queued error as a raw OpenGL value.
+    private func drainGraphicsErrors() -> UInt32? {
+        var firstError: UInt32?
+        while true {
+            let error = glad_glGetError()
+            guard error != GLenum(GL_NO_ERROR) else { return firstError }
+            if firstError == nil {
+                firstError = UInt32(error)
+            }
+        }
+    }
+
+    /// Reads the maximum texture dimension from the currently selected owning context.
+    /// - Returns: The positive maximum width and height in pixels.
+    /// - Throws: `GLTextureError.invalidMaximumTextureSize` when the context reports no limit.
+    private func maximumTextureSize() throws -> Int {
+        var maximumTextureSize: GLint = 0
+        glad_glGetIntegerv(GLenum(GL_MAX_TEXTURE_SIZE), &maximumTextureSize)
+        guard maximumTextureSize > 0 else {
+            throw GLTextureError.invalidMaximumTextureSize
+        }
+        return Int(maximumTextureSize)
     }
 
     /// Removes row padding, normalizes alpha layouts, and prepares linear premultiplied channels.
