@@ -245,3 +245,12 @@
 - **Learnings for future iterations:**
   - Comparações entre execuções sem controle do ambiente não demonstram ganho; preserve as medições e suas limitações.
 ---
+
+## 2026-11-11 - US-024
+- Documentadas versões, diagnósticos e comandos de concorrência estrita; avaliação de swift-format e ausência de SwiftLint. Clang Analyzer analisa ponte C e identifica um aviso upstream stb, sem suprimir código próprio.
+- Gate compara ocorrência exata e quantidade contra baseline; self-test rejeita duplicata, deslocamento e formato desconhecido.
+- Validação: build e 288 testes em 51 suítes com concorrência estrita e warnings como erros; analyzer real e self-test passaram; GL opt-in não foi parte desta validação; `git diff --check` passou.
+- Files changed: `.docs/StaticAnalysis.md`, `scripts/check-clang-analyzer.rb`, baseline e fixture de diagnóstico, arquivos de progresso.
+- **Learnings for future iterations:**
+  - Atualizações do header stb podem deslocar diagnóstico e exigem revisão explícita da baseline, inclusive linha e coluna.
+---

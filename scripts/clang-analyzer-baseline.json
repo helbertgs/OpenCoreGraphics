@@ -1,0 +1,15 @@
+{
+  "tool": "Apple Clang Static Analyzer",
+  "diagnostics": [
+    {
+      "source": "Sources/OpenCoreGraphicsSTB/Private/stb_truetype.h",
+      "ownership": "third-party",
+      "line": 3180,
+      "column": 36,
+      "count": 1,
+      "severity": "warning",
+      "check": "deadcode.DeadStores",
+      "message": "Although the value stored to 'xb' is used in the enclosing expression, the value is never actually read from 'xb'"
+    }
+  ]
+}
