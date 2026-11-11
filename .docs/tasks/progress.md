@@ -272,3 +272,11 @@
 - **Learnings for future iterations:**
   - Cobertura de fontes sem mapeamento precisa de revisão explícita; não atribuir zero linhas instrumentáveis por suposição nem somar percentuais com denominadores sobrepostos.
 ---
+
+## 2026-11-11 - US-027
+- Documentados caminho TrueType e falhas de `CGFont`, `--font` no sample versionado, testes padrão e GL, propriedade dos buffers, isolamento e limitações de renderização.
+- Validação: build e 288 testes com concorrência estrita; runner GL concluiu 28 testes em cinco suítes; links locais em 23 documentos e `git diff --check` passaram. O comando de sample versionado não foi executado porque uma edição local preexistente desativa texto; essa edição foi preservada.
+- Files changed: `README.md`, `.docs/RenderingConcurrency.md`, documentação de `CGFont`, arquivos de progresso.
+- **Learnings for future iterations:**
+  - Documentação versionada deve refletir fontes versionadas, sem incorporar alterações locais não relacionadas como comportamento permanente.
+---

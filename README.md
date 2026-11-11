@@ -1,14 +1,20 @@
 # OpenCoreGraphics
 
-The OpenCoreGraphics framework is based on the Apple's CoreGraphics advanced drawing engine. It provides low-level, lightweight 2D rendering with unmatched output fidelity. 
-You use this framework to handle path-based drawing, transformations, color management, offscreen rendering, patterns, gradients and shadings, image data management, image creation, and image masking, display, and parsing.
-
-In Windows and Linux, OpenCoreGraphics also includes services for working with display hardware, low-level user input events, and the windowing system.
+OpenCoreGraphics is a Swift 2D drawing framework with path-based drawing,
+transformations, color management, bitmap rendering, images, text, gradients,
+and window-backed rendering. Its behavior and limitations are documented from
+the current implementation; it does not claim complete Core Graphics
+compatibility.
 
 # Tech Stack
 
 - Swift 6.4+
 - OpenGL 3.3
+
+The package manifest declares macOS 13 as its minimum platform. The documented
+build, test, and graphical results are from macOS; this repository does not
+currently run CI for Windows or Linux, and this README makes no claim that
+those platforms have been validated.
 
 # Project Structure
 
@@ -21,8 +27,44 @@ In Windows and Linux, OpenCoreGraphics also includes services for working with d
 - **Build**: swift build
 - **Test**: swift test
 - **Run the Sample**: swift run
+- **Strict-concurrency build and tests**:
+  `swift build -Xswiftc -strict-concurrency=complete` and
+  `swift test -Xswiftc -strict-concurrency=complete`
 - **Run the opt-in OpenGL comparisons**: `ruby scripts/run-gl-tests.rb --timeout 120` on a machine with a graphical session and an OpenGL 3.3 driver. The timeout covers the build and tests. The runner exits with 0 only when both comparisons complete successfully; 1 means a failure, timeout, interruption, skipped test or incomplete report, and 2 means invalid arguments or an explicitly reported unavailable graphics context. Ruby and Swift must be available on `PATH`. Each run prints a unique artifacts directory under `.build/gl-comparison/` (override the parent directory with `OPENCOREGRAPHICS_GL_ARTIFACTS`): per-scene JSON contains the system, GL driver, framebuffer state, tolerance and result; failing scenes also preserve raw RGBA pixel buffers for both backends. Comparisons normalize opaque framebuffer pixels to sRGB; see [GL comparison diagnostics](.docs/GLComparisonDiagnostics.md). Incomplete runs may contain only partial results and must not be interpreted as passing.
 - **macOS automation**: GitHub Actions selects an installed Swift 6.4-or-later toolchain or fails explicitly, then runs build, standard tests and complete strict-concurrency checks on `macos-26`; fixture tests exercise toolchain selection before using a real compiler. GL comparisons are disabled unless manually requested on a configured self-hosted graphics runner. Test skips and the absence of coverage reporting are explicit in the job summary. See [macOS automation details](.docs/CI.md).
+
+The standard `swift test` command does not opt into the real-GL suites. Those
+comparisons require a usable graphical session and driver; a skipped, timed-out,
+or incomplete run is not a pass. The local runner reports these conditions
+separately instead of treating a zero child-process exit by itself as success.
+
+## Loading a font
+
+`CGFont.init?(_:)` takes a filesystem path to a TrueType font file, not a
+PostScript name or family name. It returns `nil` when the path cannot be read or
+the file cannot be parsed; it does not search installed fonts:
+
+```swift
+guard let font = CGFont("/System/Library/Fonts/Supplemental/Arial.ttf") else {
+    // Handle a missing, unreadable, or unsupported font file.
+    return
+}
+context.setFont(font)
+```
+
+The initializer reads and parses the file immediately and keeps its font data
+with the `CGFont` instance; it does not need to reopen the path for later text
+drawing. A graphics state retains its selected font while saved and restores
+that font with `restoreGState()`. `CGFont` does not conform to `Sendable`; do
+not share a font or mutable graphics context concurrently.
+
+In the versioned sample, text drawing is enabled by default. Its text helper
+uses `--font` as a TrueType file-path override. On macOS systems where the
+sample's bundled fallback path exists, for example:
+
+```sh
+swift run OpenCoreGraphicsSample --font /System/Library/Fonts/Supplemental/Arial.ttf
+```
 
 The GL runner also requires one valid `GL_GLYPH_PAGING` result. The paged
 glyph comparison checks mean difference across the whole framebuffer and
@@ -118,3 +160,31 @@ context/thread failures throw errors. Avoid mixing this pump with the blocking
 window loop or another GLFW event loop. Platform, startup, error, and performance
 limitations and the supervised graphical experiment are documented in
 [WindowLoopCooperative.md](.docs/WindowLoopCooperative.md).
+
+## Implementation guides and limits
+
+The guides below describe the current implementation; “not implemented” is a
+limitation, not a promise of future support:
+
+- [Rendering concurrency](.docs/RenderingConcurrency.md): bitmap ownership,
+  caller-provided buffer lifetime, exclusive access, actor isolation, image
+  snapshots, and texture-cache accounting.
+- [Cooperative window processing](.docs/WindowLoopCooperative.md) and
+  [loop strategy](.docs/WindowLoopStrategy.md): async window lifecycle,
+  cancellation, host prerequisites, polling latency, and known limitations.
+- [Gradients](.docs/Gradients.md): software and OpenGL rendering paths,
+  interpolation and extension behavior. Both paths are implemented, but the
+  general GL comparison suite does not establish parity for every gradient.
+- [Shadows](.docs/ShadowRendering.md): supported by the software renderer;
+  OpenGL does not implement the blur pass and draws the shape without its
+  shadow.
+- [GL blend mapping](.docs/GLBlendModeMapping.md): direct OpenGL mappings and
+  modes that currently fall back to normal source-over.
+- [Image-cache measurements](.docs/ImageUpdateBenchmark.md) and
+  [glyph measurements](.docs/GlyphCacheBenchmark.md): measured cache
+  bookkeeping and prototype models, with explicit boundaries on GPU timing and
+  performance claims.
+- [Static-analysis checks](.docs/StaticAnalysis.md),
+  [coverage scope](.docs/tasks/coverage.md), and
+  [macOS automation](.docs/CI.md): reproducible checks, exclusions, and
+  platform scope.

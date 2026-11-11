@@ -20,10 +20,23 @@ public class CGFont {
 
     // MARK: - Creating Font Objects
 
-    /// Creates a font object corresponding to the font specified by a PostScript or full name.
-    /// 
-    /// Before drawing text in a Core Graphics context, you must set the font in the current graphics state by calling the function ``setFont(_:)``.
-    /// - Parameter name: The PostScript or full name of a font.
+    /// Creates a font object from a TrueType font file.
+    ///
+    /// The argument is a filesystem path, not a PostScript name or a font-family
+    /// name. This initializer does not search installed fonts by name.
+    ///
+    /// ```swift
+    /// guard let font = CGFont("/path/to/font.ttf") else {
+    ///     // Handle a missing, unreadable, or unsupported font file.
+    ///     return
+    /// }
+    /// context.setFont(font)
+    /// ```
+    ///
+    /// Before drawing text in a graphics context, set the font in its current
+    /// graphics state by calling ``CGContext/setFont(_:)``.
+    /// - Parameter name: The path to a TrueType font file.
+    /// - Returns: A font object, or `nil` if the file cannot be read or parsed.
     public init?(_ name: String) {
         self.fullName = name
 

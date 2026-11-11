@@ -43,14 +43,45 @@ de versão nem de hash: alterações via atribuição, operações mutantes de
 snapshot registrado; dados ausentes ou inválidos continuam sujeitos aos erros
 existentes do carregador.
 
-A cópia e, para conteúdo igual, a comparação custam O(n) por desenho, com
-armazenamento adicional O(n) para cada último snapshot e também para
-comandos pendentes; o custo não foi medido. O cache não tem orçamento de
-memória nesta etapa. Não há upload quando o conteúdo e os metadados não
-mudam. Antes de modificar uma textura, o renderer executa o lote anterior;
-assim, comandos pendentes com versões diferentes mantêm sua ordem. A origem
-externa deve permanecer válida e não pode ser escrita simultaneamente à
-captura; este mecanismo não sincroniza acesso concorrente.
+A cópia do snapshot e a comparação de conteúdo igual são O(n) por desenho; o
+armazenamento adicional é O(n) por último snapshot retido e também por
+comandos pendentes. O benchmark CPU da [US-020](ImageUpdateBenchmark.md) mede
+separadamente o tempo total de captura do provider (que inclui atribuir os
+dados e criar `CGImageSnapshot`, com a cópia explícita do payload) e a mediana
+do loop de frames do cache com um loader sem operações de GPU. Ele também
+contabiliza as cópias explícitas e as decisões de igualdade. Essas medições não
+isolam o tempo gasto somente copiando bytes nem somente comparando igualdade;
+os bytes efetivamente percorridos e o curto-circuito interno da comparação
+`Data` não são instrumentados. Portanto, tempos do benchmark não atribuem
+latência individual a essas operações.
+
+O cache de imagens usa LRU com orçamento configurável internamente, de 64 MiB
+por padrão. A contagem soma uma estimativa dos bytes lógicos da textura e os
+bytes do último snapshot; não representa RSS nem alocação física do driver.
+Uma imagem maior que o orçamento é usada sem entrar no cache, sem desalojar as
+demais. Atlases de glifos seguem um caminho separado e de curta duração, fora
+desse orçamento. Não há upload de imagem quando conteúdo e metadados não
+mudam. Antes de modificar ou desalojar uma textura, o renderer executa o lote
+anterior; assim, comandos pendentes com versões diferentes mantêm sua ordem.
+A origem externa deve permanecer válida e não pode ser escrita
+simultaneamente à captura; este mecanismo não sincroniza acesso concorrente.
+
+## Memória de bitmap e vida útil dos buffers
+
+Um `CGContext` de bitmap criado com `data: nil` possui seu armazenamento e o
+mantém enquanto o contexto o retiver. Se o chamador fornece `data`, o contexto
+usa esse endereço sem assumir propriedade: o chamador deve manter pelo menos
+`bytesPerRow * height` bytes válidos durante toda a vida útil do contexto e
+enquanto qualquer uso do armazenamento puder ocorrer. O framework não estende
+a vida útil do buffer emprestado nem sincroniza leituras e escritas externas.
+
+A mesma instância mutável de `CGContext`, seu armazenamento e qualquer buffer
+emprestado devem ter acesso exclusivo durante desenho, leitura, cópia,
+`flush()` ou mutação dos bytes. Use contextos e buffers distintos em tarefas
+concorrentes; não acesse o mesmo bitmap simultaneamente de duas tarefas.
+`CGContext.data` e `makeImage()` retornam cópias dos pixels, não uma visão
+compartilhada do armazenamento. A cópia continua sendo uma operação síncrona e
+deve ser ordenada em relação a qualquer desenho ou escrita.
 
 ## Evidência automatizada das fronteiras
 

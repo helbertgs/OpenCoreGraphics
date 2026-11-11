@@ -460,8 +460,8 @@
         "Typecheck passes"
       ],
       "priority": 27,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Documentação de CGFont, sample, testes, isolamento, buffers e limitações atualizada; links verificados, sem alterar edição local do sample."
     }
   ]
 }
