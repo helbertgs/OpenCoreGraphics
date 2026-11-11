@@ -217,3 +217,13 @@
 - **Learnings for future iterations:**
   - Comparar uploads isolados com loader simulado não mede custo real do driver nem determina ganho de desempenho.
 ---
+
+## 2026-11-11 - US-021
+- Comparados atlas por comando, cache de máscaras CPU e protótipo de atlas paginado com 30 frames de 48 glifos; decidida manutenção da estratégia atual por falta de comparação GL completa e cargas representativas. A US-022 continua obrigatória.
+- Na carga sintética, atlas por comando rasterizou 1.440 vezes e modelou 30 uploads; protótipos rasterizaram duas vezes, com respectivamente 30 e um upload modelados. Memória é lógica, não RSS ou alocação do driver.
+- Pipeline GL real com `flush` e `glFinish`, sem apresentação/v-sync: mediana de 829.333 ns estático e 791.125 ns mutável em 150 frames por cenário; uploads e rasterizações são derivados do código, não interceptados.
+- Validação: 280 testes em 49 suítes com concorrência estrita; build estrito; runner GL concluiu 28 testes em cinco suítes e validou o relatório; `ruby -c` e `git diff --check` passaram.
+- Files changed: `.docs/GlyphCacheBenchmark.md`, testes e executor GL, `Tests/OpenCoreGraphicsTests/Rendering/GLGlyphCacheBenchmarkTests.swift`, arquivos de progresso.
+- **Learnings for future iterations:**
+  - Medições de protótipos CPU e tempos de frame GL da implementação atual não constituem comparação end-to-end entre estratégias.
+---

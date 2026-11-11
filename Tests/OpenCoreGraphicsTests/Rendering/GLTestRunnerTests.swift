@@ -47,11 +47,18 @@ struct GLTestRunnerTests {
                     "GL_COMPARISON: glyph_\(scene)_\(metric) PASSED difference=0.0 tolerance=0.015"
                 }
             }.joined(separator: "\n")
+        let scenario = """
+        {"measuredFrames":150,"rasterizations":7200,"uploadCalls":150,"uploadedBytes":808800,"peakTransientAtlasBytes":5392,"retainedGlyphCacheBytesAfterFlush":0,"minimumNanoseconds":500,"medianNanoseconds":700,"p95Nanoseconds":1000,"maximumNanoseconds":2000}
+        """
+        let benchmark = """
+        {"framebufferWidth":1024,"framebufferHeight":192,"samples":4,"msaaEnabled":true,"glVendor":"Apple","glRenderer":"Apple M3 Pro","glVersion":"4.1 Metal - 90.5","synchronization":"glad_glFinish after every flushed frame","uploadCountingMethod":"source-derived exact current path count, not GL-call interception","static":\(scenario),"mutable":\(scenario)}
+        """
         return """
         \(reports)
         GL_COMPARISON: mutable_before PASSED difference=0.0 tolerance=0.007
         GL_COMPARISON: mutable_after PASSED difference=0.0 tolerance=0.007
         GL_COMPARISON: mutable_queued PASSED difference=0.0 tolerance=0.007
+        GLYPH_REAL_FRAME_BENCHMARK: \(benchmark)
         GL_TEXTURE_CACHE_METRICS: frames=6 uploads=5 updates=1 uploadedBytes=20 retainedBytes=8,8,16,16,16,16 budgetBytes=16 evictions=2 externallyRetainedBytes=8
         GL_TEXTURE_CACHE_REAL: updates=1 evictions=1 retainedBytes=8 budgetBytes=8 updatedPixel=[0, 0, 255, 255] evictedPixel=[0, 255, 0, 255] lifetime=verified
         ✔ Test comparesSharedScenesAcrossBackends() passed after 0.001 seconds.
@@ -89,6 +96,29 @@ struct GLTestRunnerTests {
             #expect(result.status == 1)
             #expect(result.output.contains("texture-cache evidence"))
         }
+    }
+
+    /// Rejects a successful GL test summary when the measured frame-time report is absent.
+    @Test
+    private func missingGlyphFrameBenchmarkIsRejected() throws {
+        let incomplete = successOutput.replacing(
+            /GLYPH_REAL_FRAME_BENCHMARK: .+\n/, with: ""
+        )
+        let result = try run("puts \(String(reflecting: incomplete))")
+        #expect(result.status == 1)
+        #expect(result.output.contains("glyph frame-time benchmark evidence"))
+    }
+
+    /// Rejects a real GL benchmark report with invalid frame timing samples.
+    @Test
+    private func invalidGlyphFrameBenchmarkIsRejected() throws {
+        let incomplete = successOutput.replacing(
+            "\"medianNanoseconds\":700",
+            with: "\"medianNanoseconds\":-1"
+        )
+        let result = try run("puts \(String(reflecting: incomplete))")
+        #expect(result.status == 1)
+        #expect(result.output.contains("glyph frame-time benchmark evidence"))
     }
 
     /// Rejects real OpenGL pixel evidence that does not match the asserted update color.

@@ -1,6 +1,7 @@
 #!/usr/bin/env ruby
 
 require "optparse"
+require "json"
 
 timeout = 120.0
 parser = OptionParser.new do |options|
@@ -156,6 +157,35 @@ deterministic_cache_report =
   "retainedBytes=8,8,16,16,16,16 budgetBytes=16 evictions=2 externallyRetainedBytes=8"
 deterministic_cache_complete = output.scan(/^#{Regexp.escape(deterministic_cache_report)}\s*$/).length == 1
 
+real_glyph_benchmark_lines = output.scan(/^GLYPH_REAL_FRAME_BENCHMARK: (.+)$/).flatten
+real_glyph_benchmark_complete = real_glyph_benchmark_lines.length == 1 && begin
+  report = JSON.parse(real_glyph_benchmark_lines.first)
+  scenarios = [report.fetch("static"), report.fetch("mutable")]
+  scenarios.all? do |scenario|
+    timings = %w[minimumNanoseconds medianNanoseconds p95Nanoseconds maximumNanoseconds]
+      .map { |key| Float(scenario.fetch(key)) }
+    timings.all?(&:finite?) && timings.first.positive? &&
+      timings == timings.sort &&
+      scenario.fetch("measuredFrames") == 150 &&
+      scenario.fetch("rasterizations") == 7_200 &&
+      scenario.fetch("uploadCalls") == 150 &&
+      scenario.fetch("uploadedBytes").positive? &&
+      scenario.fetch("peakTransientAtlasBytes").positive? &&
+      scenario.fetch("retainedGlyphCacheBytesAfterFlush").zero?
+  end &&
+    report.fetch("framebufferWidth").positive? &&
+    report.fetch("framebufferHeight").positive? &&
+    report.fetch("samples").positive? &&
+    report.fetch("msaaEnabled") == true &&
+    report.fetch("glVendor").length.positive? &&
+    report.fetch("glRenderer").length.positive? &&
+    report.fetch("glVersion").length.positive? &&
+    report.fetch("synchronization").include?("glad_glFinish") &&
+    report.fetch("uploadCountingMethod").include?("source-derived")
+rescue JSON::ParserError, KeyError, TypeError, ArgumentError
+  false
+end
+
 real_cache_reports = output.scan(
   Regexp.new(
     "^GL_TEXTURE_CACHE_REAL: updates=(\\d+) evictions=(\\d+) retainedBytes=(\\d+) budgetBytes=(\\d+) " \
@@ -172,11 +202,11 @@ real_cache_complete = real_cache_reports.length == 1 && begin
 end
 
 if status.success? && passed && glyph_reports_complete && mutable_reports_complete &&
-   deterministic_cache_complete && real_cache_complete &&
+   deterministic_cache_complete && real_cache_complete && real_glyph_benchmark_complete &&
    !output.match?(/^.*(?:skipped|failed|Issue recorded)\b/i)
-  puts "GL runner: PASSED: GL rendering, texture-cache lifecycle, and synthetic metric tests completed successfully."
+  puts "GL runner: PASSED: GL rendering, texture-cache lifecycle, synthetic metrics, and real glyph frame-time workloads completed successfully."
   exit 0
 end
 
-warn "GL runner: FAILED: test failure, missing glyph reports or mutable-image reports or texture-cache evidence, skipped test, or unsuccessful process exit."
+warn "GL runner: FAILED: test failure, missing glyph reports, mutable-image reports, texture-cache evidence, or glyph frame-time benchmark evidence, skipped test, or unsuccessful process exit."
 exit 1

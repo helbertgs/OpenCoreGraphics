@@ -356,8 +356,8 @@
         "Typecheck passes"
       ],
       "priority": 21,
-      "passes": false,
-      "notes": ""
+      "passes": true,
+      "notes": "Medição de rasterização e modelos de upload compara três estratégias; tempos GL reais cobrem somente implementação atual. Decisão: manter desenho atual, sem dispensar US-022."
     },
     {
       "id": "US-022",

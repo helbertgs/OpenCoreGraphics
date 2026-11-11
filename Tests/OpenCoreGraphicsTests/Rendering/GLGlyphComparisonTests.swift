@@ -105,6 +105,7 @@ struct GLGlyphComparisonTests {
         )
         #expect(difference <= 4.0 / 255.0, "Glyph rendering mean channel difference was \(difference)")
         try compareAsymmetricGlyphs(window: window, softwareContext: softwareContext)
+        try measureCurrentPipelineFrameTimes(font: font)
     }
 
     /// Compares the documented asymmetric samples on both sides of the baseline and after transforms.
@@ -214,6 +215,289 @@ struct GLGlyphComparisonTests {
         return try #require(CGFont(fontURL.path))
     }
 
+    /// Measures actual frame completion for repeated and changing text on the production GL path.
+    /// - Parameter font: The bundled font fixture used for both measured workloads.
+    private func measureCurrentPipelineFrameTimes(font: CGFont) throws {
+        let frameCount = 30
+        let warmupFrames = 10
+        let repetitions = 5
+        let glyphCount = 48
+        let fontSize = 20.0
+        let window: CGWindow
+        do {
+            window = try CGWindow(frame: CGRect(x: 0, y: 0, width: 512, height: 96), title: "Glyph frame benchmark")
+        } catch let error as CGWindowError {
+            print("GL_RUNNER_GRAPHICS_UNAVAILABLE: \(error)")
+            throw error
+        }
+
+        let staticText = String(repeating: "IA", count: glyphCount / 2)
+        let mutableTexts = (0..<frameCount).map { frame in
+            String(repeating: "IA", count: glyphCount / 2 - 1)
+                + (frame.isMultiple(of: 2) ? "IA" : "AI")
+        }
+        let staticFrame = try makeTimedGlyphFrame(staticText, font: font, fontSize: fontSize)
+        let mutableFrames = try mutableTexts.map {
+            try makeTimedGlyphFrame($0, font: font, fontSize: fontSize)
+        }
+        #expect(staticFrame.glyphs.count == glyphCount)
+        #expect(mutableFrames.allSatisfy { $0.glyphs.count == glyphCount })
+        #expect(mutableFrames.first?.glyphs != mutableFrames.last?.glyphs)
+
+        let staticAtlasBytes = try atlasByteCount(for: staticFrame.glyphs, font: font, fontSize: fontSize)
+        let mutableAtlasBytes = try Set(mutableFrames.map(\.glyphs)).reduce(into: [Int]()) { sizes, glyphs in
+            sizes.append(try atlasByteCount(for: glyphs, font: font, fontSize: fontSize))
+        }
+        let glMetadata = try timedGLMetadata(for: window.cgContext)
+
+        let staticTimings = try measureFrames(
+            frames: Array(repeating: staticFrame, count: frameCount),
+            context: window.cgContext,
+            font: font,
+            fontSize: fontSize,
+            warmupFrames: warmupFrames,
+            repetitions: repetitions
+        )
+        let mutableTimings = try measureFrames(
+            frames: mutableFrames,
+            context: window.cgContext,
+            font: font,
+            fontSize: fontSize,
+            warmupFrames: warmupFrames,
+            repetitions: repetitions
+        )
+
+        let rasterizations = frameCount * repetitions * glyphCount
+        let frameCountMeasured = frameCount * repetitions
+        let report = GlyphFrameTimeBenchmarkReport(
+            system: ProcessInfo.processInfo.operatingSystemVersionString,
+            architecture: Self.hostArchitecture,
+            processorCount: ProcessInfo.processInfo.processorCount,
+            glVendor: glMetadata.vendor,
+            glRenderer: glMetadata.renderer,
+            glVersion: glMetadata.version,
+            framebufferWidth: window.cgContext.width,
+            framebufferHeight: window.cgContext.height,
+            msaaEnabled: glMetadata.msaaEnabled,
+            samples: glMetadata.samples,
+            fontFixture: "tiny-test.ttf",
+            fontSizePixels: fontSize,
+            glyphsPerFrame: glyphCount,
+            frameCountPerScenarioPerRepetition: frameCount,
+            warmupFramesPerScenario: warmupFrames,
+            repetitions: repetitions,
+            measuredFramesPerScenario: frameCountMeasured,
+            timingScope: "wall-clock CPU submission through CGContext.flush() plus glad_glFinish() GPU completion; excludes buffer swap, v-sync, and presentation",
+            uploadCountingMethod: "source-derived exact current path count, not GL-call interception",
+            rasterizationCountingMethod: "glyph count submitted to production CGContext.showGlyphs; source path rasterizes each occurrence",
+            synchronization: "glad_glFinish after every flushed frame",
+            static: makeFrameScenarioReport(
+                name: "static",
+                timings: staticTimings,
+                rasterizations: rasterizations,
+                uploadCalls: frameCountMeasured,
+                atlasByteCounts: [staticAtlasBytes]
+            ),
+            mutable: makeFrameScenarioReport(
+                name: "mutable",
+                timings: mutableTimings,
+                rasterizations: rasterizations,
+                uploadCalls: frameCountMeasured,
+                atlasByteCounts: mutableAtlasBytes
+            )
+        )
+        let data = try JSONEncoder.sorted.encode(report)
+        let json = try #require(String(data: data, encoding: .utf8))
+        try saveFrameTimeReport(data)
+        print("GLYPH_REAL_FRAME_BENCHMARK: \(json)")
+        #expect(report.static.measuredFrames == frameCountMeasured)
+        #expect(report.mutable.measuredFrames == frameCountMeasured)
+        #expect(report.static.medianNanoseconds > 0)
+        #expect(report.mutable.medianNanoseconds > 0)
+        #expect(report.static.uploadedBytes > 0)
+        #expect(report.mutable.uploadedBytes > 0)
+        #expect(report.static.uploadCalls == frameCountMeasured)
+        #expect(report.mutable.uploadCalls == frameCountMeasured)
+    }
+
+    /// Resolves a deterministic text string into production glyph identifiers and positions.
+    /// - Parameters:
+    ///   - text: The text content for one frame.
+    ///   - font: The bundled font fixture.
+    ///   - fontSize: The rasterization height in pixels.
+    /// - Returns: The immutable glyph sequence submitted for the frame.
+    private func makeTimedGlyphFrame(
+        _ text: String,
+        font: CGFont,
+        fontSize: Double
+    ) throws -> TimedGlyphFrame {
+        guard font.unitsPerEm > 0 else {
+            throw GlyphFrameBenchmarkError.invalidFontMetrics
+        }
+        var glyphs: [CGGlyph] = []
+        var positions: [OpenCoreGraphics.CGPoint] = []
+        var penX = 0.0
+        for character in text {
+            let glyph = try #require(font.glyph(for: character))
+            guard let advance = font.advance(for: glyph) else {
+                throw GlyphFrameBenchmarkError.missingGlyphAdvance
+            }
+            glyphs.append(glyph)
+            positions.append(OpenCoreGraphics.CGPoint(x: penX, y: 0))
+            penX += advance * fontSize / Double(font.unitsPerEm)
+        }
+        return TimedGlyphFrame(glyphs: glyphs, positions: positions)
+    }
+
+    /// Measures only one-time atlas payload sizes for exact byte accounting.
+    /// - Parameters:
+    ///   - glyphs: The glyph sequence represented by the atlas.
+    ///   - font: The bundled font fixture.
+    ///   - fontSize: The rasterization height in pixels.
+    /// - Returns: The packed R8 coverage payload size in bytes.
+    private func atlasByteCount(for glyphs: [CGGlyph], font: CGFont, fontSize: Double) throws -> Int {
+        let bitmaps = glyphs.map { font.rasterizedGlyph($0, at: fontSize) }
+        return try #require(CGGlyphAtlas(bitmaps: bitmaps)?.coverage.count)
+    }
+
+    /// Captures the OpenGL driver and active framebuffer settings for the timing report.
+    /// - Parameter context: The GL window context that will render the benchmark.
+    /// - Returns: Driver identity and multisample configuration.
+    private func timedGLMetadata(for context: CGContext) throws -> TimedGLMetadata {
+        context.flush()
+        var samples: GLint = 0
+        glad_glGetIntegerv(GLenum(GL_SAMPLES), &samples)
+        guard let version = glad_glGetString(GLenum(GL_VERSION)),
+              let renderer = glad_glGetString(GLenum(GL_RENDERER)),
+              let vendor = glad_glGetString(GLenum(GL_VENDOR)) else {
+            throw GlyphFrameBenchmarkError.missingDriverMetadata
+        }
+        return TimedGLMetadata(
+            vendor: String(cString: vendor),
+            renderer: String(cString: renderer),
+            version: String(cString: version),
+            msaaEnabled: glad_glIsEnabled(GLenum(GL_MULTISAMPLE)) == GL_TRUE,
+            samples: Int(samples)
+        )
+    }
+
+    /// Measures wall-clock frame completion after warming the same GL context.
+    /// - Parameters:
+    ///   - frames: The prepared frames cycled through by the workload.
+    ///   - context: The production window drawing context.
+    ///   - font: The font to install into the context before timing.
+    ///   - fontSize: The font rasterization height in pixels.
+    ///   - warmupFrames: Untimed frames rendered before collecting samples.
+    ///   - repetitions: Number of complete measured frame sequences.
+    /// - Returns: One duration in nanoseconds for every completed measured frame.
+    private func measureFrames(
+        frames: [TimedGlyphFrame],
+        context: CGContext,
+        font: CGFont,
+        fontSize: Double,
+        warmupFrames: Int,
+        repetitions: Int
+    ) throws -> [Double] {
+        context.setFont(font)
+        context.setFontSize(fontSize)
+        context.setCharacterSpacing(0)
+        context.setBlendMode(.normal)
+
+        for index in 0..<warmupFrames {
+            drawTimedFrame(frames[index % frames.count], in: context)
+        }
+
+        var samples: [Double] = []
+        samples.reserveCapacity(frames.count * repetitions)
+        for _ in 0..<repetitions {
+            for frame in frames {
+                let clock = ContinuousClock()
+                let start = clock.now
+                drawTimedFrame(frame, in: context)
+                let elapsed = start.duration(to: clock.now)
+                samples.append(nanoseconds(in: elapsed))
+            }
+        }
+        return samples
+    }
+
+    /// Submits one background and text frame, flushes it, and waits for GPU completion.
+    /// - Parameters:
+    ///   - frame: The text glyphs and positions to draw.
+    ///   - context: The production window drawing context.
+    private func drawTimedFrame(_ frame: TimedGlyphFrame, in context: CGContext) {
+        context.setFillColor(.black)
+        context.fill(CGRect(x: 0, y: 0, width: Double(context.width), height: Double(context.height)))
+        context.setFillColor(.white)
+        context.textPosition = OpenCoreGraphics.CGPoint(x: 8, y: 48)
+        context.showGlyphs(frame.glyphs, at: frame.positions)
+        context.flush()
+        glad_glFinish()
+    }
+
+    /// Converts a monotonic duration to nanoseconds.
+    /// - Parameter duration: The measured duration.
+    /// - Returns: Nanoseconds elapsed.
+    private func nanoseconds(in duration: Duration) -> Double {
+        let components = duration.components
+        return Double(components.seconds) * 1_000_000_000
+            + Double(components.attoseconds) / 1_000_000_000
+    }
+
+    /// Creates summary metrics without mixing CPU-cache prototype timings into real GL results.
+    /// - Parameters:
+    ///   - name: The workload name.
+    ///   - timings: Per-frame wall-clock durations.
+    ///   - rasterizations: Source-derived rasterization calls.
+    ///   - uploadCalls: Source-derived GL texture uploads.
+    ///   - atlasByteCounts: Exact preflight atlas payload sizes for each variant.
+    /// - Returns: Per-frame distribution and logical memory/upload metrics.
+    private func makeFrameScenarioReport(
+        name: String,
+        timings: [Double],
+        rasterizations: Int,
+        uploadCalls: Int,
+        atlasByteCounts: [Int]
+    ) -> GlyphFrameScenarioReport {
+        let sorted = timings.sorted()
+        let totalUploadedBytes = atlasByteCounts.reduce(0, +) * (timings.count / max(1, atlasByteCounts.count))
+        return GlyphFrameScenarioReport(
+            name: name,
+            measuredFrames: timings.count,
+            rasterizations: rasterizations,
+            uploadCalls: uploadCalls,
+            uploadedBytes: totalUploadedBytes,
+            peakTransientAtlasBytes: atlasByteCounts.max() ?? 0,
+            retainedGlyphCacheBytesAfterFlush: 0,
+            minimumNanoseconds: sorted.first ?? 0,
+            medianNanoseconds: sorted[sorted.count / 2],
+            p95Nanoseconds: sorted[min(sorted.count - 1, (sorted.count * 95 + 99) / 100 - 1)],
+            maximumNanoseconds: sorted.last ?? 0
+        )
+    }
+
+    /// Persists the actual GL timing record alongside comparison artifacts when configured.
+    /// - Parameter data: The encoded JSON report.
+    private func saveFrameTimeReport(_ data: Data) throws {
+        let output = URL(fileURLWithPath:
+            ProcessInfo.processInfo.environment["OPENCOREGRAPHICS_GL_ARTIFACTS"] ?? ".build/gl-comparison",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        try data.write(to: output.appending(path: "glyph-frame-time.json"), options: .atomic)
+    }
+
+    /// Returns the architecture selected by the current Swift compilation target.
+    private static var hostArchitecture: String {
+        #if arch(arm64)
+        "arm64"
+        #elseif arch(x86_64)
+        "x86_64"
+        #else
+        "other"
+        #endif
+    }
+
     /// Draws two fixture glyphs at a baseline with their measured horizontal advances.
     /// - Parameters:
     ///   - context: The destination graphics context.
@@ -262,5 +546,123 @@ struct GLGlyphComparisonTests {
             total + abs(Int(pair.0) - Int(pair.1))
         }
         return Double(totalDifference) / Double(first.count * 255)
+    }
+}
+
+/// Glyph identifiers and origins prepared for one measured frame.
+private struct TimedGlyphFrame {
+    /// Glyphs submitted to the production text drawing API.
+    let glyphs: [CGGlyph]
+    /// Text-space origins corresponding to the glyphs.
+    let positions: [OpenCoreGraphics.CGPoint]
+}
+
+/// Driver metadata observed before the real GL timing run.
+private struct TimedGLMetadata {
+    /// OpenGL vendor string.
+    let vendor: String
+    /// OpenGL renderer string.
+    let renderer: String
+    /// OpenGL version string.
+    let version: String
+    /// Whether multisample rasterization is enabled.
+    let msaaEnabled: Bool
+    /// Active sample count reported by OpenGL.
+    let samples: Int
+}
+
+/// JSON report combining the local machine, GL context and current-pipeline workloads.
+private struct GlyphFrameTimeBenchmarkReport: Encodable {
+    /// Operating system version string.
+    let system: String
+    /// Host CPU architecture.
+    let architecture: String
+    /// Available logical processors reported by ProcessInfo.
+    let processorCount: Int
+    /// OpenGL vendor string.
+    let glVendor: String
+    /// OpenGL renderer string.
+    let glRenderer: String
+    /// OpenGL version string.
+    let glVersion: String
+    /// Active framebuffer width in pixels.
+    let framebufferWidth: Int
+    /// Active framebuffer height in pixels.
+    let framebufferHeight: Int
+    /// Whether multisampling is enabled.
+    let msaaEnabled: Bool
+    /// Active sample count.
+    let samples: Int
+    /// Font resource used to prepare the workload.
+    let fontFixture: String
+    /// Glyph rasterization height in pixels.
+    let fontSizePixels: Double
+    /// Glyph occurrences submitted in each frame.
+    let glyphsPerFrame: Int
+    /// Measured workload frames per repetition.
+    let frameCountPerScenarioPerRepetition: Int
+    /// Untimed frames before sampling each scenario.
+    let warmupFramesPerScenario: Int
+    /// Number of measured repetitions for each scenario.
+    let repetitions: Int
+    /// Total number of timed frames per scenario.
+    let measuredFramesPerScenario: Int
+    /// Explicit operations included and excluded from each timed frame.
+    let timingScope: String
+    /// Basis used for the current pipeline's operation counters.
+    let uploadCountingMethod: String
+    /// Basis used for the source-derived rasterization counter.
+    let rasterizationCountingMethod: String
+    /// Synchronization operation used before stopping each frame timer.
+    let synchronization: String
+    /// Results for repeated unchanged text.
+    let `static`: GlyphFrameScenarioReport
+    /// Results for text whose glyph order changes between frames.
+    let mutable: GlyphFrameScenarioReport
+}
+
+/// Timing distribution and source-derived metrics for one real GL workload.
+private struct GlyphFrameScenarioReport: Encodable {
+    /// Scenario identifier.
+    let name: String
+    /// Number of measured frames.
+    let measuredFrames: Int
+    /// Number of glyph rasterizations executed by the production path.
+    let rasterizations: Int
+    /// Number of texture uploads derived from the production path.
+    let uploadCalls: Int
+    /// R8 payload bytes derived from the production atlas payloads.
+    let uploadedBytes: Int
+    /// Largest one-frame atlas payload in bytes.
+    let peakTransientAtlasBytes: Int
+    /// Logical cache bytes after the existing path evicts the command atlas.
+    let retainedGlyphCacheBytesAfterFlush: Int
+    /// Fastest measured frame completion time in nanoseconds.
+    let minimumNanoseconds: Double
+    /// Median measured frame completion time in nanoseconds.
+    let medianNanoseconds: Double
+    /// 95th percentile frame completion time in nanoseconds.
+    let p95Nanoseconds: Double
+    /// Slowest measured frame completion time in nanoseconds.
+    let maximumNanoseconds: Double
+}
+
+/// Errors for invalid benchmark fixture data or missing live GL metadata.
+private enum GlyphFrameBenchmarkError: Error {
+    /// The bundled font does not provide usable units-per-em metrics.
+    case invalidFontMetrics
+    /// The font does not provide an advance for a workload glyph.
+    case missingGlyphAdvance
+    /// The active OpenGL driver omitted required metadata.
+    case missingDriverMetadata
+}
+
+/// Creates stable-key JSON encoding for reproducible benchmark artifacts.
+private extension JSONEncoder {
+    /// Encoder configured to sort object keys.
+    static var sorted: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return encoder
     }
 }
